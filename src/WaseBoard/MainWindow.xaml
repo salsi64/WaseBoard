@@ -9,7 +9,8 @@
         Background="{DynamicResource BgBrush}"
         chrome:WindowChromeBehavior.Enable="True"
         Loaded="Window_Loaded" Closing="Window_Closing" PreviewKeyDown="MainWindow_PreviewKeyDown"
-        AllowDrop="True" DragEnter="Window_DragEnter" DragLeave="Window_DragLeave" Drop="Window_Drop">
+        AllowDrop="True" DragEnter="Window_DragEnter" DragLeave="Window_DragLeave" Drop="Window_Drop"
+        PreviewDragOver="Window_PreviewDragOver">
 
     <Window.Resources>
         <local:SoundButtonTemplateSelector x:Key="SoundButtonTemplateSelector"/>
@@ -337,14 +338,13 @@
                         </ItemsControl>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsReorderable, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <Button Content="↑" Width="22" Height="20" Margin="2,0" FontSize="10"
-                                        Click="MoveCategoryUp_Click" Tag="{Binding CategoryKey}"
-                                        Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                                <Button Content="↓" Width="22" Height="20" Margin="2,0" FontSize="10"
-                                        Click="MoveCategoryDown_Click" Tag="{Binding CategoryKey}"
-                                        Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                            </StackPanel>
+                            <!-- Marqueur purement visuel (pas de handler propre) : la barre entière reste
+                                 déplaçable via SectionHeader_PreviewMouseMove, ce repère indique juste que
+                                 c'est possible, à la place des anciennes flèches ↑/↓. -->
+                            <TextBlock Text="⠿" FontSize="14" Opacity="0.35" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       Cursor="SizeAll" ToolTip="Glisser pour réordonner"
+                                       Foreground="{DynamicResource TextBrush}"
+                                       Visibility="{Binding IsReorderable, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             <StackPanel Orientation="Horizontal" Visibility="{Binding IsManageable, Converter={StaticResource BoolToVisibilityConverter}}">
                                 <Button Content="✎" Width="22" Height="20" Margin="2,0" FontSize="10"
                                         Click="RenameCategory_Click" Tag="{Binding}"
@@ -628,6 +628,11 @@
                 <TextBlock Text="⬇ Déposez vos fichiers audio ici" FontSize="22" FontWeight="Bold"
                            Foreground="{DynamicResource TextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
+
+            <!-- Copie flottante d'un bouton de son pendant son glisser-déposer (voir ShowDragVisual/
+                 Window_PreviewDragOver) : suit le curseur pour bien montrer que le son "voyage" vers
+                 l'endroit du dépôt, plutôt que de laisser le bouton d'origine seul immobile. -->
+            <Canvas x:Name="DragVisualCanvas" Grid.Row="0" Grid.RowSpan="3" IsHitTestVisible="False"/>
         </Grid>
     </Grid>
 

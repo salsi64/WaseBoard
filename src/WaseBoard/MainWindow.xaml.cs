@@ -947,6 +947,7 @@ namespace WaseBoard
         // ---------- Réorganisation / classement par glisser-déposer ----------
 
         private Button? _dragOverButton;
+        private Border? _dragVisual;
 
         private void SoundButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
@@ -966,10 +967,57 @@ namespace WaseBoard
 
             _isDragging = true;
             StartWiggle(button);
+            ShowDragVisual(button, e.GetPosition(DragVisualCanvas));
             DragDrop.DoDragDrop(button, item, DragDropEffects.Move);
+            HideDragVisual();
             StopWiggle(button);
             ClearDragOverHighlight();
             _isDragging = false;
+        }
+
+        /// <summary>
+        /// Copie semi-transparente du bouton, affichée sur un calque flottant et repositionnée à
+        /// chaque Window_PreviewDragOver : le bouton d'origine ne fait que se balancer sur place
+        /// (StartWiggle), ce qui ne montre pas que le son "voyage" jusqu'à l'endroit visé pendant
+        /// qu'on maintient le clic. Ce visuel suit le curseur pour combler ce manque, le vrai
+        /// classement restant appliqué au dépôt (Section_Drop / SoundButton_DragOver).
+        /// </summary>
+        private void ShowDragVisual(Button source, Point startPosition)
+        {
+            _dragVisual = new Border
+            {
+                Width = source.ActualWidth,
+                Height = source.ActualHeight,
+                Background = new VisualBrush(source) { Stretch = Stretch.None },
+                Opacity = 0.8,
+                IsHitTestVisible = false,
+                Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 14, ShadowDepth = 2, Opacity = 0.5 }
+            };
+            DragVisualCanvas.Children.Add(_dragVisual);
+            PositionDragVisual(startPosition);
+        }
+
+        private void PositionDragVisual(Point position)
+        {
+            if (_dragVisual is null) return;
+            Canvas.SetLeft(_dragVisual, position.X - _dragVisual.Width / 2);
+            Canvas.SetTop(_dragVisual, position.Y - _dragVisual.Height / 2);
+        }
+
+        private void HideDragVisual()
+        {
+            if (_dragVisual is null) return;
+            DragVisualCanvas.Children.Remove(_dragVisual);
+            _dragVisual = null;
+        }
+
+        /// <summary>Fait suivre le calque flottant (ShowDragVisual) au curseur pendant tout glisser-déposer
+        /// en cours dans la fenêtre — tunnel depuis la racine, donc reçu même si un contrôle enfant
+        /// (bouton, section...) gère aussi son propre DragOver.</summary>
+        private void Window_PreviewDragOver(object sender, DragEventArgs e)
+        {
+            if (_dragVisual is not null)
+                PositionDragVisual(e.GetPosition(DragVisualCanvas));
         }
 
         /// <summary>Petit balancement (façon icônes iOS en réorganisation) sur le bouton en cours de déplacement.</summary>
@@ -1201,18 +1249,24 @@ namespace WaseBoard
         }
 
         /// <summary>
-        /// Filet de sécurité pour "Favoris"/"Tous les sons" : garantit qu'elles s'affichent
-        /// dépliées dès que l'Expander est réellement chargé, indépendamment du timing du binding
-        /// OneTime initial de IsExpanded (qui pilote normalement Section_Expanded).
+        /// Filet de sécurité pour TOUTES les sections : le binding OneTime initial d'IsExpanded ne
+        /// déclenche Section_Expanded/Collapsed que si sa valeur diffère du défaut de l'Expander
+        /// (false), et le fait avant que le contrôle soit réellement chargé — ce qui peut échouer à
+        /// synchroniser la hauteur visible (ExpandSiteBorder.MaxHeight) avec l'état voulu. Comme
+        /// RefreshSections() recrée systématiquement tous les Expanders (nouvelle liste, pas de
+        /// notification incrémentale), une catégorie que l'utilisateur avait ouverte se retrouvait
+        /// ainsi visuellement repliée après un ajout de son (ou toute autre action qui rafraîchit
+        /// les sections) même si IsExpanded valait bien true. On force donc ici, une fois le
+        /// contrôle réellement chargé, la hauteur à correspondre à IsExpanded — sans animation,
+        /// pour ne pas provoquer de "pop" au premier affichage.
         /// </summary>
         private void Section_Loaded(object sender, RoutedEventArgs e)
         {
-            if (sender is not Expander { Tag: string key } expander) return;
-            if (key != FavoritesKey && key != AllSoundsKey) return;
+            if (sender is not Expander expander) return;
 
             expander.ApplyTemplate();
             if (expander.Template?.FindName("ExpandSiteBorder", expander) is Border border)
-                border.MaxHeight = double.PositiveInfinity;
+                border.MaxHeight = expander.IsExpanded ? double.PositiveInfinity : 0;
         }
 
         private void Section_Expanded(object sender, RoutedEventArgs e)
@@ -1322,30 +1376,6 @@ namespace WaseBoard
             if (!confirm) return;
 
             _library.DeleteCategory(section.CategoryKey);
-            RefreshSections();
-        }
-
-        // ---------- Réorganisation des catégories (flèches — plus fiable que le glisser-déposer
-        // depuis l'en-tête d'un Expander, dont le ToggleButton interne capture la souris et
-        // interfère avec un DragDrop personnalisé) ----------
-
-        private void MoveCategoryUp_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button { Tag: string name }) return;
-            var order = _library.GetCategoriesInOrder(_sharedCategories.Select(s => s.GuildId));
-            var idx = order.IndexOf(name);
-            if (idx > 0) { (order[idx - 1], order[idx]) = (order[idx], order[idx - 1]); }
-            _library.SaveCategoryOrder(order);
-            RefreshSections();
-        }
-
-        private void MoveCategoryDown_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is not Button { Tag: string name }) return;
-            var order = _library.GetCategoriesInOrder(_sharedCategories.Select(s => s.GuildId));
-            var idx = order.IndexOf(name);
-            if (idx >= 0 && idx < order.Count - 1) { (order[idx + 1], order[idx]) = (order[idx], order[idx + 1]); }
-            _library.SaveCategoryOrder(order);
             RefreshSections();
         }
 
