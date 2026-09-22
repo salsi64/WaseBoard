@@ -54,9 +54,6 @@ namespace WaseBoard.Models
         /// <summary>Si vrai, la couleur d'accent suit automatiquement la couleur d'accent Windows.</summary>
         public bool FollowSystemAccent { get; set; } = true;
 
-        /// <summary>Mode d'affichage des sons : "Grid" (défaut) ou "List" (ligne compacte).</summary>
-        public string SoundViewMode { get; set; } = "Grid";
-
         /// <summary>Vrai dès que l'assistant de premier lancement a été fermé une fois (Terminer ou Passer) —
         /// évite de le rouvrir à chaque démarrage tant que le jeton/l'ID Discord ne sont pas remplis.</summary>
         public bool HasSeenOnboarding { get; set; }

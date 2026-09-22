@@ -8,8 +8,5 @@ namespace WaseBoard
     public static class ThemeState
     {
         public static bool IsModern { get; set; }
-
-        /// <summary>"Grid" (défaut) ou "List" : bascule grille/liste, prioritaire sur IsModern dans SoundButtonTemplateSelector.</summary>
-        public static string ViewMode { get; set; } = "Grid";
     }
 }

@@ -148,6 +148,7 @@ namespace WaseBoard
             ApplyColorScheme();
 
             MainVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
+            SidebarVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
             UpdateMainVolumeLabel();
 
             if (!_library.Settings.HasSeenOnboarding)
@@ -161,7 +162,6 @@ namespace WaseBoard
             }
 
             _hotkeys = new GlobalHotkeyManager(this);
-            ApplyViewMode();
             ApplyTheme();
             await RefreshCatalogAsync();
             await RefreshSharedCategoriesAsync();
@@ -255,7 +255,13 @@ namespace WaseBoard
             res["AccentBrush"] = new SolidColorBrush(accent);
         }
 
-        /// <summary>Bascule entre le thème classique (barre d'outils) et moderne (barre latérale, boutons en pilule).</summary>
+        /// <summary>
+        /// Bascule entre le thème classique (barre d'outils) et moderne (barre latérale, boutons en pilule).
+        /// Le bouton Paramètres et le slider de volume de la barre d'outils (MainVolumePanel) ont
+        /// chacun un équivalent dans la barre latérale (SidebarFooter) : masqués ici en thème
+        /// moderne pour ne pas les afficher en double, ils restent la seule voie d'accès en
+        /// thème classique puisque la barre latérale n'existe pas dans ce cas.
+        /// </summary>
         private void ApplyTheme()
         {
             var isModern = _library.Settings.UiTheme == "Modern";
@@ -264,35 +270,12 @@ namespace WaseBoard
             Sidebar.Visibility = isModern ? Visibility.Visible : Visibility.Collapsed;
             SidebarColumn.Width = new GridLength(isModern ? (_sidebarCollapsed ? 60 : 230) : 0);
             TitleText.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
+            SettingsButton.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
+            MainVolumePanel.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
 
             // Les boutons de son utilisent un ItemTemplateSelector qui lit ThemeState.IsModern :
             // il faut reconstruire les sections pour que le changement de gabarit soit pris en compte.
             RefreshSections();
-        }
-
-        /// <summary>Bascule vue grille (par défaut) / vue liste compacte, même mécanisme que ApplyTheme() : ThemeState + reconstruction des sections.</summary>
-        private void ApplyViewMode()
-        {
-            ThemeState.ViewMode = _library.Settings.SoundViewMode;
-            ViewModeToggleButton.Content = ThemeState.ViewMode == "List" ? "▦ Grille" : "☰ Liste";
-        }
-
-        private void ViewModeToggleButton_Click(object sender, RoutedEventArgs e)
-        {
-            _library.Settings.SoundViewMode = _library.Settings.SoundViewMode == "List" ? "Grid" : "List";
-            _library.SaveSettings();
-            ApplyViewMode();
-            RefreshSections();
-        }
-
-        /// <summary>Bascule le panneau des sons d'une section entre grille animée (AnimatedWrapPanel) et
-        /// liste verticale compacte, selon ThemeState.ViewMode — réévalué à chaque reconstruction
-        /// des sections (RefreshSections crée de nouvelles instances d'ItemsControl).</summary>
-        private void SoundsItemsControl_Loaded(object sender, RoutedEventArgs e)
-        {
-            if (sender is not ItemsControl itemsControl) return;
-            if (ThemeState.ViewMode == "List")
-                itemsControl.ItemsPanel = new ItemsPanelTemplate(new FrameworkElementFactory(typeof(StackPanel)));
         }
 
         /// <summary>Résout votre pseudo/avatar Discord une fois au démarrage (mise en cache locale, pas un indicateur de présence).</summary>
@@ -504,17 +487,29 @@ namespace WaseBoard
             await Task.WhenAll(tasks);
         }
 
-        private void MainVolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        /// <summary>
+        /// Partagé par les deux sliders de volume (MainVolumeSlider en thème classique,
+        /// SidebarVolumeSlider en thème moderne — voir ApplyTheme()) : un seul des deux est
+        /// visible à la fois, mais on garde l'autre à jour pour retrouver la bonne valeur si le
+        /// thème change en cours de session.
+        /// </summary>
+        private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (!_settingsReady) return; // évite d'écraser settings.json pendant InitializeComponent(), voir _settingsReady
             _library.Settings.LocalPlaybackVolume = (float)e.NewValue;
             _library.SaveSettings();
+
+            if (!ReferenceEquals(sender, MainVolumeSlider)) MainVolumeSlider.Value = e.NewValue;
+            if (!ReferenceEquals(sender, SidebarVolumeSlider)) SidebarVolumeSlider.Value = e.NewValue;
+
             UpdateMainVolumeLabel();
         }
 
         private void UpdateMainVolumeLabel()
         {
-            if (MainVolumeLabel is not null) MainVolumeLabel.Text = $"{(int)(MainVolumeSlider.Value * 100)}%";
+            var text = $"{(int)(MainVolumeSlider.Value * 100)}%";
+            if (MainVolumeLabel is not null) MainVolumeLabel.Text = text;
+            if (SidebarVolumeLabel is not null) SidebarVolumeLabel.Text = text;
         }
 
         /// <summary>Pastille de statut serveur : pulse pendant la connexion, fixe une fois résolue.</summary>

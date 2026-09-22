@@ -225,78 +225,6 @@
             </Button>
         </DataTemplate>
 
-        <!-- Gabarit "liste" (vue compacte) : une ligne fine par son, réutilisée quel que soit le thème Classique/Moderne. -->
-        <DataTemplate x:Key="SoundListRowTemplate">
-            <Button Height="34" Margin="0,2" HorizontalContentAlignment="Stretch"
-                    Click="SoundButton_Click"
-                    MouseRightButtonUp="SoundButton_RightClick"
-                    PreviewMouseLeftButtonDown="SoundButton_PreviewMouseLeftButtonDown"
-                    PreviewMouseMove="SoundButton_PreviewMouseMove"
-                    DragOver="SoundButton_DragOver" DragLeave="SoundButton_DragLeave"
-                    Tag="{Binding}"
-                    Background="{DynamicResource PanelBrush}"
-                    Foreground="{DynamicResource TextBrush}"
-                    BorderThickness="0,0,0,2" BorderBrush="Transparent"
-                    FontSize="12"
-                    ToolTip="Clic gauche : jouer dans le vocal • Clic droit : options • 📣 : aperçu local">
-                <Button.Style>
-                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="24"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <Border Grid.Column="0" Width="18" Height="18" CornerRadius="5"
-                            MouseLeftButtonDown="PreviewIcon_MouseLeftButtonDown" Cursor="Hand"
-                            ToolTip="Aperçu (lecture locale uniquement, sans envoi à Discord)">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background" Value="#77000000"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsPreviewing}" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <TextBlock Text="📣" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-
-                    <TextBlock Grid.Column="1" Text="{Binding Emoji}" FontSize="13" Margin="8,0,6,0" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="2" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Grid.Column="3" Text="★" Foreground="Gold" FontWeight="Bold" Margin="6,0" VerticalAlignment="Center"
-                               Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVisibilityConverter}}"/>
-
-                    <ItemsControl Grid.Column="4" ItemsSource="{Binding ActiveUsers}" VerticalAlignment="Center" Margin="6,0,10,0">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Width="16" Height="16" CornerRadius="8" Margin="0,0,2,0"
-                                        BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1" ToolTip="{Binding Username}">
-                                    <Border.Background>
-                                        <ImageBrush ImageSource="{Binding AvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
-                                    </Border.Background>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Grid>
-            </Button>
-        </DataTemplate>
-
         <!-- Gabarit d'une section (★ Favoris, une catégorie, ou "Tous les sons") : un accordéon repliable. -->
         <DataTemplate x:Key="SectionTemplate">
             <Expander IsExpanded="{Binding IsExpanded, Mode=OneTime}" Tag="{Binding CategoryKey}"
@@ -361,8 +289,7 @@
                 <Border Background="{DynamicResource BgBrush}" CornerRadius="6" Padding="8" MinHeight="40"
                         AllowDrop="True" Drop="Section_Drop" Tag="{Binding}">
                     <Grid>
-                        <ItemsControl ItemsSource="{Binding Sounds}" ItemTemplateSelector="{StaticResource SoundButtonTemplateSelector}"
-                                      Loaded="SoundsItemsControl_Loaded">
+                        <ItemsControl ItemsSource="{Binding Sounds}" ItemTemplateSelector="{StaticResource SoundButtonTemplateSelector}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><local:AnimatedWrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
@@ -421,6 +348,27 @@
                 <TextBlock Text="Rien ne joue actuellement" FontSize="11" Opacity="0.5"
                            Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"
                            Visibility="{Binding NowPlayingEntries.Count, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=Invert}"/>
+
+                <!-- Statut serveur ("Connecté — X son(s)") : déplacé ici depuis la barre d'outils
+                     pour lui laisser de la place, aligné à droite de cette même barre. -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <Ellipse x:Name="StatusDot" Width="8" Height="8" Margin="2,0,6,0" VerticalAlignment="Center">
+                        <Ellipse.RenderTransform>
+                            <ScaleTransform CenterX="4" CenterY="4"/>
+                        </Ellipse.RenderTransform>
+                        <Ellipse.Resources>
+                            <Storyboard x:Key="StatusDotPulse" RepeatBehavior="Forever" AutoReverse="True">
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0.35" Duration="0:0:0.6">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseInOut"/>
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </Ellipse.Resources>
+                    </Ellipse>
+                    <TextBlock x:Name="ServerStatusText" Text="" FontSize="12" Opacity="0.7"
+                               Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
+                </StackPanel>
             </Grid>
         </Border>
 
@@ -520,12 +468,21 @@
                 </ScrollViewer>
 
                 <StackPanel x:Name="SidebarFooter" Grid.Row="4" Margin="0,12,0,0">
+                    <!-- Équivalent du slider de la barre d'outils classique (MainVolumePanel), qui
+                         reste masqué en thème moderne pour ne pas le dupliquer — voir ApplyTheme(). -->
+                    <StackPanel Orientation="Horizontal" Margin="2,0,2,10">
+                        <TextBlock Text="🔊" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{DynamicResource TextBrush}"/>
+                        <Slider x:Name="SidebarVolumeSlider" Width="110" Minimum="0" Maximum="1.5" Value="1.0"
+                                ValueChanged="VolumeSlider_ValueChanged" ToolTip="Volume d'écoute local (aperçu uniquement, jamais envoyé à Discord)"/>
+                        <TextBlock x:Name="SidebarVolumeLabel" Text="100%" FontSize="11" Opacity="0.7" Width="34"
+                                   VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{DynamicResource TextBrush}"/>
+                    </StackPanel>
                     <Button Content="⚙ Paramètres" Click="SettingsButton_Click" HorizontalContentAlignment="Left" Height="34" Margin="0,0,0,8" Padding="10,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
                     <Border Background="{DynamicResource BgBrush}" CornerRadius="8" Padding="10">
                         <StackPanel>
                             <TextBlock x:Name="SidebarConnectionText" Text="🔴 Non connecté" FontSize="12" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"/>
-                            <TextBlock Text="WaseBoard v2.1" FontSize="10" Opacity="0.5" Foreground="{DynamicResource TextBrush}" Margin="0,4,0,0"/>
+                            <TextBlock Text="WaseBoard v2.2" FontSize="10" Opacity="0.5" Foreground="{DynamicResource TextBrush}" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -536,92 +493,68 @@
         <Grid Grid.Column="1" Margin="16">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Barre d'outils -->
+            <!-- Barre unique : titre, statut serveur, recherche, actions. Le bouton Paramètres et
+                 le slider de volume (MainVolumePanel) ont chacun un équivalent dans la barre
+                 latérale du thème moderne ; ils ne restent visibles ICI qu'en thème classique
+                 (pas de barre latérale), pour ne pas dupliquer les contrôles — voir ApplyTheme(). -->
             <DockPanel Grid.Row="0" Margin="0,0,0,12">
-                <TextBlock x:Name="TitleText" Text="🎛️ WaseBoard" FontSize="20" FontWeight="Bold"
+                <TextBlock x:Name="TitleText" Text="🎛️ WaseBoard" FontSize="18" FontWeight="Bold"
                            Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" DockPanel.Dock="Left"/>
 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="RefreshButton" Content="⟳ Actualiser" Padding="12,6" Margin="0,0,8,0"
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                    <Button x:Name="RefreshButton" Content="⟳ Actualiser" Padding="10,6" Margin="0,0,6,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
                             BorderBrush="{DynamicResource TextBrush}" Click="RefreshButton_Click"/>
-                    <Button x:Name="JoinVoiceButton" Content="🔊 Rejoindre mon vocal" Padding="12,6" Margin="0,0,8,0"
+                    <Button x:Name="JoinVoiceButton" Content="🔊 Rejoindre mon vocal" Padding="10,6" Margin="0,0,6,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
                             BorderBrush="{DynamicResource TextBrush}" Click="JoinVoiceButton_Click"
                             ToolTip="Fait rejoindre le bot au salon vocal où vous êtes actuellement"/>
-                    <Button x:Name="StopAllButton" Content="⏹ Stop tout" Padding="12,6" Margin="0,0,8,0"
+                    <Button x:Name="StopAllButton" Content="⏹ Stop tout" Padding="10,6" Margin="0,0,6,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
                             BorderBrush="{DynamicResource TextBrush}" Click="StopAllButton_Click"/>
-                    <Button x:Name="SettingsButton" Content="⚙ Paramètres" Padding="12,6" Margin="0,0,8,0"
+                    <Button x:Name="SettingsButton" Content="⚙ Paramètres" Padding="10,6" Margin="0,0,6,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
                             BorderBrush="{DynamicResource TextBrush}" Click="SettingsButton_Click"/>
-                    <Button x:Name="ViewModeToggleButton" Content="☰ Liste" Padding="12,6" Margin="0,0,8,0"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource TextBrush}" Click="ViewModeToggleButton_Click"
-                            ToolTip="Basculer entre vue grille et vue liste compacte"/>
-                    <Button x:Name="AddSoundButton" Content="+ Ajouter un son" Padding="12,6"
+                    <Button Content="+ Nouvelle catégorie" Padding="10,6" Margin="0,0,6,0"
+                            Click="AddCategoryButton_Click"
+                            Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                            BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                    <Button x:Name="AddSoundButton" Content="+ Ajouter un son" Padding="10,6"
                             Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"
                             Click="AddSoundButton_Click"/>
                 </StackPanel>
-            </DockPanel>
 
-            <!-- Sous-barre : statut serveur + recherche + nouvelle catégorie -->
-            <DockPanel Grid.Row="1" Margin="0,0,0,12">
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
-                    <Ellipse x:Name="StatusDot" Width="8" Height="8" Margin="2,0,6,0" VerticalAlignment="Center">
-                        <Ellipse.RenderTransform>
-                            <ScaleTransform CenterX="4" CenterY="4"/>
-                        </Ellipse.RenderTransform>
-                        <Ellipse.Resources>
-                            <Storyboard x:Key="StatusDotPulse" RepeatBehavior="Forever" AutoReverse="True">
-                                <DoubleAnimation Storyboard.TargetProperty="Opacity" To="0.35" Duration="0:0:0.6">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseInOut"/>
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </Ellipse.Resources>
-                    </Ellipse>
-                    <TextBlock x:Name="ServerStatusText" Text="" FontSize="12" Opacity="0.7"
-                               Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
-                </StackPanel>
-
-                <Button Content="+ Nouvelle catégorie" Padding="10,5" HorizontalAlignment="Right" DockPanel.Dock="Right"
-                        Click="AddCategoryButton_Click"
-                        Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                        BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
-
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="0,0,14,0" VerticalAlignment="Center">
+                <StackPanel x:Name="MainVolumePanel" Orientation="Horizontal" DockPanel.Dock="Right"
+                            Margin="0,0,14,0" VerticalAlignment="Center">
                     <TextBlock Text="🔊" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource TextBrush}"/>
-                    <Slider x:Name="MainVolumeSlider" Width="90" Minimum="0" Maximum="1.5" Value="1.0"
-                            ValueChanged="MainVolumeSlider_ValueChanged" ToolTip="Volume d'écoute local (aperçu uniquement, jamais envoyé à Discord)"/>
+                    <Slider x:Name="MainVolumeSlider" Width="80" Minimum="0" Maximum="1.5" Value="1.0"
+                            ValueChanged="VolumeSlider_ValueChanged" ToolTip="Volume d'écoute local (aperçu uniquement, jamais envoyé à Discord)"/>
                     <TextBlock x:Name="MainVolumeLabel" Text="100%" FontSize="11" Opacity="0.7" Width="34"
                                VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{DynamicResource TextBrush}"/>
                 </StackPanel>
 
-                <Grid Margin="16,0" HorizontalAlignment="Stretch">
+                <Grid Margin="12,0" HorizontalAlignment="Stretch" MaxWidth="420">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="🔍" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource TextBrush}"/>
-                    <TextBox x:Name="SearchBox" Grid.Column="1" Height="28" MaxWidth="260" HorizontalAlignment="Left"
+                    <TextBox x:Name="SearchBox" Grid.Column="1" Height="28" HorizontalAlignment="Stretch"
                              TextChanged="SearchBox_TextChanged"
                              ToolTip="Rechercher un son par son nom"/>
                 </Grid>
             </DockPanel>
 
             <!-- Sections : ★ Favoris, catégories personnalisées, puis Tous les sons -->
-            <ScrollViewer x:Name="SectionsScrollViewer" Grid.Row="2" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer x:Name="SectionsScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="SectionsItemsControl" ItemTemplate="{StaticResource SectionTemplate}"/>
             </ScrollViewer>
 
             <!-- Overlay affiché pendant le survol d'un glisser-déposer de fichiers -->
-            <Border x:Name="DropOverlay" Grid.Row="0" Grid.RowSpan="3"
+            <Border x:Name="DropOverlay" Grid.Row="0" Grid.RowSpan="2"
                     Background="#CC1E1E2E" CornerRadius="8"
                     BorderBrush="{DynamicResource AccentBrush}" BorderThickness="3"
                     Visibility="Collapsed" IsHitTestVisible="False">
@@ -632,7 +565,7 @@
             <!-- Copie flottante d'un bouton de son pendant son glisser-déposer (voir ShowDragVisual/
                  Window_PreviewDragOver) : suit le curseur pour bien montrer que le son "voyage" vers
                  l'endroit du dépôt, plutôt que de laisser le bouton d'origine seul immobile. -->
-            <Canvas x:Name="DragVisualCanvas" Grid.Row="0" Grid.RowSpan="3" IsHitTestVisible="False"/>
+            <Canvas x:Name="DragVisualCanvas" Grid.Row="0" Grid.RowSpan="2" IsHitTestVisible="False"/>
         </Grid>
     </Grid>
 
