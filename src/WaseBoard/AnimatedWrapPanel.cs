@@ -23,6 +23,24 @@ namespace WaseBoard
     {
         private static readonly TimeSpan AnimationDuration = TimeSpan.FromMilliseconds(380);
 
+        /// <summary>
+        /// Grille à cellules de largeur FIXE en thème moderne : les pilules ont sinon une largeur
+        /// organique qui dépend de leur contenu (nom, favori, avatars de qui joue ce son...), donc
+        /// tout changement (ex: quelqu'un se met à jouer un son ailleurs dans la grille) décale la
+        /// position de TOUS les boutons suivants — WrapPanel recalcule où chaque ligne "casse" à
+        /// partir de la largeur réelle de chaque enfant. Avec ItemWidth fixé, cette largeur ne
+        /// dépend plus que de la fenêtre (plus ou moins de colonnes selon l'espace dispo, comme une
+        /// vraie grille responsive) : le contenu d'un bouton peut grandir sans jamais affecter ses
+        /// voisins, l'éventuel dépassement étant simplement rogné (voir ClipToBounds sur le
+        /// bouton du gabarit moderne). Le thème classique, déjà à largeur de bouton fixe de son
+        /// côté, n'a pas besoin de cette béquille (ItemWidth reste NaN, comportement par défaut).
+        /// </summary>
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            ItemWidth = ThemeState.IsModern ? 195 : double.NaN;
+            return base.MeasureOverride(availableSize);
+        }
+
         protected override Size ArrangeOverride(Size finalSize)
         {
             // Position de chaque enfant AVANT ce passage d'arrangement (donc sa position actuelle,

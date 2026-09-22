@@ -132,7 +132,7 @@
 
         <!-- Gabarit moderne (pilule) réutilisé pour chaque bouton de son, façon maquette. -->
         <DataTemplate x:Key="ModernSoundButtonTemplate">
-            <Button Height="42" Margin="4"
+            <Button Height="42" Margin="4" ClipToBounds="True"
                     Click="SoundButton_Click"
                     MouseRightButtonUp="SoundButton_RightClick"
                     PreviewMouseLeftButtonDown="SoundButton_PreviewMouseLeftButtonDown"
