@@ -220,8 +220,9 @@ class MixingAudioSource(discord.AudioSource):
 intents = discord.Intents.default()
 intents.voice_states = True
 intents.guilds = True
-intents.members = True  # nécessaire pour lister les membres (GET /members) ; à activer aussi
-                         # côté Portail Développeur > Bot > "Server Members Intent".
+intents.members = True  # nécessaire pour résoudre un membre par id (verify-user, activité,
+                         # catégories partagées...) ; à activer aussi côté Portail Développeur >
+                         # Bot > "Server Members Intent".
 
 
 class WaseBoardServer(commands.Bot):
@@ -433,8 +434,6 @@ class WaseBoardServer(commands.Bot):
         app.router.add_post("/stop", self._handle_stop_all)
         app.router.add_post("/join-my-channel", self._handle_join_my_channel)
         app.router.add_get("/status", self._handle_status)
-        app.router.add_get("/guilds", self._handle_list_guilds)
-        app.router.add_get("/members", self._handle_list_members)
         app.router.add_get("/activity", self._handle_activity)
         app.router.add_get("/my-guilds", self._handle_my_guilds)
         app.router.add_get("/verify-user", self._handle_verify_user)
@@ -565,31 +564,7 @@ class WaseBoardServer(commands.Bot):
 
         return web.json_response({"status": "ok"})
 
-    # ---------- Membres Discord (pour le sélecteur "qui êtes-vous ?" côté client) ----------
-
-    async def _handle_list_members(self, request: web.Request) -> web.Response:
-        if not self._check_auth(request):
-            return web.json_response({"error": "unauthorized"}, status=401)
-
-        seen: dict[int, dict] = {}
-        for guild in self.guilds:
-            for member in guild.members:
-                if member.bot or member.id in seen:
-                    continue
-                seen[member.id] = {
-                    "id": str(member.id),
-                    "username": member.display_name,
-                    "avatar_url": str(member.display_avatar.url),
-                }
-
-        return web.json_response({"members": list(seen.values())})
-
     # ---------- Serveurs Discord / statut ----------
-
-    async def _handle_list_guilds(self, request: web.Request) -> web.Response:
-        if not self._check_auth(request):
-            return web.json_response({"error": "unauthorized"}, status=401)
-        return web.json_response({"guilds": [{"id": str(g.id), "name": g.name} for g in self.guilds]})
 
     async def _handle_my_guilds(self, request: web.Request) -> web.Response:
         """Liste TOUS les serveurs Discord dont cet utilisateur est membre — chacun a

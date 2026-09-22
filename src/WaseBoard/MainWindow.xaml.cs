@@ -897,8 +897,7 @@ namespace WaseBoard
             removeHotkeyItem.Click += (_, _) =>
             {
                 _library.SetHotkey(item, null);
-                _hotkeys?.UnregisterAll();
-                RegisterAllHotkeys();
+                ResyncHotkeys();
             };
 
             var deleteItem = new MenuItem { Header = "Supprimer" };
@@ -907,9 +906,17 @@ namespace WaseBoard
                 var confirm = ConfirmDialog.Show(this, $"Supprimer « {item.Name} » du catalogue partagé ?");
                 if (!confirm) return;
 
-                UnregisterHotkeyFor(item);
                 var ok = await _library.DeleteSoundAsync(item);
-                if (ok) { Sounds.Remove(item); RefreshSections(); }
+                if (ok)
+                {
+                    // Après le retrait (pas avant) : ResyncHotkeys() reconstruit depuis Sounds, donc
+                    // le raccourci de ce son ne disparaît vraiment que s'il n'est plus dans la
+                    // collection au moment de l'appel — sinon il resterait actif jusqu'au prochain
+                    // resync et redéclencherait Play() sur un son qui n'existe plus côté serveur.
+                    Sounds.Remove(item);
+                    ResyncHotkeys();
+                    RefreshSections();
+                }
                 else ToastService.Show("Suppression échouée.", ToastKind.Warning);
             };
 
@@ -1550,11 +1557,6 @@ namespace WaseBoard
 
         /// <summary>
         /// Joue un son dans le vocal Discord : envoie l'ordre au serveur, qui retrouve tout seul
-        /// le bon salon (via votre présence vocale) et prévient tous les clients via l'activité
-        /// partagée (highlight + avatar), sondée en continu — pas de lecture locale ici.
-        /// </summary>
-        /// <summary>
-        /// Joue un son dans le vocal Discord : envoie l'ordre au serveur, qui retrouve tout seul
         /// le bon salon (via votre présence vocale) et enregistre l'activité pour tous. On sonde
         /// immédiatement après l'envoi (sans attendre le prochain cycle programmé) pour que le
         /// highlight apparaisse instantanément sur votre propre clic.
@@ -1726,7 +1728,10 @@ namespace WaseBoard
                 _hotkeys.Register(modifiers, key, () => Dispatcher.Invoke(() => Play(item)));
         }
 
-        private void UnregisterHotkeyFor(SoundItem item)
+        /// <summary>Reconstruit tous les raccourcis depuis Sounds/Settings.SoundHotkeys — le
+        /// GlobalHotkeyManager n'expose pas de désenregistrement ciblé par son, donc toute
+        /// modification (retrait, suppression du son) repasse par un cycle complet unregister/register.</summary>
+        private void ResyncHotkeys()
         {
             _hotkeys?.UnregisterAll();
             RegisterAllHotkeys();

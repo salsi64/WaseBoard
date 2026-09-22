@@ -7,9 +7,6 @@ using NAudio.Wave;
 namespace WaseBoard.Services
 {
     /// <summary>
-    /// Joue des fichiers audio vers un ou plusieurs périphériques de sortie (retour audio local).
-    /// </summary>
-    /// <summary>
     /// Enveloppe un WaveStream pour garantir qu'il ne délivre jamais plus d'octets que sa longueur
     /// nominale. Certains décodeurs (notamment des MP3 encodés en VBR avec une durée mal déclarée,
     /// ou le ré-échantillonnage automatique de WASAPI en mode partagé) peuvent dans de rares cas
@@ -51,6 +48,7 @@ namespace WaseBoard.Services
         }
     }
 
+    /// <summary>Joue des fichiers audio vers un ou plusieurs périphériques de sortie (retour audio local).</summary>
     public class AudioPlaybackService : IDisposable
     {
         private class ActivePlayback
@@ -68,18 +66,6 @@ namespace WaseBoard.Services
 
         /// <summary>Déclenché quand un son a fini de jouer sur TOUS ses périphériques (plus aucune instance active).</summary>
         public event Action<string>? SoundStopped;
-
-        public static List<MMDevice> GetOutputDevices()
-        {
-            using var enumerator = new MMDeviceEnumerator();
-            return enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).ToList();
-        }
-
-        public static MMDevice? GetDeviceById(string? deviceId)
-        {
-            if (string.IsNullOrEmpty(deviceId)) return null;
-            return GetOutputDevices().FirstOrDefault(d => d.ID == deviceId);
-        }
 
         /// <summary>Périphérique de sortie par défaut du système, utilisé pour le retour audio local.</summary>
         public static MMDevice? GetDefaultOutputDevice()

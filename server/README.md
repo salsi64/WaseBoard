@@ -144,13 +144,13 @@ sudo journalctl -u waseboard -f   # pour suivre les logs
 
 ## 6. Utilisation
 
-1. Chaque utilisateur configure l'adresse (`http://VOTRE_IP:5005`) et le `shared_secret`
-   dans les Paramètres de son WaseBoard.
-2. Dans chaque Discord concerné, `/join` fait rejoindre le bot au salon vocal — la réponse
-   affiche l'ID du serveur Discord (guild), à renseigner dans WaseBoard si le bot est présent
-   sur plusieurs Discords (sinon, inutile : le serveur le déduit automatiquement s'il n'y en
-   a qu'un seul de connecté). Un bouton "⟳" dans les Paramètres de WaseBoard liste aussi
-   automatiquement les serveurs disponibles.
+1. Chaque utilisateur configure l'adresse (`http://VOTRE_IP:5005`), le `shared_secret` et
+   son ID Discord dans les Paramètres de son WaseBoard (voir "Identité Discord" dans le README
+   principal). Rien d'autre à choisir : le serveur cible (guild) est déduit automatiquement à
+   partir du salon vocal où cet utilisateur se trouve — aucun ID de serveur à renseigner
+   manuellement, même si le bot est présent sur plusieurs Discords en même temps.
+2. Dans chaque Discord concerné, `/join` fait rejoindre le bot au salon vocal où vous êtes
+   (ou utilisez le bouton "🔊 Rejoindre mon vocal" directement depuis WaseBoard).
 3. Les sons ajoutés/joués depuis n'importe quel client WaseBoard sont partagés avec tous les
    autres utilisateurs connectés au même serveur.
 4. `/leave` pour déconnecter le bot d'un salon donné. Il se déconnecte aussi
