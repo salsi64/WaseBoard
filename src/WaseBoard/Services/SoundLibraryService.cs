@@ -42,6 +42,10 @@ namespace WaseBoard.Services
             /// <summary>SHA-256 du contenu, calculé côté serveur à l'upload. Absent sur les sons
             /// uploadés avant l'ajout de la détection de doublons (null, ne matche jamais).</summary>
             public string? hash { get; set; }
+
+            /// <summary>Emoji du son, partagé entre tous les utilisateurs (contrairement à
+            /// favoris/catégories/volume/raccourcis, qui restent des préférences locales).</summary>
+            public string? emoji { get; set; }
         }
 
         private class CatalogResponse
@@ -131,16 +135,6 @@ namespace WaseBoard.Services
         {
             item.Volume = volume;
             Settings.SoundVolumes[item.Id] = volume;
-            SaveSettings();
-        }
-
-        public void SetEmoji(SoundItem item, string? emoji)
-        {
-            item.Emoji = string.IsNullOrWhiteSpace(emoji) ? null : emoji.Trim();
-            if (string.IsNullOrEmpty(item.Emoji))
-                Settings.SoundEmojis.Remove(item.Id);
-            else
-                Settings.SoundEmojis[item.Id] = item.Emoji;
             SaveSettings();
         }
 
@@ -281,6 +275,36 @@ namespace WaseBoard.Services
             }
         }
 
+        /// <summary>Emoji partagé entre tous les utilisateurs (contrairement à favoris/catégories/
+        /// volume/raccourcis, préférences locales) : assigné par quelqu'un, visible et modifiable
+        /// par tous, donc stocké côté serveur plutôt que dans Settings.</summary>
+        public async Task<bool> SetEmojiAsync(SoundItem item, string? emoji)
+        {
+            LastErrorDetail = null;
+            var trimmed = string.IsNullOrWhiteSpace(emoji) ? null : emoji.Trim();
+            try
+            {
+                using var request = CreateRequest(HttpMethod.Patch, $"/sounds/{item.Id}");
+                var payload = JsonSerializer.Serialize(new { emoji = trimmed ?? "" });
+                request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+
+                using var response = await _http.SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    LastErrorDetail = $"Changement d'emoji échoué ({(int)response.StatusCode}).";
+                    return false;
+                }
+
+                item.Emoji = trimmed;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastErrorDetail = ex.Message;
+                return false;
+            }
+        }
+
         // ---------- Communication serveur ----------
 
         private string BaseUrl => Settings.ServerUrl.TrimEnd('/');
@@ -319,7 +343,7 @@ namespace WaseBoard.Services
                     IsFavorite = Settings.FavoriteSoundIds.Contains(entry.id),
                     Hotkey = Settings.SoundHotkeys.TryGetValue(entry.id, out var hk) ? hk : null,
                     Volume = Settings.SoundVolumes.TryGetValue(entry.id, out var vol) ? vol : 1.0f,
-                    Emoji = Settings.SoundEmojis.TryGetValue(entry.id, out var emoji) ? emoji : null
+                    Emoji = string.IsNullOrEmpty(entry.emoji) ? null : entry.emoji
                 }).ToList();
 
                 return ApplyCustomOrder(items);
@@ -404,7 +428,7 @@ namespace WaseBoard.Services
                 var entry = JsonSerializer.Deserialize<CatalogEntry>(json);
                 if (entry is null) return null;
 
-                return new SoundItem { Id = entry.id, Name = entry.name, Extension = entry.extension, ContentHash = entry.hash };
+                return new SoundItem { Id = entry.id, Name = entry.name, Extension = entry.extension, ContentHash = entry.hash, Emoji = entry.emoji };
             }
             catch (Exception ex)
             {
@@ -427,7 +451,6 @@ namespace WaseBoard.Services
                 Settings.FavoriteSoundIds.Remove(item.Id);
                 Settings.SoundHotkeys.Remove(item.Id);
                 Settings.SoundVolumes.Remove(item.Id);
-                Settings.SoundEmojis.Remove(item.Id);
                 Settings.SoundOrder.Remove(item.Id);
                 foreach (var list in Settings.Categories.Values) list.Remove(item.Id);
                 SaveSettings();

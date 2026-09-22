@@ -88,6 +88,9 @@ namespace WaseBoard
 
             /// <summary>Vrai pour les catégories personnelles et partagées (pas Favoris/Tous les sons) : affiche les flèches ↑/↓.</summary>
             public bool IsReorderable { get; set; }
+
+            /// <summary>Vrai uniquement pour "Tous les sons" : affiche le sélecteur de tri dans l'en-tête.</summary>
+            public bool IsAllSounds { get; set; }
         }
 
         private List<SoundLibraryService.SharedCategoryInfo> _sharedCategories = new();
@@ -623,7 +626,7 @@ namespace WaseBoard
                     CategoryKey = FavoritesKey,
                     Sounds = new ObservableCollection<SoundItem>(Filtered(Sounds.Where(s => s.IsFavorite))),
                     IsManageable = false,
-                    IsExpanded = true // toujours ouverte
+                    IsExpanded = !_library.Settings.CollapsedSections.Contains(FavoritesKey)
                 }
             };
 
@@ -666,8 +669,9 @@ namespace WaseBoard
             {
                 Name = "Tous les sons",
                 CategoryKey = AllSoundsKey,
-                Sounds = new ObservableCollection<SoundItem>(Filtered(Sounds)),
+                Sounds = new ObservableCollection<SoundItem>(SortAllSounds(Filtered(Sounds))),
                 IsManageable = false,
+                IsAllSounds = true,
                 IsExpanded = true // toujours ouverte
             });
 
@@ -690,6 +694,45 @@ namespace WaseBoard
                     };
                 })
                 .ToList();
+        }
+
+        /// <summary>Tri appliqué uniquement à "Tous les sons" (la seule section vouée à devenir
+        /// vraiment longue) : "Custom" garde l'ordre d'affichage actuel (glisser-déposer manuel,
+        /// celui de Sounds), les autres trient par nom. Choix mémorisé (Settings.AllSoundsSortMode).</summary>
+        private static IEnumerable<SoundItem> SortAllSounds(IEnumerable<SoundItem> sounds, string sortMode) => sortMode switch
+        {
+            "NameAsc" => sounds.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase),
+            "NameDesc" => sounds.OrderByDescending(s => s.Name, StringComparer.OrdinalIgnoreCase),
+            _ => sounds
+        };
+
+        private IEnumerable<SoundItem> SortAllSounds(IEnumerable<SoundItem> sounds) =>
+            SortAllSounds(sounds, _library.Settings.AllSoundsSortMode);
+
+        /// <summary>Présélectionne le tri courant à chaque (re)création du ComboBox — la section
+        /// "Tous les sons" (comme toutes les sections) est entièrement reconstruite à chaque
+        /// RefreshSections(), donc ce ComboBox n'a pas de binding réactif vers Settings, juste cet
+        /// état initial lu une fois chargé.</summary>
+        private void AllSoundsSortCombo_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is not ComboBox { DataContext: SectionViewModel { IsAllSounds: true } } combo) return;
+
+            var mode = _library.Settings.AllSoundsSortMode;
+            foreach (ComboBoxItem item in combo.Items)
+            {
+                if ((string)item.Tag == mode) { combo.SelectedItem = item; return; }
+            }
+            combo.SelectedIndex = 0;
+        }
+
+        private void AllSoundsSort_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (sender is not ComboBox { SelectedItem: ComboBoxItem { Tag: string mode } } || !_settingsReady) return;
+            if (mode == _library.Settings.AllSoundsSortMode) return;
+
+            _library.Settings.AllSoundsSortMode = mode;
+            _library.SaveSettings();
+            RefreshSections();
         }
 
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -786,6 +829,21 @@ namespace WaseBoard
                 {
                     Sounds.Add(uploaded);
                     RegisterHotkeyFor(uploaded);
+
+                    // Emoji obligatoire à l'ajout, partagé entre tous les utilisateurs : ne peut
+                    // s'appliquer qu'une fois le son réellement uploadé (id connu) — impossible de
+                    // le demander avant l'envoi au serveur.
+                    var picker = new EmojiPickerWindow(null, required: true) { Owner = this };
+                    if (picker.ShowDialog() == true && !string.IsNullOrEmpty(picker.Result))
+                    {
+                        var emojiOk = await _library.SetEmojiAsync(uploaded, picker.Result);
+                        if (!emojiOk)
+                        {
+                            ToastService.Show(
+                                "Échec de l'assignation de l'emoji." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                                ToastKind.Warning);
+                        }
+                    }
                 }
                 else
                 {
@@ -861,18 +919,33 @@ namespace WaseBoard
             categoryMenu.Items.Add(newCategoryItem);
 
             var emojiItem = new MenuItem { Header = string.IsNullOrEmpty(item.Emoji) ? "Choisir un emoji..." : $"Modifier l'emoji ({item.Emoji})" };
-            emojiItem.Click += (_, _) =>
+            emojiItem.Click += async (_, _) =>
             {
                 var picker = new EmojiPickerWindow(item.Emoji) { Owner = this };
-                if (picker.ShowDialog() == true && picker.Result is not null)
+                if (picker.ShowDialog() != true || picker.Result is null) return;
+
+                var ok = await _library.SetEmojiAsync(item, picker.Result);
+                if (ok) RefreshSections();
+                else
                 {
-                    _library.SetEmoji(item, picker.Result);
-                    RefreshSections();
+                    ToastService.Show(
+                        "Échec de l'assignation de l'emoji." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                        ToastKind.Warning);
                 }
             };
 
             var removeEmojiItem = new MenuItem { Header = "Retirer l'emoji", IsEnabled = !string.IsNullOrEmpty(item.Emoji) };
-            removeEmojiItem.Click += (_, _) => { _library.SetEmoji(item, null); RefreshSections(); };
+            removeEmojiItem.Click += async (_, _) =>
+            {
+                var ok = await _library.SetEmojiAsync(item, null);
+                if (ok) RefreshSections();
+                else
+                {
+                    ToastService.Show(
+                        "Échec du retrait de l'emoji." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                        ToastKind.Warning);
+                }
+            };
 
             var renameItem = new MenuItem { Header = "Renommer" };
             renameItem.Click += async (_, _) =>
@@ -1316,9 +1389,10 @@ namespace WaseBoard
         {
             if (sender is not Expander expander) return;
 
-            // "Favoris" et "Tous les sons" restent toujours ouvertes : on annule immédiatement le
-            // repli au lieu de le persister.
-            if (expander.Tag is string key0 && (key0 == FavoritesKey || key0 == AllSoundsKey))
+            // "Tous les sons" reste toujours ouverte (potentiellement très longue liste, pas
+            // d'intérêt à la replier) : on annule immédiatement le repli au lieu de le persister.
+            // "Favoris", elle, est repliable comme n'importe quelle autre catégorie.
+            if (expander.Tag is string key0 && key0 == AllSoundsKey)
             {
                 expander.IsExpanded = true;
                 return;

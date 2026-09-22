@@ -27,9 +27,6 @@ namespace WaseBoard.Models
         /// <summary>Volume individuel par son (ID → volume 0.0-1.5), préférence locale.</summary>
         public Dictionary<string, float> SoundVolumes { get; set; } = new();
 
-        /// <summary>Emoji associé à chaque son (ID → emoji), préférence locale, purement décorative.</summary>
-        public Dictionary<string, string> SoundEmojis { get; set; } = new();
-
         /// <summary>Ordre d'affichage personnalisé des sons dans la grille principale (liste d'IDs). Vide = ordre du serveur.</summary>
         public List<string> SoundOrder { get; set; } = new();
 
@@ -41,6 +38,10 @@ namespace WaseBoard.Models
 
         /// <summary>Clés des sections repliées sur la page principale.</summary>
         public List<string> CollapsedSections { get; set; } = new();
+
+        /// <summary>Tri appliqué à la section "Tous les sons" : "Custom" (ordre d'affichage actuel,
+        /// glisser-déposer manuel), "NameAsc" ou "NameDesc".</summary>
+        public string AllSoundsSortMode { get; set; } = "Custom";
 
         /// <summary>Couleur de fond personnalisée de l'application (hex, ex: "#1E1E2E"). Null = thème par défaut.</summary>
         public string? BackgroundColorHex { get; set; }

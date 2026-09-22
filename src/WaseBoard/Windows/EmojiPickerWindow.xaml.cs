@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace WaseBoard.Windows
 {
@@ -9,35 +10,61 @@ namespace WaseBoard.Windows
         private static readonly string[] Palette =
         {
             "🔥", "💀", "😂", "🤣", "😱", "😭", "😡", "🤡", "😴", "🤔", "🥳", "😎",
+            "😏", "🥺", "😳", "🤯", "🥶", "🤢", "🤮", "😵", "🫠", "🙄", "😬", "🥴",
             "🎉", "🎵", "🎶", "🎤", "🥁", "📢", "🚨", "⚠️", "🔔", "📣", "🎸", "🎧",
-            "👍", "👎", "👏", "🙌", "🤝", "🖕", "🤙", "✌️",
+            "🎷", "🎺", "🎹", "🔊", "🔇", "📯", "🪘", "🎬",
+            "👍", "👎", "👏", "🙌", "🤝", "🖕", "🤙", "✌️", "🤞", "🫡", "👊", "🙏",
             "💩", "🍆", "🍑", "🐸", "🐶", "🐱", "🦆", "🐔", "🐷", "🦉",
+            "🐵", "🦧", "🐢", "🦀", "🐙", "🦈", "🐺", "🦁", "🐴", "🐭",
             "🎮", "⭐", "💥", "🌈", "👑", "🦄", "👻", "🎃", "💣", "🧨", "🚀", "⚡",
-            "❤️", "💔", "💯", "❓", "❗", "✅", "❌", "🔞", "🍺", "🍕", "🍔", "☕"
+            "🛸", "🎯", "🏆", "🎲", "🃏", "🔮", "🧙", "🤖", "👽", "💎",
+            "❤️", "💔", "💯", "❓", "❗", "✅", "☑️", "❌", "🔞", "🍺", "🍕", "🍔", "☕",
+            "🍟", "🌭", "🍿", "🧃", "🍩", "🎂", "🍫", "🥤", "🍷", "🍾",
+            "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚪", "⚫",
+            "😅", "🤩", "👌", "🥚", "🧑", "☀️", "❄️", "💍", "🏠", "🏳️‍🌈"
         };
 
         /// <summary>Emoji choisi, chaîne vide pour "retirer", ou null si annulé.</summary>
         public string? Result { get; private set; }
 
-        public EmojiPickerWindow(string? currentEmoji)
+        /// <summary>Mode "obligatoire" (voir AddSoundFiles) : masque Annuler/Retirer l'emoji et
+        /// désactive Valider tant qu'aucun emoji n'est choisi — on ne peut pas ressortir de cette
+        /// fenêtre sans en avoir assigné un, sauf en la fermant via la croix de la barre de titre
+        /// (dans ce cas Result reste null, géré normalement par l'appelant).</summary>
+        public EmojiPickerWindow(string? currentEmoji, bool required = false)
         {
             InitializeComponent();
             CustomEmojiBox.Text = currentEmoji ?? "";
 
             foreach (var emoji in Palette)
             {
+                // Image plutôt que texte : WPF ne sait pas afficher en couleur le format d'emoji
+                // récent de Windows 11 (COLRv1) — voir EmojiImageResolver. Le glyphe texte
+                // (FontFamily Segoe UI Emoji) s'affichait en traits monochromes malgré la bonne
+                // police, quel que soit le réglage — une vraie limitation du framework, pas un
+                // problème de configuration.
                 var button = new Button
                 {
-                    Content = emoji,
+                    Content = new Image { Source = EmojiImageResolver.Resolve(emoji), Width = 22, Height = 22 },
                     Width = 38,
                     Height = 38,
                     Margin = new Thickness(3),
-                    FontSize = 18,
-                    Background = System.Windows.Media.Brushes.Transparent,
-                    BorderThickness = new Thickness(0)
+                    Background = Brushes.Transparent,
+                    BorderThickness = new Thickness(0),
+                    ToolTip = emoji
                 };
                 button.Click += (_, _) => { CustomEmojiBox.Text = emoji; };
                 EmojiPalette.Children.Add(button);
+            }
+
+            if (required)
+            {
+                Title = "Choisissez un emoji pour ce son";
+                IntroText.Text = "Choisissez un emoji pour ce son (obligatoire)";
+                CancelButton.Visibility = Visibility.Collapsed;
+                RemoveButton.Visibility = Visibility.Collapsed;
+                OkButton.IsEnabled = false;
+                CustomEmojiBox.TextChanged += (_, _) => OkButton.IsEnabled = !string.IsNullOrWhiteSpace(CustomEmojiBox.Text);
             }
         }
 

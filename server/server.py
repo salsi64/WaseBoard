@@ -428,7 +428,7 @@ class WaseBoardServer(commands.Bot):
         app.router.add_get("/sounds", self._handle_list_sounds)
         app.router.add_get("/sounds/{id}/file", self._handle_get_file)
         app.router.add_post("/sounds", self._handle_upload_sound)
-        app.router.add_patch("/sounds/{id}", self._handle_rename_sound)
+        app.router.add_patch("/sounds/{id}", self._handle_update_sound)
         app.router.add_delete("/sounds/{id}", self._handle_delete_sound)
         app.router.add_post("/play", self._handle_play)
         app.router.add_post("/stop", self._handle_stop_all)
@@ -513,7 +513,11 @@ class WaseBoardServer(commands.Bot):
             log.exception("Échec de l'upload")
             return web.json_response({"error": str(ex)}, status=500)
 
-    async def _handle_rename_sound(self, request: web.Request) -> web.Response:
+    async def _handle_update_sound(self, request: web.Request) -> web.Response:
+        """PATCH /sounds/{id} : renomme et/ou change l'emoji d'un son du catalogue partage. Les
+        deux proprietes sont partagees entre tous les utilisateurs (contrairement aux favoris,
+        categories perso, volume ou raccourcis, qui restent des preferences locales par
+        utilisateur) - un emoji assigne par quelqu'un doit etre visible et modifiable par tous."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
 
@@ -523,16 +527,23 @@ class WaseBoardServer(commands.Bot):
         except Exception:
             return web.json_response({"error": "corps JSON invalide"}, status=400)
 
-        new_name = str(data.get("name", "")).strip()
-        if not new_name:
-            return web.json_response({"error": "'name' requis"}, status=400)
-
         catalog = load_catalog()
         entry = next((s for s in catalog if s["id"] == sound_id), None)
         if entry is None:
             return web.json_response({"error": "son introuvable"}, status=404)
 
-        entry["name"] = new_name
+        if "name" not in data and "emoji" not in data:
+            return web.json_response({"error": "'name' ou 'emoji' requis"}, status=400)
+
+        if "name" in data:
+            new_name = str(data.get("name", "")).strip()
+            if not new_name:
+                return web.json_response({"error": "'name' ne peut pas etre vide"}, status=400)
+            entry["name"] = new_name
+
+        if "emoji" in data:
+            entry["emoji"] = str(data.get("emoji") or "").strip()
+
         save_catalog(catalog)
         return web.json_response(entry)
 

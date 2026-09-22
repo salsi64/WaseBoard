@@ -7,7 +7,8 @@
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource BgBrush}"
         chrome:WindowChromeBehavior.Enable="True"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        TextOptions.TextFormattingMode="Display">
     <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource BgBrush}">
         <Grid>
             <Grid.RowDefinitions>
@@ -16,21 +17,22 @@
             </Grid.RowDefinitions>
             <chrome:TitleBarControl Grid.Row="0" TitleText="Choisir un emoji" ShowMinMax="False"/>
             <StackPanel Grid.Row="1" Margin="16,4,16,16">
-                <TextBlock Text="Emoji pour ce son" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10"/>
+                <TextBlock x:Name="IntroText" Text="Emoji pour ce son" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10"/>
 
                 <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" Margin="0,0,0,12">
                     <WrapPanel x:Name="EmojiPalette"/>
                 </ScrollViewer>
 
                 <TextBlock Text="Ou collez un emoji personnalisé :" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                <TextBox x:Name="CustomEmojiBox" Height="30" FontSize="16" Margin="0,0,0,14"/>
+                <TextBox x:Name="CustomEmojiBox" Height="30" FontSize="16" Margin="0,0,0,14"
+                         FontFamily="Segoe UI Emoji, Segoe UI"/>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Content="Retirer l'emoji" Padding="10,6" Margin="0,0,8,0" Click="Remove_Click"
+                    <Button x:Name="RemoveButton" Content="Retirer l'emoji" Padding="10,6" Margin="0,0,8,0" Click="Remove_Click"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
-                    <Button Content="Annuler" Padding="10,6" Margin="0,0,8,0" Click="Cancel_Click"
+                    <Button x:Name="CancelButton" Content="Annuler" Padding="10,6" Margin="0,0,8,0" Click="Cancel_Click"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
-                    <Button Content="Valider" Padding="16,6" Click="Ok_Click" IsDefault="True"
+                    <Button x:Name="OkButton" Content="Valider" Padding="16,6" Click="Ok_Click" IsDefault="True"
                             Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
                 </StackPanel>
             </StackPanel>
