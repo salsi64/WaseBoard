@@ -4,10 +4,12 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -745,12 +747,40 @@ namespace WaseBoard
                 if (trimWindow.ShowDialog() != true || trimWindow.ResultFilePath is null)
                     continue;
 
-                var uploaded = await _library.UploadSoundAsync(trimWindow.ResultFilePath, trimWindow.ResultName);
-
-                if (trimWindow.ResultIsTemporaryFile && File.Exists(trimWindow.ResultFilePath))
+                void CleanupTempFile()
                 {
-                    try { File.Delete(trimWindow.ResultFilePath); } catch { /* fichier temporaire, non bloquant */ }
+                    if (trimWindow.ResultIsTemporaryFile && File.Exists(trimWindow.ResultFilePath))
+                    {
+                        try { File.Delete(trimWindow.ResultFilePath); } catch { /* fichier temporaire, non bloquant */ }
+                    }
                 }
+
+                // Détection de doublons : hash du fichier final (après découpe) contre celui de
+                // chaque son déjà présent dans le catalogue, avant même d'envoyer quoi que ce
+                // soit au serveur. À défaut de correspondance exacte de contenu, un même nom
+                // (catalogue partagé entre tous les utilisateurs d'un serveur) reste un signal
+                // utile, plus faible, qu'on remonte différemment.
+                var contentHash = SoundLibraryService.ComputeFileHash(trimWindow.ResultFilePath);
+                var hashMatch = Sounds.FirstOrDefault(s => s.ContentHash is not null && s.ContentHash == contentHash);
+                var nameMatch = hashMatch is null
+                    ? Sounds.FirstOrDefault(s => string.Equals(s.Name, trimWindow.ResultName, StringComparison.OrdinalIgnoreCase))
+                    : null;
+
+                if (hashMatch is not null)
+                {
+                    var proceed = ConfirmDialog.Show(this,
+                        $"Ce fichier est identique à « {hashMatch.Name} », déjà présent dans le catalogue. L'ajouter quand même ?");
+                    if (!proceed) { CleanupTempFile(); continue; }
+                }
+                else if (nameMatch is not null)
+                {
+                    var proceed = ConfirmDialog.Show(this,
+                        $"Un son nommé « {nameMatch.Name} » existe déjà (contenu différent). L'ajouter quand même ?");
+                    if (!proceed) { CleanupTempFile(); continue; }
+                }
+
+                var uploaded = await _library.UploadSoundAsync(trimWindow.ResultFilePath, trimWindow.ResultName);
+                CleanupTempFile();
 
                 if (uploaded is not null)
                 {
@@ -1339,12 +1369,154 @@ namespace WaseBoard
             }
         }
 
+        /// <summary>Menu déroulant (Nouvelle catégorie / Importer) plutôt qu'un second bouton dans une
+        /// barre d'outils déjà tassée sur une seule ligne.</summary>
         private void AddCategoryButton_Click(object sender, RoutedEventArgs e)
+        {
+            var menu = new ContextMenu { PlacementTarget = AddCategoryButton, Placement = PlacementMode.Bottom };
+
+            var newItem = new MenuItem { Header = "Nouvelle catégorie..." };
+            newItem.Click += (_, _) => CreateCategoryPrompt();
+            menu.Items.Add(newItem);
+
+            var importItem = new MenuItem { Header = "📥 Importer une catégorie..." };
+            importItem.Click += async (_, _) => await ImportCategoryAsync();
+            menu.Items.Add(importItem);
+
+            menu.IsOpen = true;
+        }
+
+        private void CreateCategoryPrompt()
         {
             var name = PromptDialog.Show(this, "Nom de la nouvelle catégorie :", "");
             if (string.IsNullOrWhiteSpace(name)) return;
             _library.CreateCategory(name.Trim());
             RefreshSections();
+        }
+
+        /// <summary>Format du fichier produit par ExportCategory / lu par ImportCategoryAsync.
+        /// Le nom est conservé en plus de l'id de chaque son : ça permet de retrouver un son par
+        /// nom si le fichier est importé sur un autre serveur WaseBoard (catalogue différent, donc
+        /// ids différents) qui possède malgré tout un son de même nom.</summary>
+        private class CategoryExport
+        {
+            public string Category { get; set; } = "";
+            public List<CategoryExportSound> Sounds { get; set; } = new();
+        }
+
+        private class CategoryExportSound
+        {
+            public string Id { get; set; } = "";
+            public string Name { get; set; } = "";
+        }
+
+        /// <summary>Clic droit sur la barre d'une section : menu avec l'export, seule action disponible
+        /// pour toutes les sections (favoris, catégorie perso/partagée, tous les sons) — contrairement
+        /// à renommer/supprimer (boutons dédiés, ✎/🗑) qui restent réservés aux catégories personnelles.</summary>
+        private void SectionHeader_RightClick(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: SectionViewModel section }) return;
+
+            var menu = new ContextMenu();
+            var exportItem = new MenuItem { Header = "⬇ Exporter cette catégorie..." };
+            exportItem.Click += (_, _) => ExportCategory(section);
+            menu.Items.Add(exportItem);
+            menu.IsOpen = true;
+        }
+
+        /// <summary>Exporte n'importe quelle section (favoris, catégorie perso/partagée, tous les sons)
+        /// dans un fichier JSON partageable — action non destructive, disponible pour toutes,
+        /// contrairement à renommer/supprimer qui restent réservés aux catégories personnelles.</summary>
+        private void ExportCategory(SectionViewModel section)
+        {
+            var dialog = new SaveFileDialog
+            {
+                Title = "Exporter la catégorie",
+                Filter = "Catégorie WaseBoard (*.wbcat.json)|*.wbcat.json",
+                FileName = SanitizeFileName(StripSharedPrefix(section.Name)) + ".wbcat.json"
+            };
+            if (dialog.ShowDialog(this) != true) return;
+
+            var export = new CategoryExport
+            {
+                Category = StripSharedPrefix(section.Name),
+                Sounds = section.Sounds.Select(s => new CategoryExportSound { Id = s.Id, Name = s.Name }).ToList()
+            };
+
+            try
+            {
+                File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(export, new JsonSerializerOptions { WriteIndented = true }));
+                ToastService.Show($"Catégorie « {export.Category} » exportée ({export.Sounds.Count} son(s)).", ToastKind.Success);
+            }
+            catch (Exception ex)
+            {
+                ToastService.Show("Échec de l'export : " + ex.Message, ToastKind.Error);
+            }
+        }
+
+        private static string SanitizeFileName(string name)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var cleaned = new string(name.Where(c => !invalid.Contains(c)).ToArray()).Trim();
+            return string.IsNullOrEmpty(cleaned) ? "categorie" : cleaned;
+        }
+
+        /// <summary>Crée une nouvelle catégorie personnelle à partir d'un fichier exporté par
+        /// ExportCategory_Click. Les sons sont retrouvés par id, puis par nom en repli (utile si le
+        /// fichier vient d'un autre serveur WaseBoard, donc d'un catalogue avec d'autres ids) ;
+        /// ceux introuvables sur CE serveur sont simplement ignorés et comptés dans le résumé.</summary>
+        private async Task ImportCategoryAsync()
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "Importer une catégorie",
+                Filter = "Catégorie WaseBoard (*.wbcat.json)|*.wbcat.json|Tous les fichiers|*.*"
+            };
+            if (dialog.ShowDialog(this) != true) return;
+
+            CategoryExport? import;
+            try
+            {
+                var json = await File.ReadAllTextAsync(dialog.FileName);
+                import = JsonSerializer.Deserialize<CategoryExport>(json);
+            }
+            catch (Exception ex)
+            {
+                ToastService.Show("Fichier de catégorie invalide : " + ex.Message, ToastKind.Error);
+                return;
+            }
+
+            if (import is null || import.Sounds.Count == 0)
+            {
+                ToastService.Show("Ce fichier ne contient aucun son.", ToastKind.Warning);
+                return;
+            }
+
+            var suggestedName = string.IsNullOrWhiteSpace(import.Category) ? "Catégorie importée" : import.Category;
+            var name = PromptDialog.Show(this, "Nom de la catégorie importée :", suggestedName);
+            if (string.IsNullOrWhiteSpace(name)) return;
+            var trimmedName = name.Trim();
+
+            _library.CreateCategory(trimmedName);
+
+            var found = 0;
+            foreach (var soundRef in import.Sounds)
+            {
+                var match = Sounds.FirstOrDefault(s => s.Id == soundRef.Id)
+                            ?? Sounds.FirstOrDefault(s => string.Equals(s.Name, soundRef.Name, StringComparison.OrdinalIgnoreCase));
+                if (match is null) continue;
+                _library.AddSoundToCategory(trimmedName, match);
+                found++;
+            }
+
+            RefreshSections();
+
+            var skipped = import.Sounds.Count - found;
+            ToastService.Show(
+                skipped > 0
+                    ? $"Catégorie « {trimmedName} » importée : {found} son(s) ajouté(s), {skipped} introuvable(s) sur ce serveur."
+                    : $"Catégorie « {trimmedName} » importée : {found} son(s) ajouté(s).",
+                skipped > 0 ? ToastKind.Warning : ToastKind.Success);
         }
 
         // Pas de bouton de création pour les catégories partagées : une existe automatiquement

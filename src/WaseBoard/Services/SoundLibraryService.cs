@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -37,6 +38,10 @@ namespace WaseBoard.Services
             public string id { get; set; } = "";
             public string name { get; set; } = "";
             public string extension { get; set; } = ".wav";
+
+            /// <summary>SHA-256 du contenu, calculé côté serveur à l'upload. Absent sur les sons
+            /// uploadés avant l'ajout de la détection de doublons (null, ne matche jamais).</summary>
+            public string? hash { get; set; }
         }
 
         private class CatalogResponse
@@ -310,6 +315,7 @@ namespace WaseBoard.Services
                     Id = entry.id,
                     Name = entry.name,
                     Extension = entry.extension,
+                    ContentHash = entry.hash,
                     IsFavorite = Settings.FavoriteSoundIds.Contains(entry.id),
                     Hotkey = Settings.SoundHotkeys.TryGetValue(entry.id, out var hk) ? hk : null,
                     Volume = Settings.SoundVolumes.TryGetValue(entry.id, out var vol) ? vol : 1.0f,
@@ -364,6 +370,15 @@ namespace WaseBoard.Services
             await Task.WhenAll(tasks);
         }
 
+        /// <summary>SHA-256 d'un fichier local, en minuscules hexadécimal — même format que le hash calculé
+        /// côté serveur à l'upload, pour permettre au client de détecter un doublon AVANT d'envoyer le fichier.</summary>
+        public static string ComputeFileHash(string filePath)
+        {
+            using var sha256 = SHA256.Create();
+            using var stream = File.OpenRead(filePath);
+            return Convert.ToHexString(sha256.ComputeHash(stream)).ToLowerInvariant();
+        }
+
         public async Task<SoundItem?> UploadSoundAsync(string localFilePath, string name)
         {
             LastErrorDetail = null;
@@ -389,7 +404,7 @@ namespace WaseBoard.Services
                 var entry = JsonSerializer.Deserialize<CatalogEntry>(json);
                 if (entry is null) return null;
 
-                return new SoundItem { Id = entry.id, Name = entry.name, Extension = entry.extension };
+                return new SoundItem { Id = entry.id, Name = entry.name, Extension = entry.extension, ContentHash = entry.hash };
             }
             catch (Exception ex)
             {

@@ -24,6 +24,7 @@ Voir README.md pour la mise en place complète (création du bot, ouverture du p
 """
 
 import array
+import hashlib
 import json
 import logging
 import threading
@@ -493,11 +494,17 @@ class WaseBoardServer(commands.Bot):
             sound_id = uuid.uuid4().hex
             destination = SOUNDS_DIR / f"{sound_id}{extension}"
 
+            # Hash du contenu (calculé ici, jamais fourni par le client) : sert de base à la
+            # détection de doublons côté client, qui compare son fichier final (après découpe)
+            # au hash de chaque son déjà présent dans le catalogue avant d'uploader.
+            file_bytes = file_field.file.read()
+            content_hash = hashlib.sha256(file_bytes).hexdigest()
+
             with open(destination, "wb") as out_file:
-                out_file.write(file_field.file.read())
+                out_file.write(file_bytes)
 
             catalog = load_catalog()
-            entry = {"id": sound_id, "name": name, "extension": extension}
+            entry = {"id": sound_id, "name": name, "extension": extension, "hash": content_hash}
             catalog.append(entry)
             save_catalog(catalog)
 

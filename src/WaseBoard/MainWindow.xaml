@@ -234,9 +234,10 @@
                       PreviewMouseMove="SectionHeader_PreviewMouseMove">
                 <Expander.Header>
                     <Border Background="{DynamicResource PanelBrush}" CornerRadius="6" Padding="10,6" HorizontalAlignment="Left"
-                            BorderThickness="0" BorderBrush="Transparent"
+                            BorderThickness="0" BorderBrush="Transparent" Tag="{Binding}"
                             AllowDrop="True" Drop="SectionHeader_Drop"
-                            DragEnter="SectionHeader_DragEnter" DragLeave="SectionHeader_DragLeave">
+                            DragEnter="SectionHeader_DragEnter" DragLeave="SectionHeader_DragLeave"
+                            MouseRightButtonUp="SectionHeader_RightClick">
                     <DockPanel MinWidth="160">
                         <Border Width="18" Height="18" CornerRadius="9" DockPanel.Dock="Left" Margin="4,0,4,0"
                                 Visibility="{Binding HasIcon, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -518,7 +519,7 @@
                     <Button x:Name="SettingsButton" Content="⚙ Paramètres" Padding="10,6" Margin="0,0,6,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
                             BorderBrush="{DynamicResource TextBrush}" Click="SettingsButton_Click"/>
-                    <Button Content="+ Nouvelle catégorie" Padding="10,6" Margin="0,0,6,0"
+                    <Button x:Name="AddCategoryButton" Content="+ Nouvelle catégorie ▾" Padding="10,6" Margin="0,0,6,0"
                             Click="AddCategoryButton_Click"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"
                             BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>

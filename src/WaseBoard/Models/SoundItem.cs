@@ -50,6 +50,11 @@ namespace WaseBoard.Models
         [JsonIgnore]
         public string Extension { get; set; } = ".wav";
 
+        /// <summary>SHA-256 du contenu, calculé côté serveur à l'upload (voir SoundLibraryService.ComputeFileHash
+        /// pour la détection de doublons). Null pour les sons uploadés avant l'ajout de cette fonctionnalité.</summary>
+        [JsonIgnore]
+        public string? ContentHash { get; set; }
+
         private bool _isPlaying;
 
         /// <summary>
