@@ -363,12 +363,13 @@ class WaseBoardServer(commands.Bot):
 
     # ---------- Activité (highlight + avatars partagés) & présence ----------
 
-    def record_activity(self, sound_id: str, user_id: str, username: Optional[str], avatar_url: Optional[str]) -> None:
+    def record_activity(self, sound_id: str, user_id: str, username: Optional[str], avatar_url: Optional[str], guild_id: int) -> None:
         with self._activity_lock:
             self.active_plays.setdefault(sound_id, {})[user_id] = {
                 "username": username or "?",
                 "avatar_url": avatar_url or "",
                 "expires_at": time.time() + ACTIVITY_TTL_SECONDS,
+                "guild_id": guild_id,
             }
 
     def clear_activity(self, sound_id: str, user_id: str) -> None:
@@ -381,20 +382,30 @@ class WaseBoardServer(commands.Bot):
                 if not users:
                     self.active_plays.pop(sound_id, None)
 
-    def get_active_snapshot(self) -> dict:
+    def get_active_snapshot(self, guild_id: Optional[int] = None) -> dict:
+        """guild_id=None (identité de l'appelant inconnue, ou pas en vocal) : aucune activité
+        n'est attribuable à "son" salon, donc on ne renvoie rien plutôt que tout — sinon on
+        retombe dans le bug d'origine (highlight/now-playing d'un salon vocal auquel on n'a
+        rien à voir)."""
         now = time.time()
         result: dict[str, list[dict]] = {}
         with self._activity_lock:
             for sound_id, users in list(self.active_plays.items()):
                 alive = {uid: info for uid, info in users.items() if info["expires_at"] > now}
-                if alive:
-                    self.active_plays[sound_id] = alive
+                if not alive:
+                    self.active_plays.pop(sound_id, None)
+                    continue
+
+                self.active_plays[sound_id] = alive
+                if guild_id is None:
+                    continue
+
+                same_channel = {uid: info for uid, info in alive.items() if info.get("guild_id") == guild_id}
+                if same_channel:
                     result[sound_id] = [
                         {"user_id": uid, "username": info["username"], "avatar_url": info["avatar_url"]}
-                        for uid, info in alive.items()
+                        for uid, info in same_channel.items()
                     ]
-                else:
-                    self.active_plays.pop(sound_id, None)
         return result
 
     def record_presence(self, user_id: str, username: str, avatar_url: str) -> None:
@@ -649,6 +660,7 @@ class WaseBoardServer(commands.Bot):
             return web.json_response({"error": "unauthorized"}, status=401)
 
         user_id = request.query.get("user_id")
+        guild_id = None
         if user_id and user_id.isdigit():
             member = self.find_member(int(user_id))
             self.record_presence(
@@ -656,9 +668,13 @@ class WaseBoardServer(commands.Bot):
                 member.display_name if member else "?",
                 str(member.display_avatar.url) if member else ""
             )
+            # strict=True (comme /status) : on ne veut PAS du filet de sécurité "un seul salon
+            # connecté ? on suppose que c'est le bon", qui montrerait l'activité d'un salon où
+            # l'appelant n'est en réalité pas présent.
+            guild_id = self.resolve_guild_id(request.query.get("guild_id"), user_id, strict=True)
 
         return web.json_response({
-            "activity": self.get_active_snapshot(),
+            "activity": self.get_active_snapshot(guild_id),
             "online": self.get_online_snapshot(),
         })
 
@@ -752,7 +768,7 @@ class WaseBoardServer(commands.Bot):
             member = await self.find_member_async(int(user_id)) if str_user_id.isdigit() else None
             username = member.display_name if member else None
             avatar_url = str(member.display_avatar.url) if member else None
-            self.record_activity(sound_id, str_user_id, username, avatar_url)
+            self.record_activity(sound_id, str_user_id, username, avatar_url, guild_id)
             on_finish = lambda: self.clear_activity(sound_id, str_user_id)
 
         mixer.add(sound_id, source, on_finish=on_finish)
