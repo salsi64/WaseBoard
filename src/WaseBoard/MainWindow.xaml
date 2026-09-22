@@ -499,7 +499,7 @@
                     <Border Background="{DynamicResource BgBrush}" CornerRadius="8" Padding="10">
                         <StackPanel>
                             <TextBlock x:Name="SidebarConnectionText" Text="🔴 Non connecté" FontSize="12" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"/>
-                            <TextBlock Text="WaseBoard v2.3" FontSize="10" Opacity="0.5" Foreground="{DynamicResource TextBrush}" Margin="0,4,0,0"/>
+                            <TextBlock Text="WaseBoard v2.4" FontSize="10" Opacity="0.5" Foreground="{DynamicResource TextBrush}" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
