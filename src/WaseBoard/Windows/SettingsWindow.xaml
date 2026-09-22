@@ -1,0 +1,146 @@
+﻿<Window x:Class="WaseBoard.Windows.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:chrome="clr-namespace:WaseBoard.Windows.Chrome"
+        Title="Paramètres"
+        FontFamily="Segoe UI Emoji, Segoe UI" Height="480" Width="480"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BgBrush}"
+        chrome:WindowChromeBehavior.Enable="True">
+    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource BgBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="36"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <chrome:TitleBarControl Grid.Row="0" TitleText="Paramètres" ShowMinMax="True"/>
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="20,4,20,20">
+
+            <TextBlock Text="⚙ Paramètres" FontSize="20" FontWeight="Bold"
+                       Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16"/>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Serveur WaseBoard" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Le catalogue de sons et le bot Discord sont hébergés sur ce serveur, partagé entre tous les utilisateurs." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+                    <TextBlock Text="Adresse du serveur" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                    <TextBox x:Name="ServerUrlBox" Height="28" Margin="0,0,0,10"/>
+
+                    <TextBlock Text="Jeton d'accès" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                    <TextBox x:Name="ServerTokenBox" Height="28" Margin="0,0,0,10"/>
+
+                    <Button x:Name="TestConnectionButton" Content="Tester la connexion" Height="34"
+                            Click="TestConnectionButton_Click"
+                            Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                            BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Qui êtes-vous sur Discord ?" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Permet d'afficher votre avatar quand vous jouez un son, et de retrouver automatiquement le bon salon vocal — plus besoin de choisir un serveur Discord." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+                    <TextBlock Text="Votre ID Discord" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Discord > Paramètres > Avancés > activez le Mode développeur, puis clic droit sur votre propre profil > Copier l'ID utilisateur." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="ManualUserIdBox" Grid.Column="0" Height="28" Margin="0,0,8,0"/>
+                        <Button x:Name="VerifyUserIdButton" Grid.Column="1" Content="Vérifier" Padding="10,0" Click="VerifyUserIdButton_Click"
+                                Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                    </Grid>
+                    <Border x:Name="VerifyResultBorder" CornerRadius="6" Padding="8" Visibility="Collapsed" Margin="0,0,0,4">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="24" Height="24" CornerRadius="12" Margin="0,0,8,0" x:Name="VerifyAvatarBorder" Visibility="Collapsed">
+                                <Border.Background>
+                                    <ImageBrush x:Name="VerifyAvatarBrush" Stretch="UniformToFill"/>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock x:Name="VerifyResultText" TextWrapping="Wrap" VerticalAlignment="Center" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Volume d'aperçu" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Volume de la lecture locale déclenchée par l'icône mégaphone (aperçu, jamais envoyé à Discord)." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="44"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider x:Name="LocalVolumeSlider" Minimum="0" Maximum="1.5" Value="1.0"
+                                ValueChanged="LocalVolumeSlider_ValueChanged"/>
+                        <TextBlock x:Name="LocalVolumeLabel" Grid.Column="1" Text="100%" Foreground="{DynamicResource TextBrush}"
+                                   VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12" Opacity="0.8"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource CardBorder}">
+                <StackPanel>
+                    <TextBlock Text="Apparence" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+
+                    <CheckBox x:Name="FollowSystemThemeCheckBox" Content="Suivre le thème clair/sombre de Windows"
+                              Foreground="{DynamicResource TextBrush}" Margin="0,4,0,6"
+                              Checked="FollowSystemTheme_Changed" Unchecked="FollowSystemTheme_Changed"/>
+                    <CheckBox x:Name="FollowSystemAccentCheckBox" Content="Suivre la couleur d'accent de Windows"
+                              Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"
+                              Checked="FollowSystemTheme_Changed" Unchecked="FollowSystemTheme_Changed"/>
+                    <TextBlock Text="Désactivez pour garder la palette sombre et la couleur de fond ci-dessous, indépendamment de Windows." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+                    <TextBlock Text="Thème de l'interface" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,4,0,4"/>
+                    <TextBlock Text="Le thème moderne (barre latérale, boutons en pilule) est encore récent — revenez au classique à tout moment si besoin." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                        <Button x:Name="ClassicThemeButton" Content="Classique" Padding="14,6" Margin="0,0,8,0" Click="ClassicThemeButton_Click"
+                                Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                        <Button x:Name="ModernThemeButton" Content="Moderne" Padding="14,6" Click="ModernThemeButton_Click"
+                                Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                    </StackPanel>
+
+                    <StackPanel x:Name="ManualColorSection">
+                        <TextBlock Text="Couleur de fond personnalisée (utilisée quand « suivre le thème système » est désactivé ci-dessus)." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                        <WrapPanel Margin="0,0,0,10">
+                            <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#1E1E2E" Cursor="Hand" Tag="#1E1E2E" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Violet (défaut)"/>
+                            <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#0F172A" Cursor="Hand" Tag="#0F172A" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Bleu nuit"/>
+                            <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#14231A" Cursor="Hand" Tag="#14231A" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Vert forêt"/>
+                            <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#2A1418" Cursor="Hand" Tag="#2A1418" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Bordeaux"/>
+                            <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#1A1A1A" Cursor="Hand" Tag="#1A1A1A" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Noir"/>
+                            <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#232323" Cursor="Hand" Tag="#232323" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Gris anthracite"/>
+                        </WrapPanel>
+
+                        <TextBlock Text="Ou couleur personnalisée (code hexadécimal)" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="CustomColorBox" Grid.Column="0" Height="28" Margin="0,0,8,0"/>
+                            <Button Grid.Column="1" Content="Appliquer" Padding="10,0" Click="ApplyCustomColor_Click"
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                        </Grid>
+
+                        <TextBlock Text="Aperçu :" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <Border x:Name="ColorPreview" Height="30" CornerRadius="6" BorderBrush="{DynamicResource TextBrush}" BorderThickness="1"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Button Content="Enregistrer" Height="40" HorizontalAlignment="Right" Width="130" Margin="0,4,0,0"
+                    Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"
+                    FontWeight="SemiBold" Click="SaveButton_Click"/>
+        </StackPanel>
+    </ScrollViewer>
+    </Grid>
+    </Border>
+</Window>

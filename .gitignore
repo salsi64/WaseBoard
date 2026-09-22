@@ -1,0 +1,20 @@
+# Build .NET
+bin/
+obj/
+installer/Output/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+*.egg-info/
+
+# Données runtime du serveur (générées automatiquement, propres à chaque déploiement)
+server/config.json
+server/sounds_data/
+server/shared_categories.json
+
+# Divers
+.vs/
+.vscode/
+*.user
