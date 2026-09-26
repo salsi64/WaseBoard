@@ -143,11 +143,83 @@ sudo systemctl enable --now waseboard
 sudo journalctl -u waseboard -f   # pour suivre les logs
 ```
 
-## 6. Utilisation
+## 6. (Recommandé) Passer en HTTPS avec un nom de domaine gratuit
 
-1. Chaque utilisateur configure l'adresse de VOTRE serveur (ex: `http://mon-serveur.exemple:5005`
-   ou `http://VOTRE_IP:5005`), le `shared_secret` et
-   son ID Discord dans les Paramètres de son WaseBoard (voir "Identité Discord" dans le README
+Par défaut, le serveur répond en HTTP non chiffré : le `shared_secret` transite en clair sur le
+réseau. Passer en HTTPS ne coûte rien et ne prend qu'une dizaine de minutes, via un nom de
+domaine gratuit (le `shared_secret` seul ne suffit pas à obtenir un certificat — Let's Encrypt
+exige un nom de domaine, jamais une IP nue).
+
+1. **Nom de domaine gratuit** : créez un compte sur [DuckDNS](https://www.duckdns.org/) (connexion
+   via GitHub/Google), puis créez un sous-domaine (ex: `mon-groupe.duckdns.org`). Notez le
+   **token** affiché sur la page.
+
+2. **Maintenir l'IP à jour** : si votre IP publique change (cas fréquent en résidentiel), DuckDNS
+   doit être notifié. Un script + minuteur systemd suffit :
+   ```bash
+   sudo tee /usr/local/bin/duckdns_update.sh > /dev/null <<'EOF'
+   #!/bin/bash
+   curl -fsS "https://www.duckdns.org/update?domains=VOTRE_SOUS_DOMAINE&token=VOTRE_TOKEN&ip=" \
+       -o /var/log/duckdns/duck.log
+   EOF
+   sudo chmod 700 /usr/local/bin/duckdns_update.sh
+   sudo mkdir -p /var/log/duckdns
+   ```
+   Puis un service + minuteur systemd (`/etc/systemd/system/duckdns-update.service` en
+   `Type=oneshot` exécutant ce script, et `duckdns-update.timer` avec `OnUnitActiveSec=5min`),
+   activés via `sudo systemctl enable --now duckdns-update.timer`.
+
+3. **nginx en reverse proxy + certificat** :
+   ```bash
+   sudo apt install -y nginx certbot python3-certbot-nginx
+   ```
+   Créez `/etc/nginx/sites-available/waseboard` :
+   ```nginx
+   server {
+       listen 80;
+       listen [::]:80;
+       server_name VOTRE_SOUS_DOMAINE.duckdns.org;
+
+       location / {
+           proxy_pass http://127.0.0.1:5005;
+           proxy_http_version 1.1;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           client_max_body_size 64M;   # doit couvrir la limite d'upload du serveur (64 Mo)
+       }
+   }
+   ```
+   Puis :
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/waseboard /etc/nginx/sites-enabled/waseboard
+   sudo nginx -t && sudo systemctl reload nginx
+   sudo certbot --nginx -d VOTRE_SOUS_DOMAINE.duckdns.org
+   ```
+   Certbot modifie automatiquement la configuration nginx pour ajouter le certificat et
+   rediriger le HTTP vers le HTTPS, et programme son propre renouvellement automatique.
+
+4. **Redirection de port** : sur votre box/routeur, ouvrez le port **443** (HTTPS) en plus du
+   port 5005 déjà ouvert. Le 443 devient le point d'entrée public ; vous pouvez retirer la
+   redirection du port 5005 une fois tous les clients migrés sur la nouvelle adresse.
+
+5. **Si nginx sert déjà un autre site sur ce serveur** : assurez-vous qu'aucun autre bloc
+   `server` ne capte les requêtes destinées à votre sous-domaine WaseBoard par erreur — sans
+   `default_server` explicite sur le bon bloc, nginx peut faire atterrir les requêtes à
+   l'adresse IP nue (ou à un nom d'hôte non reconnu) sur le mauvais site. Ajoutez
+   `default_server` au(x) `listen` de votre site "principal" existant pour lever toute
+   ambiguïté.
+
+6. Une fois en place, chaque client configure `https://VOTRE_SOUS_DOMAINE.duckdns.org` (sans
+   port, HTTPS implique le port 443) comme adresse de serveur dans WaseBoard.
+
+## 7. Utilisation
+
+1. Chaque utilisateur configure l'adresse de VOTRE serveur — `https://votre-domaine.duckdns.org`
+   si vous avez suivi la section 6 (recommandé), sinon `http://VOTRE_IP:5005` — le
+   `shared_secret` et son ID Discord dans les Paramètres de son WaseBoard (voir "Identité
+   Discord" dans le README
    principal). Rien d'autre à choisir : le serveur cible (guild) est déduit automatiquement à
    partir du salon vocal où cet utilisateur se trouve — aucun ID de serveur à renseigner
    manuellement, même si le bot est présent sur plusieurs Discords en même temps.
@@ -161,10 +233,11 @@ sudo journalctl -u waseboard -f   # pour suivre les logs
 ## Sécurité — points à garder en tête
 
 - Le serveur est exposé sur internet avec pour seule protection le `shared_secret` en en-tête
-  HTTP, sur une connexion **non chiffrée** (HTTP, pas HTTPS). Convenable pour un usage entre
-  amis/petite communauté, mais quelqu'un interceptant le trafic réseau pourrait lire ce jeton.
-  Pour aller plus loin : placez un reverse proxy (nginx + Let's Encrypt/certbot) devant ce
-  serveur pour passer en HTTPS.
+  HTTP. Sans HTTPS, ce jeton transite en clair et peut être intercepté — voir la section 6
+  ci-dessus pour passer en HTTPS gratuitement (nom de domaine + nginx + certbot), fortement
+  recommandé.
+- Choisissez un `shared_secret` long et aléatoire (32+ caractères) — c'est la seule barrière
+  contre un accès non autorisé, et le serveur n'a aucune limitation de débit sur les tentatives.
 - N'importe qui connaissant le `shared_secret` peut uploader, supprimer et faire jouer des
   sons. Ne le partagez qu'avec les personnes de confiance.
 
