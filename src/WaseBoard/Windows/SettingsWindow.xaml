@@ -27,7 +27,7 @@
 
                     <TextBlock Text="Adresse du serveur" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                     <TextBox x:Name="ServerUrlBox" Height="28" Margin="0,0,0,10"
-                             ToolTip="Ex: http://mon-serveur.exemple:5005 — voir server/README.md pour héberger le vôtre"/>
+                             ToolTip="Ex: https://mon-serveur.exemple — voir server/README.md pour héberger le vôtre"/>
 
                     <TextBlock Text="Jeton d'accès" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                     <TextBox x:Name="ServerTokenBox" Height="28" Margin="0,0,0,10"/>

@@ -45,7 +45,7 @@
 
                     <TextBlock Text="Adresse du serveur" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                     <TextBox x:Name="ServerUrlBox" Height="28" Margin="0,0,0,10"
-                             ToolTip="Ex: http://mon-serveur.exemple:5005 — demandez-la à qui héberge votre serveur WaseBoard"/>
+                             ToolTip="Ex: https://mon-serveur.exemple — demandez-la à qui héberge votre serveur WaseBoard"/>
 
                     <TextBlock Text="Jeton d'accès" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                     <TextBox x:Name="ServerTokenBox" Height="28" Margin="0,0,0,10"/>

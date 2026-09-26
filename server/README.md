@@ -6,9 +6,9 @@ Chacun héberge sa propre instance — pas de serveur central fourni avec le pro
 
 ```
 [PC utilisateur A]  ──┐
-[PC utilisateur B]  ──┼── HTTP (port 5005) ──►  [Votre serveur]  ──► Discord (voix)
-[PC utilisateur C]  ──┘                          - catalogue de sons
-                                                  - bot Discord (multi-serveurs)
+[PC utilisateur B]  ──┼── HTTPS ──►  [Votre serveur]  ──► Discord (voix)
+[PC utilisateur C]  ──┘               - catalogue de sons
+                                       - bot Discord (multi-serveurs)
 ```
 
 - Le bot peut être connecté à plusieurs serveurs Discord en même temps.
@@ -52,18 +52,7 @@ Copiez `config.example.json` vers `config.json` et renseignez :
   protection de l'API, choisissez-le en conséquence.
 - `http_host` : laissez `0.0.0.0`.
 
-## 4. Ouvrir le port réseau
-
-Port HTTP (`5005` par défaut), en TCP entrant :
-
-```bash
-sudo ufw allow 5005/tcp
-```
-
-Si le serveur est derrière une box/routeur, ajoutez aussi une redirection de port (port
-forwarding) du port 5005 TCP vers l'IP locale de cette machine.
-
-## 5. Lancer le serveur
+## 4. Lancer le serveur
 
 ```bash
 source venv/bin/activate
@@ -95,9 +84,9 @@ sudo systemctl enable --now waseboard
 sudo journalctl -u waseboard -f   # suivre les logs
 ```
 
-## 6. (Recommandé) Passer en HTTPS avec un nom de domaine gratuit
+## 5. Rendre le serveur accessible en HTTPS
 
-Sans HTTPS, le `shared_secret` transite en clair sur le réseau. Let's Encrypt exige un nom de
+Le `shared_secret` doit passer par une connexion chiffrée. Let's Encrypt exige un nom de
 domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit un gratuitement.
 
 1. Créez un compte DuckDNS (GitHub/Google) et un sous-domaine (ex: `mon-groupe.duckdns.org`).
@@ -146,8 +135,9 @@ domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit u
    ```
    Certbot configure le certificat, la redirection HTTP→HTTPS et son propre renouvellement.
 
-4. Ouvrez le port **443** sur votre box/routeur en plus du 5005 (retirable une fois tous les
-   clients migrés sur la nouvelle adresse).
+4. Ouvrez le port **443** sur votre box/routeur (TCP entrant), avec une redirection de port
+   vers l'IP locale de cette machine si besoin. Le port 5005 n'a pas besoin d'être ouvert :
+   nginx en local suffit à faire le lien.
 
 5. **Si nginx sert déjà un autre site** : ajoutez `default_server` au(x) `listen` de ce site
    existant, sinon nginx peut faire atterrir dessus les requêtes à une adresse non reconnue
@@ -156,11 +146,11 @@ domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit u
 6. Chaque client configure `https://VOTRE_SOUS_DOMAINE.duckdns.org` (sans port) comme adresse
    de serveur dans WaseBoard.
 
-## 7. Utilisation
+## 6. Utilisation
 
 1. Chaque utilisateur configure, dans les Paramètres de son WaseBoard : l'adresse du serveur
-   (`https://votre-domaine.duckdns.org` si vous avez suivi l'étape 6, sinon
-   `http://VOTRE_IP:5005`), le `shared_secret`, et son ID Discord (voir le README principal).
+   (`https://votre-domaine.duckdns.org`), le `shared_secret`, et son ID Discord (voir le
+   README principal).
 2. `/join` dans Discord fait rejoindre le bot au salon vocal (ou le bouton "🔊 Rejoindre mon
    vocal" dans WaseBoard). `/leave` pour le déconnecter — il part aussi seul si le salon se vide.
 3. Les sons ajoutés/joués depuis n'importe quel client sont partagés entre tous les
@@ -170,13 +160,12 @@ domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit u
 
 - Le `shared_secret` est la seule protection de l'API — aucune limitation de débit sur les
   tentatives, choisissez-le long et aléatoire, ne le partagez qu'à des personnes de confiance.
-- Sans HTTPS (étape 6), ce secret transite en clair et peut être intercepté.
 
 ## Dépannage
 
 - **Le bot ne rejoint pas / erreur PyNaCl** : `pip install -r requirements.txt --force-reinstall`.
 - **Le son ne se joue pas** : vérifiez `ffmpeg -version` fonctionne sur le serveur.
 - **Un client ne peut pas se connecter** : depuis une autre machine,
-  `curl http://VOTRE_IP:5005/status -H "X-WaseBoard-Token: VOTRE_SECRET"`.
+  `curl https://VOTRE_DOMAINE/status -H "X-WaseBoard-Token: VOTRE_SECRET"`.
 - **"Address already in use"** : changez `http_port` dans `config.json`, ou arrêtez l'ancien
   processus (`sudo lsof -i :5005`).
