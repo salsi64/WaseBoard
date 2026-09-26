@@ -126,16 +126,24 @@ namespace WaseBoard.Windows
             _settings.ServerToken = ServerTokenBox.Text;
 
             TestConnectionButton.IsEnabled = false;
-            var (connected, channel) = await _library.GetServerStatusAsync();
+            var (result, channel) = await _library.GetServerStatusAsync();
             TestConnectionButton.IsEnabled = true;
 
-            var message = connected
-                ? $"Serveur joignable. Bot connecté au salon vocal « {channel ?? "aucun (utilisez /join dans Discord)"} »."
-                : "Serveur injoignable, jeton incorrect, ou vous n'êtes actuellement dans aucun salon où le bot est présent." +
-                  (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : "\nDétail : " + _library.LastErrorDetail);
+            var message = result switch
+            {
+                SoundLibraryService.ServerStatusResult.Connected =>
+                    $"✅ Serveur joignable. Bot connecté au salon vocal « {channel} ».",
+                SoundLibraryService.ServerStatusResult.BotNotInVoice =>
+                    "✅ Serveur joignable, jeton correct. Le bot n'est simplement dans aucun salon vocal pour l'instant — " +
+                    "faites « /join » dans Discord, ou utilisez le bouton « 🔊 Rejoindre mon vocal » dans WaseBoard.",
+                SoundLibraryService.ServerStatusResult.Unauthorized =>
+                    "❌ Jeton d'accès incorrect.",
+                _ => "❌ Serveur injoignable." +
+                     (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : "\nDétail : " + _library.LastErrorDetail)
+            };
 
-            AlertDialog.Show(this, message, "Serveur WaseBoard",
-                connected ? AlertKind.Info : AlertKind.Warning);
+            var isOk = result is SoundLibraryService.ServerStatusResult.Connected or SoundLibraryService.ServerStatusResult.BotNotInVoice;
+            AlertDialog.Show(this, message, "Serveur WaseBoard", isOk ? AlertKind.Info : AlertKind.Warning);
 
             _settings.ServerUrl = previousUrl;
             _settings.ServerToken = previousToken;

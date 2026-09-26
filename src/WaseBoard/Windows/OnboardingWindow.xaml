@@ -24,14 +24,24 @@
                     <TextBlock Text="Bienvenue sur WaseBoard" FontSize="18" FontWeight="Bold"
                                Foreground="{DynamicResource TextBrush}" HorizontalAlignment="Center" Margin="0,0,0,12"/>
                     <TextBlock TextWrapping="Wrap" TextAlignment="Center" FontSize="13" Opacity="0.85"
+                               Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10"
+                               Text="WaseBoard est un soundboard partagé pour Discord : cliquez un son, il joue à la fois sur vos enceintes et dans votre salon vocal, pour tout le monde."/>
+                    <TextBlock TextWrapping="Wrap" TextAlignment="Center" FontSize="12" Opacity="0.7"
                                Foreground="{DynamicResource TextBrush}"
-                               Text="Deux petites étapes pour se connecter au serveur partagé et vous identifier sur Discord. Vous pourrez toujours revenir dessus depuis les Paramètres."/>
+                               Text="Pour l'utiliser, il vous faut un serveur WaseBoard — celui de la personne qui vous a fait découvrir l'app (demandez-lui l'adresse et le jeton d'accès), ou le vôtre. Deux petites étapes pour vous connecter ; vous pourrez toujours y revenir depuis les Paramètres."/>
                 </StackPanel>
 
                 <!-- Étape 2 : serveur -->
                 <StackPanel x:Name="StepServer" Visibility="Collapsed">
                     <TextBlock Text="Serveur WaseBoard" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,4,0,4"/>
-                    <TextBlock Text="Le catalogue de sons et le bot Discord sont hébergés sur ce serveur, partagé entre tous les utilisateurs." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14" TextWrapping="Wrap"/>
+                    <TextBlock FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4" TextWrapping="Wrap"
+                               Text="Le catalogue de sons et le bot Discord qui les joue sont hébergés sur un serveur — pas fourni avec l'application, chaque groupe héberge le sien."/>
+                    <TextBlock FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14" TextWrapping="Wrap">
+                        <Run Text="Si on vous a invité : demandez l'adresse et le jeton à la personne qui héberge. Sinon : "/>
+                        <Hyperlink NavigateUri="https://github.com/salsi64/WaseBoard/blob/master/server/README.md" RequestNavigate="Hyperlink_RequestNavigate"
+                                   Foreground="{DynamicResource AccentBrush}">hébergez le vôtre</Hyperlink>
+                        <Run Text=" (gratuit, ~15 minutes)."/>
+                    </TextBlock>
 
                     <TextBlock Text="Adresse du serveur" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                     <TextBox x:Name="ServerUrlBox" Height="28" Margin="0,0,0,10"
@@ -51,7 +61,9 @@
                 <!-- Étape 3 : identité Discord -->
                 <StackPanel x:Name="StepDiscord" Visibility="Collapsed">
                     <TextBlock Text="Qui êtes-vous sur Discord ?" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,4,0,4"/>
-                    <TextBlock Text="Permet d'afficher votre avatar quand vous jouez un son, et de retrouver automatiquement le bon salon vocal." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                    <TextBlock Text="Permet d'afficher votre avatar quand vous jouez un son, et de retrouver automatiquement le bon salon vocal." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                    <TextBlock FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" TextWrapping="Wrap"
+                               Text="Un bot Discord (ajouté au serveur du Discord concerné par la personne qui héberge) rejoint votre salon vocal et joue les sons — jamais via votre micro. Une fois votre identité vérifiée, faites « /join » dans Discord (ou le bouton « 🔊 Rejoindre mon vocal » dans WaseBoard) pour que le bot vous rejoigne."/>
                     <TextBlock Text="Discord > Paramètres > Avancés > activez le Mode développeur, puis clic droit sur votre profil > Copier l'ID utilisateur." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
 
                     <Grid Margin="0,0,0,8">

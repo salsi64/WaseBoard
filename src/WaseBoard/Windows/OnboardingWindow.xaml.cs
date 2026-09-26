@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Navigation;
 using WaseBoard.Models;
 using WaseBoard.Services;
 
@@ -88,32 +90,36 @@ namespace WaseBoard.Windows
             Close();
         }
 
+        /// <summary>WPF n'ouvre jamais un lien tout seul (par sécurité) : il faut explicitement
+        /// démarrer le navigateur par défaut du système via ShellExecute.</summary>
+        private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+            e.Handled = true;
+        }
+
         private async void TestConnectionButton_Click(object sender, RoutedEventArgs e)
         {
             CommitServerFields();
 
             TestConnectionButton.IsEnabled = false;
-            var (connected, channel) = await _library.GetServerStatusAsync();
+            var (result, channel) = await _library.GetServerStatusAsync();
             TestConnectionButton.IsEnabled = true;
 
-            if (connected)
+            ServerResultText.Text = result switch
             {
-                ServerResultText.Text = $"✅ Serveur joignable. Bot connecté au salon vocal « {channel ?? "aucun"} ».";
-            }
-            else if (!string.IsNullOrEmpty(_library.LastErrorDetail))
-            {
-                // Échec réel de la requête (serveur injoignable, jeton refusé...) : le détail vient
-                // directement de la réponse HTTP, contrairement au cas ci-dessous.
-                ServerResultText.Text = $"❌ Serveur injoignable ou jeton incorrect.\n{_library.LastErrorDetail}";
-            }
-            else
-            {
-                // La requête a réussi (jeton accepté) mais le bot ne vous voit dans aucun salon
-                // vocal en ce moment — ce n'est pas un problème de jeton, juste un état normal si
-                // vous n'êtes pas connecté à un salon où le bot est présent.
-                ServerResultText.Text = "✅ Serveur joignable et jeton accepté — mais le bot ne vous voit " +
-                    "dans aucun salon vocal en ce moment (normal si vous n'êtes pas connecté à Discord/dans un salon où le bot est présent).";
-            }
+                SoundLibraryService.ServerStatusResult.Connected =>
+                    $"✅ Serveur joignable. Bot connecté au salon vocal « {channel} ».",
+                // Jeton accepté mais le bot ne vous voit dans aucun salon vocal en ce moment — ce
+                // n'est pas un problème de jeton, juste un état normal si vous n'êtes pas connecté
+                // à Discord ou dans un salon où le bot est présent.
+                SoundLibraryService.ServerStatusResult.BotNotInVoice =>
+                    "✅ Serveur joignable et jeton accepté — mais le bot ne vous voit dans aucun salon " +
+                    "vocal en ce moment (normal si vous n'êtes pas connecté à Discord/dans un salon où le bot est présent).",
+                SoundLibraryService.ServerStatusResult.Unauthorized =>
+                    "❌ Jeton d'accès incorrect.",
+                _ => $"❌ Serveur injoignable.\n{_library.LastErrorDetail}"
+            };
         }
 
         private async void VerifyButton_Click(object sender, RoutedEventArgs e)

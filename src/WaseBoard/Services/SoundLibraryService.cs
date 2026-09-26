@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -519,7 +520,23 @@ namespace WaseBoard.Services
             }
         }
 
-        public async Task<(bool Connected, string? Channel)> GetServerStatusAsync()
+        /// <summary>Résultat détaillé de GetServerStatusAsync : le serveur répond "200 + connected:
+        /// false" aussi bien pour "jeton correct mais bot pas en vocal" que pour d'autres cas — sans
+        /// cette distinction, l'UI ne pouvait afficher qu'un message générique regroupant à tort
+        /// une vraie panne réseau, un jeton faux, et le cas bénin "personne n'a encore fait /join".</summary>
+        public enum ServerStatusResult
+        {
+            /// <summary>Serveur joignable, jeton correct, bot connecté à un salon vocal.</summary>
+            Connected,
+            /// <summary>Serveur joignable, jeton correct, mais le bot n'est dans aucun salon vocal pour l'instant.</summary>
+            BotNotInVoice,
+            /// <summary>Le jeton (shared_secret) est incorrect.</summary>
+            Unauthorized,
+            /// <summary>Serveur injoignable (réseau, DNS, TLS...) ou erreur inattendue — voir LastErrorDetail.</summary>
+            Unreachable
+        }
+
+        public async Task<(ServerStatusResult Result, string? Channel)> GetServerStatusAsync()
         {
             LastErrorDetail = null;
             try
@@ -527,10 +544,14 @@ namespace WaseBoard.Services
                 var query = string.IsNullOrEmpty(Settings.DiscordUserId) ? "" : $"?user_id={Uri.EscapeDataString(Settings.DiscordUserId)}";
                 using var request = CreateRequest(HttpMethod.Get, "/status" + query);
                 using var response = await _http.SendAsync(request);
+
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                    return (ServerStatusResult.Unauthorized, null);
+
                 if (!response.IsSuccessStatusCode)
                 {
                     LastErrorDetail = $"Le serveur a répondu {(int)response.StatusCode}.";
-                    return (false, null);
+                    return (ServerStatusResult.Unreachable, null);
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
@@ -538,12 +559,12 @@ namespace WaseBoard.Services
                 var connected = doc.RootElement.TryGetProperty("connected", out var c) && c.GetBoolean();
                 string? channel = doc.RootElement.TryGetProperty("channel", out var ch) && ch.ValueKind == JsonValueKind.String
                     ? ch.GetString() : null;
-                return (connected, channel);
+                return (connected ? ServerStatusResult.Connected : ServerStatusResult.BotNotInVoice, channel);
             }
             catch (Exception ex)
             {
                 LastErrorDetail = ex.Message;
-                return (false, null);
+                return (ServerStatusResult.Unreachable, null);
             }
         }
 
