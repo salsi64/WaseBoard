@@ -8,16 +8,19 @@ les suppressions de bruit type Krisp).
 
 ## Comment ça marche
 
-```
-[WaseBoard.exe] ──HTTP──► [Votre serveur] ──► Bot Discord (joue dans le vocal)
-   (un par utilisateur)     (catalogue de sons partagé)
-```
+WaseBoard est **auto-hébergé** : il n'y a pas de serveur central, chaque groupe fait tourner
+le sien (gratuit, ~15 minutes) — il héberge le catalogue de sons partagé et le bot Discord qui
+les joue dans le vocal.
 
-- **Le client** (ce que vous installez) : ajoute, liste et joue les sons.
-- **Le serveur** : héberge le catalogue partagé et le bot Discord. Chaque groupe héberge le
-  sien — voir [`server/README.md`](server/README.md) pour mettre en place le vôtre (gratuit,
-  ~15 minutes). Si quelqu'un vous a invité sur son serveur, demandez-lui simplement l'adresse
-  et le jeton d'accès : rien à installer côté serveur.
+## Installation / utilisation
+
+Si quelqu'un dans votre groupe a déjà un serveur WaseBoard (le bot est déjà présent sur votre
+Discord) :
+
+1. [Téléchargez et installez le client](https://github.com/salsi64/WaseBoard/releases/latest).
+2. Demandez à cette personne l'**adresse du serveur** et le **jeton d'accès**, à saisir au
+   premier lancement (ou plus tard dans les Paramètres).
+3. Rejoignez un salon vocal, cliquez un son — c'est prêt.
 
 ## Fonctionnalités
 
@@ -34,38 +37,11 @@ les suppressions de bruit type Krisp).
   votre salon vocal — rien à choisir manuellement.
 - Formats supportés : mp3, wav, ogg (Vorbis et Opus), flac, m4a, wma.
 
-## Développer / héberger
+## Héberger
 
-### Serveur
-
-Suivez [`server/README.md`](server/README.md) en premier (bot Discord, mise en place, HTTPS).
-Le client ne fonctionne pas sans serveur joignable.
-
-### Client
-
-Pré-requis : [.NET 8 SDK](https://dotnet.microsoft.com/download) sur Windows.
-
-```powershell
-cd src/WaseBoard
-dotnet build -c Release
-```
-
-Exécutable autonome (self-contained) :
-
-```powershell
-dotnet publish src/WaseBoard/WaseBoard.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
-```
-
-Installeur : ouvrez `installer/setup.iss` avec [Inno Setup](https://jrsoftware.org/isinfo.php)
-et compilez (F9) → l'installeur apparaît dans `installer/Output/`.
-
-### Structure du projet
-
-```
-src/WaseBoard/    → Client Windows (WPF, .NET 8)
-server/           → Serveur Python (catalogue de sons + bot Discord), voir son README
-installer/        → Script Inno Setup pour générer l'installeur Windows
-```
+Personne dans votre groupe n'a encore de serveur ? Suivez
+[`server/README.md`](server/README.md) (bot Discord, mise en place, HTTPS) — gratuit,
+~15 minutes.
 
 ## Pistes d'amélioration
 
