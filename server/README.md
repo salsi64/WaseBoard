@@ -1,61 +1,28 @@
 # Serveur WaseBoard
 
-Serveur central : héberge le catalogue de sons partagé (upload/liste/suppression) et le bot
-Discord qui les joue dans le salon vocal. Prévu pour tourner en continu sur une machine
-dédiée (Linux — testé sur Linux Mint/Ubuntu), accessible par des clients WaseBoard qui ne sont
-**pas** sur le même réseau local. Chacun héberge sa propre instance : il n'y a pas de serveur
-central partagé fourni avec le projet — voir ce guide pour mettre en place le vôtre.
-
-## Architecture en un coup d'œil
+Héberge le catalogue de sons partagé et le bot Discord qui les joue dans le salon vocal.
+Tourne en continu sur une machine Linux accessible en permanence (testé sur Linux Mint/Ubuntu).
+Chacun héberge sa propre instance — pas de serveur central fourni avec le projet.
 
 ```
 [PC utilisateur A]  ──┐
 [PC utilisateur B]  ──┼── HTTP (port 5005) ──►  [Votre serveur]  ──► Discord (voix)
 [PC utilisateur C]  ──┘                          - catalogue de sons
-                                                  - fichiers audio
                                                   - bot Discord (multi-serveurs)
 ```
 
-Chaque client WaseBoard récupère la liste des sons, en ajoute de nouveaux, et déclenche leur
-lecture — tout passe par ce serveur. Le bot Discord, lui, se contente de jouer les sons dans
-le(s) salon(s) vocal(aux) sur commande.
-
-**Multi-Discord** : le bot peut être connecté à plusieurs serveurs Discord différents en même
-temps (`/join` fonctionne indépendamment sur chacun). Chaque client WaseBoard choisit, dans
-ses Paramètres, quel serveur Discord ses clics doivent cibler.
-
-**Plusieurs sons en même temps** : un mixeur audio persistant tourne en continu sur chaque
-salon vocal connecté. Jouer un son l'ajoute au mixage au lieu de remplacer ce qui est en
-cours — donc deux utilisateurs (ou le même utilisateur, plusieurs fois) peuvent déclencher
-des sons simultanément sans s'annuler mutuellement.
-
-**Plus de sélection manuelle du serveur Discord** : chaque clic identifie l'utilisateur
-Discord qui l'a déclenché, et le serveur retrouve automatiquement le bon salon vocal en
-cherchant où cette personne est actuellement connectée. Rien à configurer côté client.
-
-**Activité partagée en temps réel** : le serveur retient qui a joué quoi dans les dernières
-secondes (`GET /activity`), pour que tous les clients WaseBoard affichent le même highlight
-et les mêmes avatars au même moment.
-
-**Arrêt global** (`POST /stop`) : coupe immédiatement tous les sons en cours sur le salon
-vocal ciblé, sans déconnecter le bot.
-
-## ⚠️ Nouvelle étape obligatoire : activer l'intent "Server Members"
-
-Cette mise à jour ajoute la liste des membres Discord (pour que chaque utilisateur WaseBoard
-indique qui il est). Ça nécessite un **intent privilégié**, à activer manuellement :
-
-1. https://discord.com/developers/applications > votre application > onglet **Bot**.
-2. Section **Privileged Gateway Intents**, activez **SERVER MEMBERS INTENT**.
-3. Sauvegardez.
-
-Sans cette étape, le bot plantera au démarrage avec une erreur `PrivilegedIntentsRequired`.
+- Le bot peut être connecté à plusieurs serveurs Discord en même temps.
+- Plusieurs sons peuvent jouer en même temps sans s'annuler entre utilisateurs.
+- Chaque clic identifie l'utilisateur Discord qui l'a déclenché ; le serveur retrouve seul
+  son salon vocal — rien à choisir côté client.
 
 ## 1. Créer l'application bot Discord
 
 1. https://discord.com/developers/applications > **New Application**.
 2. Onglet **Bot** > **Reset Token** > copiez le token (gardez-le secret).
-3. Désactivez **Public Bot** si vous ne voulez pas que d'autres puissent l'inviter ailleurs.
+3. Section **Privileged Gateway Intents**, activez **SERVER MEMBERS INTENT** (obligatoire,
+   sans quoi le bot plante au démarrage avec `PrivilegedIntentsRequired`).
+4. Désactivez **Public Bot** si vous ne voulez pas que d'autres puissent l'inviter ailleurs.
 
 ## 2. Inviter le bot sur votre serveur Discord
 
@@ -64,7 +31,7 @@ Sans cette étape, le bot plantera au démarrage avec une erreur `PrivilegedInte
 3. Bot Permissions : **Connect** + **Speak**.
 4. Ouvrez l'URL générée, choisissez votre serveur, autorisez.
 
-## 3. Installer sur la machine serveur (Linux Mint)
+## 3. Installer sur la machine serveur
 
 ```bash
 sudo apt update
@@ -79,31 +46,22 @@ pip install -r requirements.txt
 Copiez `config.example.json` vers `config.json` et renseignez :
 - `bot_token` : le token de l'étape 1.
 - `guild_id` *(recommandé)* : ID de votre serveur Discord (Discord > Paramètres avancés >
-  Mode développeur, puis clic droit sur le serveur > Copier l'ID) — sans ça, les commandes
-  slash mettent jusqu'à 1h à apparaître au lieu d'être instantanées.
-- `shared_secret` : un mot de passe de votre choix. **Chaque utilisateur WaseBoard devra le
-  connaître** pour se connecter au serveur (c'est la seule protection contre un accès non
-  autorisé, puisque le serveur est exposé sur internet — gardez-le secret, changez-le si
-  besoin).
-- `http_host` : laissez `0.0.0.0` (écoute sur toutes les interfaces réseau, nécessaire pour
-  que des utilisateurs distants puissent se connecter).
+  Mode développeur, puis clic droit sur le serveur > Copier l'ID) — sinon les commandes slash
+  mettent jusqu'à 1h à apparaître au lieu d'être instantanées.
+- `shared_secret` : un mot de passe long et aléatoire (32+ caractères) — c'est la seule
+  protection de l'API, choisissez-le en conséquence.
+- `http_host` : laissez `0.0.0.0`.
 
 ## 4. Ouvrir le port réseau
 
-Un seul port à ouvrir : le port HTTP (`5005` par défaut), en **TCP entrant**, vers cette
-machine. Deux niveaux à vérifier :
+Port HTTP (`5005` par défaut), en TCP entrant :
 
-1. **Pare-feu de la machine** (si `ufw` est actif) :
-   ```bash
-   sudo ufw allow 5005/tcp
-   ```
-2. **Box/routeur internet** (si le serveur est derrière une box) : redirection de port
-   (port forwarding) du port 5005 TCP vers l'IP locale de cette machine sur votre réseau.
-   Si votre machine a déjà une IP publique directe (hébergement dédié/VPS), cette étape ne
-   s'applique pas.
+```bash
+sudo ufw allow 5005/tcp
+```
 
-Le trafic vocal Discord lui-même (UDP) ne nécessite **aucune ouverture de port entrant** :
-c'est le bot qui se connecte *vers* Discord, jamais l'inverse.
+Si le serveur est derrière une box/routeur, ajoutez aussi une redirection de port (port
+forwarding) du port 5005 TCP vers l'IP locale de cette machine.
 
 ## 5. Lancer le serveur
 
@@ -112,13 +70,7 @@ source venv/bin/activate
 python3 server.py
 ```
 
-Vous devriez voir :
-```
-Commandes slash synchronisées sur le serveur ... (instantané).
-Serveur HTTP prêt sur 0.0.0.0:5005 (catalogue + ordres de lecture WaseBoard).
-```
-
-Pour le garder actif en permanence (recommandé), utilisez un service systemd :
+Pour le garder actif en permanence, utilisez un service systemd :
 
 ```ini
 # /etc/systemd/system/waseboard.service
@@ -140,22 +92,18 @@ WantedBy=multi-user.target
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now waseboard
-sudo journalctl -u waseboard -f   # pour suivre les logs
+sudo journalctl -u waseboard -f   # suivre les logs
 ```
 
 ## 6. (Recommandé) Passer en HTTPS avec un nom de domaine gratuit
 
-Par défaut, le serveur répond en HTTP non chiffré : le `shared_secret` transite en clair sur le
-réseau. Passer en HTTPS ne coûte rien et ne prend qu'une dizaine de minutes, via un nom de
-domaine gratuit (le `shared_secret` seul ne suffit pas à obtenir un certificat — Let's Encrypt
-exige un nom de domaine, jamais une IP nue).
+Sans HTTPS, le `shared_secret` transite en clair sur le réseau. Let's Encrypt exige un nom de
+domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit un gratuitement.
 
-1. **Nom de domaine gratuit** : créez un compte sur [DuckDNS](https://www.duckdns.org/) (connexion
-   via GitHub/Google), puis créez un sous-domaine (ex: `mon-groupe.duckdns.org`). Notez le
-   **token** affiché sur la page.
+1. Créez un compte DuckDNS (GitHub/Google) et un sous-domaine (ex: `mon-groupe.duckdns.org`).
+   Notez le token affiché.
 
-2. **Maintenir l'IP à jour** : si votre IP publique change (cas fréquent en résidentiel), DuckDNS
-   doit être notifié. Un script + minuteur systemd suffit :
+2. Maintenez l'IP à jour (utile en résidentiel, où elle change parfois) :
    ```bash
    sudo tee /usr/local/bin/duckdns_update.sh > /dev/null <<'EOF'
    #!/bin/bash
@@ -165,15 +113,15 @@ exige un nom de domaine, jamais une IP nue).
    sudo chmod 700 /usr/local/bin/duckdns_update.sh
    sudo mkdir -p /var/log/duckdns
    ```
-   Puis un service + minuteur systemd (`/etc/systemd/system/duckdns-update.service` en
-   `Type=oneshot` exécutant ce script, et `duckdns-update.timer` avec `OnUnitActiveSec=5min`),
-   activés via `sudo systemctl enable --now duckdns-update.timer`.
+   Puis un service + minuteur systemd (`duckdns-update.service` en `Type=oneshot` exécutant ce
+   script, `duckdns-update.timer` avec `OnUnitActiveSec=5min`), activés via
+   `sudo systemctl enable --now duckdns-update.timer`.
 
-3. **nginx en reverse proxy + certificat** :
+3. nginx en reverse proxy + certificat :
    ```bash
    sudo apt install -y nginx certbot python3-certbot-nginx
    ```
-   Créez `/etc/nginx/sites-available/waseboard` :
+   `/etc/nginx/sites-available/waseboard` :
    ```nginx
    server {
        listen 80;
@@ -187,65 +135,48 @@ exige un nom de domaine, jamais une IP nue).
            proxy_set_header X-Real-IP $remote_addr;
            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
            proxy_set_header X-Forwarded-Proto $scheme;
-           client_max_body_size 64M;   # doit couvrir la limite d'upload du serveur (64 Mo)
+           client_max_body_size 64M;   # limite d'upload du serveur
        }
    }
    ```
-   Puis :
    ```bash
    sudo ln -s /etc/nginx/sites-available/waseboard /etc/nginx/sites-enabled/waseboard
    sudo nginx -t && sudo systemctl reload nginx
    sudo certbot --nginx -d VOTRE_SOUS_DOMAINE.duckdns.org
    ```
-   Certbot modifie automatiquement la configuration nginx pour ajouter le certificat et
-   rediriger le HTTP vers le HTTPS, et programme son propre renouvellement automatique.
+   Certbot configure le certificat, la redirection HTTP→HTTPS et son propre renouvellement.
 
-4. **Redirection de port** : sur votre box/routeur, ouvrez le port **443** (HTTPS) en plus du
-   port 5005 déjà ouvert. Le 443 devient le point d'entrée public ; vous pouvez retirer la
-   redirection du port 5005 une fois tous les clients migrés sur la nouvelle adresse.
+4. Ouvrez le port **443** sur votre box/routeur en plus du 5005 (retirable une fois tous les
+   clients migrés sur la nouvelle adresse).
 
-5. **Si nginx sert déjà un autre site sur ce serveur** : assurez-vous qu'aucun autre bloc
-   `server` ne capte les requêtes destinées à votre sous-domaine WaseBoard par erreur — sans
-   `default_server` explicite sur le bon bloc, nginx peut faire atterrir les requêtes à
-   l'adresse IP nue (ou à un nom d'hôte non reconnu) sur le mauvais site. Ajoutez
-   `default_server` au(x) `listen` de votre site "principal" existant pour lever toute
-   ambiguïté.
+5. **Si nginx sert déjà un autre site** : ajoutez `default_server` au(x) `listen` de ce site
+   existant, sinon nginx peut faire atterrir dessus les requêtes à une adresse non reconnue
+   (IP nue, sous-domaine inconnu) au lieu de votre site habituel.
 
-6. Une fois en place, chaque client configure `https://VOTRE_SOUS_DOMAINE.duckdns.org` (sans
-   port, HTTPS implique le port 443) comme adresse de serveur dans WaseBoard.
+6. Chaque client configure `https://VOTRE_SOUS_DOMAINE.duckdns.org` (sans port) comme adresse
+   de serveur dans WaseBoard.
 
 ## 7. Utilisation
 
-1. Chaque utilisateur configure l'adresse de VOTRE serveur — `https://votre-domaine.duckdns.org`
-   si vous avez suivi la section 6 (recommandé), sinon `http://VOTRE_IP:5005` — le
-   `shared_secret` et son ID Discord dans les Paramètres de son WaseBoard (voir "Identité
-   Discord" dans le README
-   principal). Rien d'autre à choisir : le serveur cible (guild) est déduit automatiquement à
-   partir du salon vocal où cet utilisateur se trouve — aucun ID de serveur à renseigner
-   manuellement, même si le bot est présent sur plusieurs Discords en même temps.
-2. Dans chaque Discord concerné, `/join` fait rejoindre le bot au salon vocal où vous êtes
-   (ou utilisez le bouton "🔊 Rejoindre mon vocal" directement depuis WaseBoard).
-3. Les sons ajoutés/joués depuis n'importe quel client WaseBoard sont partagés avec tous les
-   autres utilisateurs connectés au même serveur.
-4. `/leave` pour déconnecter le bot d'un salon donné. Il se déconnecte aussi
-   **automatiquement** dès qu'il ne reste plus que des bots (ou personne) dans le salon.
+1. Chaque utilisateur configure, dans les Paramètres de son WaseBoard : l'adresse du serveur
+   (`https://votre-domaine.duckdns.org` si vous avez suivi l'étape 6, sinon
+   `http://VOTRE_IP:5005`), le `shared_secret`, et son ID Discord (voir le README principal).
+2. `/join` dans Discord fait rejoindre le bot au salon vocal (ou le bouton "🔊 Rejoindre mon
+   vocal" dans WaseBoard). `/leave` pour le déconnecter — il part aussi seul si le salon se vide.
+3. Les sons ajoutés/joués depuis n'importe quel client sont partagés entre tous les
+   utilisateurs connectés au même serveur.
 
-## Sécurité — points à garder en tête
+## Sécurité
 
-- Le serveur est exposé sur internet avec pour seule protection le `shared_secret` en en-tête
-  HTTP. Sans HTTPS, ce jeton transite en clair et peut être intercepté — voir la section 6
-  ci-dessus pour passer en HTTPS gratuitement (nom de domaine + nginx + certbot), fortement
-  recommandé.
-- Choisissez un `shared_secret` long et aléatoire (32+ caractères) — c'est la seule barrière
-  contre un accès non autorisé, et le serveur n'a aucune limitation de débit sur les tentatives.
-- N'importe qui connaissant le `shared_secret` peut uploader, supprimer et faire jouer des
-  sons. Ne le partagez qu'avec les personnes de confiance.
+- Le `shared_secret` est la seule protection de l'API — aucune limitation de débit sur les
+  tentatives, choisissez-le long et aléatoire, ne le partagez qu'à des personnes de confiance.
+- Sans HTTPS (étape 6), ce secret transite en clair et peut être intercepté.
 
 ## Dépannage
 
 - **Le bot ne rejoint pas / erreur PyNaCl** : `pip install -r requirements.txt --force-reinstall`.
 - **Le son ne se joue pas** : vérifiez `ffmpeg -version` fonctionne sur le serveur.
-- **Un client WaseBoard ne peut pas se connecter** : vérifiez le port ouvert avec, depuis une
-  autre machine, `curl http://VOTRE_IP:5005/status -H "X-WaseBoard-Token: VOTRE_SECRET"`.
-- **"Address already in use"** : un autre processus utilise déjà le port 5005 — changez
-  `http_port` dans `config.json`, ou arrêtez l'ancien processus (`sudo lsof -i :5005`).
+- **Un client ne peut pas se connecter** : depuis une autre machine,
+  `curl http://VOTRE_IP:5005/status -H "X-WaseBoard-Token: VOTRE_SECRET"`.
+- **"Address already in use"** : changez `http_port` dans `config.json`, ou arrêtez l'ancien
+  processus (`sudo lsof -i :5005`).
