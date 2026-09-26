@@ -20,11 +20,12 @@ Discord) :
 1. [Téléchargez et installez le client](https://github.com/salsi64/WaseBoard/releases/latest).
 2. Demandez à cette personne l'**adresse du serveur** et le **jeton d'accès**, à saisir au
    premier lancement (ou plus tard dans les Paramètres).
-3. Rejoignez un salon vocal, cliquez un son — c'est prêt.
+3. Cliquez sur le bouton: Rejoindre mon vocal.   
+4. Cliquez un son — c'est prêt.
 
 ## Fonctionnalités
 
-- **Aperçu local** (icône 📣) avant de jouer réellement dans le vocal ; le bouton s'illumine
+- **Aperçu local** (émoticône sur la gauche des boutons) avant de jouer réellement dans le vocal ; le bouton s'illumine
   pour tout le monde pendant la lecture, avec l'avatar de qui joue.
 - **Plusieurs sons en même temps**, sans s'annuler entre utilisateurs.
 - **Favoris**, **catégories personnelles** et **catégorie automatique par serveur Discord**,
