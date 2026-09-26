@@ -24,6 +24,7 @@ Voir README.md pour la mise en place complète (création du bot, ouverture du p
 """
 
 import array
+import asyncio
 import hashlib
 import json
 import logging
@@ -752,21 +753,34 @@ class WaseBoardServer(commands.Bot):
         source = discord.FFmpegPCMAudio(str(file_path))
         source = discord.PCMVolumeTransformer(source, volume=min(max(volume, 0.0), 2.0))
 
-        # Enregistre l'activité pour le highlight + avatar partagés, et l'efface PRÉCISÉMENT
-        # quand ce son a fini de jouer (callback appelé par le mixeur), plutôt qu'après un
-        # délai fixe déconnecté de la durée réelle.
-        on_finish = None
-        if user_id:
-            str_user_id = str(user_id)
-            member = await self.find_member_async(int(user_id)) if str_user_id.isdigit() else None
-            username = member.display_name if member else None
-            avatar_url = str(member.display_avatar.url) if member else None
-            self.record_activity(sound_id, str_user_id, username, avatar_url, guild_id)
-            on_finish = lambda: self.clear_activity(sound_id, str_user_id)
+        # Le son part D'ABORD, la résolution du membre Discord (pour le highlight/avatar
+        # partagés) se fait ENSUITE en tâche de fond. Avant, cette résolution — un vrai appel
+        # réseau vers l'API Discord si le membre n'est pas déjà en cache — se faisait AVANT
+        # mixer.add() : avec plusieurs utilisateurs déclenchant des sons au même moment, ça
+        # pouvait retarder perceptiblement le déclenchement réel du son (donnant l'impression
+        # que certains "ne se lancent pas" en cas de spam de boutons). clear_activity ne
+        # nécessite pas d'avoir résolu le membre, donc le callback de fin peut être posé tout
+        # de suite ; seul l'enregistrement de l'activité (affichage) attend la tâche de fond.
+        str_user_id = str(user_id) if user_id else None
+        on_finish = (lambda: self.clear_activity(sound_id, str_user_id)) if str_user_id else None
 
         mixer.add(sound_id, source, on_finish=on_finish)
 
+        if str_user_id:
+            asyncio.create_task(self._record_play_activity(sound_id, str_user_id, guild_id))
+
         return web.json_response({"status": "ok"})
+
+    async def _record_play_activity(self, sound_id: str, user_id: str, guild_id: int) -> None:
+        """Résout le membre et enregistre l'activité partagée (highlight/avatar) en arrière-plan,
+        après que le son a déjà été lancé — voir _handle_play."""
+        try:
+            member = await self.find_member_async(int(user_id)) if user_id.isdigit() else None
+            username = member.display_name if member else None
+            avatar_url = str(member.display_avatar.url) if member else None
+            self.record_activity(sound_id, user_id, username, avatar_url, guild_id)
+        except Exception:
+            log.exception("Échec de l'enregistrement d'activité en arrière-plan")
 
     async def _handle_stop_all(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
