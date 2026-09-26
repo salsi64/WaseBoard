@@ -33,12 +33,8 @@ namespace WaseBoard.Services
             int channels = reader.WaveFormat.Channels;
             int bytesPerSample = reader.WaveFormat.BitsPerSample / 8;
 
-            // IMPORTANT : selon le décodeur utilisé en amont (AudioReaderFactory), le format réel
-            // varie — flottant 32 bits pour wav/mp3/flac/Vorbis, mais PCM 16 bits pour l'Opus décodé
-            // via Concentus. Le code lisait auparavant TOUJOURS les échantillons comme des flottants
-            // 32 bits (division fixe par 4), ce qui produisait une waveform totalement aberrante sur
-            // les fichiers Opus (mauvaise interprétation des octets). On détecte maintenant le
-            // format réel et on lit chaque échantillon en conséquence.
+            // Le format réel varie selon le décodeur (AudioReaderFactory) : flottant 32 bits pour
+            // wav/mp3/flac/Vorbis, PCM 16 bits pour l'Opus via Concentus — à détecter, pas supposer.
             bool isFloat32 = reader.WaveFormat.Encoding == WaveFormatEncoding.IeeeFloat && bytesPerSample == 4;
             bool isPcm16 = reader.WaveFormat.Encoding == WaveFormatEncoding.Pcm && bytesPerSample == 2;
 
@@ -75,12 +71,8 @@ namespace WaseBoard.Services
                     }
                     framesReadSoFar++;
 
-                    // IMPORTANT : chaque bucket représente une tranche de temps STRICTEMENT égale
-                    // (calculée en division flottante, pas tronquée), pour que la position à l'écran
-                    // corresponde toujours exactement à la même position temporelle lors de l'export —
-                    // avec des tranches de taille inégale (dernière tranche plus courte), le mappage
-                    // pixel → temps dérivait progressivement, plus fortement vers la droite de la
-                    // waveform, ce qui rendait la découpe du côté droit peu fiable.
+                    // Tranches de temps strictement égales (division flottante, pas tronquée) pour
+                    // que la position à l'écran corresponde exactement à celle utilisée à l'export.
                     int expectedBucket = (int)Math.Min(bucketCount - 1, framesReadSoFar * bucketCount / totalFrames);
                     if (expectedBucket > currentBucket)
                     {
@@ -102,12 +94,9 @@ namespace WaseBoard.Services
         }
 
         /// <summary>
-        /// Mini-waveform (peu de buckets) pour affichage direct sur un bouton-son, avec cache disque
-        /// (%AppData%\WaseBoard\Cache\{id}.waveform.json) invalidé par date de modification du
-        /// fichier audio local — évite de rescanner tout le catalogue à chaque lancement. Ne lève
-        /// jamais : un fichier illisible ou un format non pris en charge se traduit juste par
-        /// l'absence de waveform (pas de plantage), synchrone comme ComputeWaveform (à appeler en
-        /// arrière-plan par l'appelant, voir MainWindow.PrecomputeWaveformsAsync).
+        /// Mini-waveform pour affichage sur un bouton-son, avec cache disque invalidé par date de
+        /// modification du fichier. Ne lève jamais (retourne null en cas d'échec) ; synchrone, à
+        /// appeler en arrière-plan par l'appelant.
         /// </summary>
         public static float[]? GetOrComputeMiniWaveform(string soundId, string audioFilePath, string cacheDirectory, int bucketCount = 28)
         {
@@ -157,20 +146,14 @@ namespace WaseBoard.Services
             long bytesToSkip = (long)(start.TotalSeconds * reader.WaveFormat.AverageBytesPerSecond);
             long bytesToKeep = (long)((end - start).TotalSeconds * reader.WaveFormat.AverageBytesPerSecond);
 
-            // IMPORTANT : on aligne les deux valeurs sur une frame audio complète (BlockAlign =
-            // tous les canaux d'un même instant, ex: gauche+droite en stéréo). Sans ça, dès que le
-            // marqueur de gauche est déplacé, l'écriture démarre au milieu d'une frame stéréo, ce
-            // qui inverse/corrompt les canaux et peut rendre le fichier exporté illisible — c'est
-            // ce qui cassait l'aperçu (et la découpe en général) dès qu'on bougeait le côté gauche.
+            // Alignement sur une frame audio complète (BlockAlign) : sinon l'écriture peut démarrer
+            // au milieu d'une frame stéréo et corrompre les canaux.
             int blockAlign = Math.Max(1, reader.WaveFormat.BlockAlign);
             bytesToSkip -= bytesToSkip % blockAlign;
             bytesToKeep -= bytesToKeep % blockAlign;
 
-            // Lecture strictement séquentielle depuis le tout début du fichier, jamais de seek
-            // (reader.CurrentTime / reader.Position) : pour les formats à débit variable (MP3 VBR,
-            // Ogg), le seek de NAudio est approximatif et peut atterrir sur le mauvais octet. En
-            // relisant depuis le début et en ignorant simplement les octets avant "start", l'export
-            // utilise exactement le même chemin de décodage que le calcul de la waveform.
+            // Lecture séquentielle depuis le début, jamais de seek : pour les formats à débit
+            // variable (MP3 VBR, Ogg), le seek de NAudio est approximatif.
             var buffer = new byte[8192];
             long bytesReadTotal = 0;
             int bytesRead;

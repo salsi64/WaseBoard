@@ -8,13 +8,9 @@ using System.Windows.Controls;
 
 namespace WaseBoard.Windows.Chrome
 {
-    /// <summary>
-    /// Habillage de fenêtre réutilisable : barre de titre custom (via WindowChrome) et coins
-    /// arrondis natifs Windows 11 (DWM). Activé en posant l'attached property Enable="True" sur
-    /// une fenêtre dont la racine est un Border nommé "RootChromeBorder" (utilisé pour le clip
-    /// arrondi, qui protège aussi les enfants à fond carré comme la barre latérale sur Win10
-    /// où l'arrondi DWM n'existe pas).
-    /// </summary>
+    /// <summary>Habillage de fenêtre réutilisable : barre de titre custom + coins arrondis DWM.
+    /// Activé via l'attached property Enable="True", nécessite un Border racine nommé
+    /// "RootChromeBorder".</summary>
     public static class WindowChromeBehavior
     {
         public static readonly DependencyProperty EnableProperty =

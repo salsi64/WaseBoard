@@ -10,13 +10,9 @@ using NAudio.Wave.SampleProviders;
 
 namespace WaseBoard.Services
 {
-    /// <summary>
-    /// Ouvre un fichier audio et retourne un flux exploitable de façon uniforme (lecture,
-    /// calcul de waveform, export). NAudio ne décode pas nativement l'Ogg Vorbis/Opus (ça
-    /// dépendrait d'un codec Windows Media Foundation souvent absent) : on utilise ici
-    /// NAudio.Vorbis (décodeur Vorbis pur C#) et Concentus (décodeur Opus pur C#), fiables sur
-    /// toutes les machines sans dépendance native.
-    /// </summary>
+    /// <summary>Ouvre un fichier audio de façon uniforme (lecture, waveform, export). NAudio ne
+    /// décode pas nativement l'Ogg Vorbis/Opus : NAudio.Vorbis et Concentus (décodeurs C# purs)
+    /// évitent une dépendance à un codec Windows Media Foundation.</summary>
     public static class AudioReaderFactory
     {
         /// <summary>Ouvre le fichier et retourne un WaveStream avec volume ajustable.</summary>

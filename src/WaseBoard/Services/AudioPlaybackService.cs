@@ -6,13 +6,8 @@ using NAudio.Wave;
 
 namespace WaseBoard.Services
 {
-    /// <summary>
-    /// Enveloppe un WaveStream pour garantir qu'il ne délivre jamais plus d'octets que sa longueur
-    /// nominale. Certains décodeurs (notamment des MP3 encodés en VBR avec une durée mal déclarée,
-    /// ou le ré-échantillonnage automatique de WASAPI en mode partagé) peuvent dans de rares cas
-    /// continuer à renvoyer des données après la fin logique du morceau, ce qui est perçu comme
-    /// un bouclage. Ce wrapper coupe strictement à la longueur attendue.
-    /// </summary>
+    /// <summary>Enveloppe un WaveStream pour ne jamais délivrer plus d'octets que sa longueur
+    /// nominale (certains décodeurs VBR/WASAPI peuvent sinon boucler en fin de lecture).</summary>
     internal sealed class SingleShotWaveStream : WaveStream
     {
         private readonly WaveStream _source;
@@ -84,13 +79,8 @@ namespace WaseBoard.Services
         /// <summary>Un périphérique de sortie ciblé, avec son propre volume (ex: micro virtuel à 100%, écoute à 60%).</summary>
         public readonly record struct PlaybackTarget(MMDevice Device, float Volume);
 
-        /// <summary>
-        /// Joue un son identifié par <paramref name="soundId"/> vers plusieurs périphériques, chacun
-        /// avec son propre volume. Si ce même son est déjà en cours de lecture (sur n'importe quel
-        /// périphérique), sa lecture est arrêtée avant de relancer depuis le début — un nouveau clic
-        /// sur le même bouton redémarre donc le son au lieu de le superposer. Les autres sons en
-        /// cours de lecture ne sont pas affectés.
-        /// </summary>
+        /// <summary>Joue un son vers plusieurs périphériques (chacun son volume). Un son déjà en
+        /// cours est stoppé puis relancé, plutôt que superposé ; les autres sons ne sont pas affectés.</summary>
         public void PlaySound(string soundId, string filePath, IEnumerable<PlaybackTarget> targets)
         {
             StopSound(soundId);

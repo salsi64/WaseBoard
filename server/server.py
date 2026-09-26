@@ -1,26 +1,9 @@
 """
-Serveur WaseBoard.
+Serveur WaseBoard : catalogue de sons partagé (API HTTP) + bot Discord qui les joue dans le
+salon vocal. Peut être connecté à plusieurs serveurs Discord (guilds) en même temps, chacun
+avec sa propre connexion vocale et son propre mixeur audio.
 
-Rôles :
-1. Catalogue de sons partagé : upload/liste/suppression/renommage via une API HTTP.
-2. Bot Discord : rejoint un salon vocal sur commande (/join) et joue les sons demandés
-   directement dans l'appel — un flux séparé du micro de qui que ce soit, donc jamais
-   filtré par les suppressions de bruit IA (Krisp).
-3. Activité en temps réel : suit qui joue quoi (avec la vraie durée du son, pas une durée
-   approximative), et qui a l'application ouverte en ce moment — pour que tous les clients
-   WaseBoard affichent le même highlight et les mêmes avatars au même moment.
-4. Résolution automatique du salon Discord ciblé : à partir de l'utilisateur qui clique
-   (retrouvé via sa présence vocale actuelle), sans que personne n'ait à choisir un
-   serveur Discord dans les Paramètres.
-5. Catégories partagées par serveur Discord : chaque guild a ses propres catégories,
-   visibles et modifiables par tous ses membres (en plus des catégories 100% personnelles
-   de chaque utilisateur, gérées côté client).
-
-Le bot peut être connecté à PLUSIEURS serveurs Discord (guilds) simultanément, chacun avec
-sa propre connexion vocale et son propre mixeur audio (plusieurs sons superposés au lieu de
-se remplacer).
-
-Voir README.md pour la mise en place complète (création du bot, ouverture du port, etc.).
+Voir README.md pour la mise en place complète.
 """
 
 import array
@@ -106,19 +89,13 @@ def save_shared_categories(data: dict) -> None:
 
 class MixingAudioSource(discord.AudioSource):
     """
-    Source audio persistante, jouée en continu par le voice_client d'un salon. Plusieurs sons
-    DIFFÉRENTS peuvent être ajoutés en même temps (add) et sont mixés ensemble à chaque frame de
-    20ms au lieu de se remplacer — c'est ce qui permet à plusieurs utilisateurs de déclencher des
-    sons simultanément sans s'annuler mutuellement. Renvoie du silence quand rien ne joue, pour ne
-    jamais signaler de fin de flux au voice_client (qui sinon arrêterait la lecture).
+    Source audio persistante d'un salon : mixe plusieurs sons différents (ajoutés via add(),
+    indexés par sound_id) à chaque frame de 20ms au lieu de se remplacer. Rejouer le MÊME son
+    coupe et relance l'instance précédente plutôt que de la superposer. Renvoie du silence
+    quand rien ne joue (le voice_client ne doit jamais voir de fin de flux).
 
-    En revanche, rejouer le MÊME son (même clé) pendant qu'il joue déjà ne le superpose PAS à
-    lui-même : l'instance précédente est immédiatement coupée et remplacée par la nouvelle — un
-    nouvel appui relance le son plutôt que de créer un chevauchement.
-
-    Chaque son ajouté peut porter un callback "on_finish", appelé dès que CETTE instance précise
-    a fini de jouer OU vient d'être remplacée par une relance — utilisé pour effacer le highlight
-    partagé au bon moment, plutôt qu'après une durée approximative fixe.
+    Le callback "on_finish" optionnel se déclenche à la fin réelle du son (ou à son remplacement),
+    utilisé pour effacer le highlight partagé au bon moment.
     """
 
     def __init__(self) -> None:
@@ -129,10 +106,8 @@ class MixingAudioSource(discord.AudioSource):
         with self._lock:
             previous = self._entries.get(key)
             self._entries[key] = (source, on_finish)
-        # Coupe l'ancienne instance de CE MÊME son APRÈS avoir déjà publié la nouvelle dans le
-        # dict (pour qu'il n'y ait jamais un instant sans aucune entrée pour cette clé), en dehors
-        # du verrou (cleanup()/on_finish() peuvent prendre un peu de temps, pas de raison de
-        # bloquer read() pendant ce temps-là).
+        # Coupe l'ancienne instance après avoir publié la nouvelle (jamais de trou pour cette
+        # clé), hors du verrou (cleanup/on_finish peuvent être lents).
         if previous is not None:
             old_source, old_on_finish = previous
             try:
@@ -221,9 +196,8 @@ class MixingAudioSource(discord.AudioSource):
 intents = discord.Intents.default()
 intents.voice_states = True
 intents.guilds = True
-intents.members = True  # nécessaire pour résoudre un membre par id (verify-user, activité,
-                         # catégories partagées...) ; à activer aussi côté Portail Développeur >
-                         # Bot > "Server Members Intent".
+intents.members = True  # requis pour résoudre un membre par id ; à activer aussi dans le
+                         # Portail Développeur > Bot > "Server Members Intent".
 
 
 class WaseBoardServer(commands.Bot):
@@ -298,10 +272,8 @@ class WaseBoardServer(commands.Bot):
             except ValueError:
                 pass
 
-        # Ce filet de sécurité ("un seul salon connecté ? on suppose que c'est le bon") est
-        # utile pour /play et /stop (éviter de bloquer l'utilisateur sur une ambiguïté qui n'en
-        # est pas vraiment une), mais FAUX pour un indicateur "suis-je actuellement en vocal ?"
-        # — il faisait dire "connecté" même quand l'utilisateur n'était présent nulle part.
+        # Filet de sécurité pour /play et /stop uniquement : ignoré en mode strict (indicateurs
+        # de présence), où un seul salon connecté ne veut pas dire que l'utilisateur y est.
         if not strict and len(self.voice_clients_map) == 1:
             return next(iter(self.voice_clients_map))
         return None
@@ -317,10 +289,8 @@ class WaseBoardServer(commands.Bot):
         return None
 
     async def find_member_async(self, user_id: int) -> Optional[discord.Member]:
-        """Comme find_member, mais interroge Discord si le membre n'est pas déjà en cache
-        (ex: venant de rejoindre, ou serveur avec beaucoup de membres). Plus lent : réservé
-        aux cas où la précision prime sur la vitesse (résolution d'identité, pas le sondage
-        d'activité à haute fréquence)."""
+        """Comme find_member, mais interroge Discord si absent du cache. Plus lent : réservé aux
+        cas où la précision prime (résolution d'identité), pas au sondage d'activité fréquent."""
         member = self.find_member(user_id)
         if member is not None:
             return member
@@ -386,10 +356,7 @@ class WaseBoardServer(commands.Bot):
                     self.active_plays.pop(sound_id, None)
 
     def get_active_snapshot(self, guild_id: Optional[int] = None) -> dict:
-        """guild_id=None (identité de l'appelant inconnue, ou pas en vocal) : aucune activité
-        n'est attribuable à "son" salon, donc on ne renvoie rien plutôt que tout — sinon on
-        retombe dans le bug d'origine (highlight/now-playing d'un salon vocal auquel on n'a
-        rien à voir)."""
+        """guild_id=None (appelant non identifié ou pas en vocal) renvoie rien plutôt que tout."""
         now = time.time()
         result: dict[str, list[dict]] = {}
         with self._activity_lock:
@@ -515,10 +482,8 @@ class WaseBoardServer(commands.Bot):
             return web.json_response({"error": str(ex)}, status=500)
 
     async def _handle_update_sound(self, request: web.Request) -> web.Response:
-        """PATCH /sounds/{id} : renomme et/ou change l'emoji d'un son du catalogue partage. Les
-        deux proprietes sont partagees entre tous les utilisateurs (contrairement aux favoris,
-        categories perso, volume ou raccourcis, qui restent des preferences locales par
-        utilisateur) - un emoji assigne par quelqu'un doit etre visible et modifiable par tous."""
+        """PATCH /sounds/{id} : renomme et/ou change l'emoji d'un son (partages entre tous les
+        utilisateurs, contrairement aux favoris/categories/volume/raccourcis, locaux)."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
 
@@ -753,14 +718,9 @@ class WaseBoardServer(commands.Bot):
         source = discord.FFmpegPCMAudio(str(file_path))
         source = discord.PCMVolumeTransformer(source, volume=min(max(volume, 0.0), 2.0))
 
-        # Le son part D'ABORD, la résolution du membre Discord (pour le highlight/avatar
-        # partagés) se fait ENSUITE en tâche de fond. Avant, cette résolution — un vrai appel
-        # réseau vers l'API Discord si le membre n'est pas déjà en cache — se faisait AVANT
-        # mixer.add() : avec plusieurs utilisateurs déclenchant des sons au même moment, ça
-        # pouvait retarder perceptiblement le déclenchement réel du son (donnant l'impression
-        # que certains "ne se lancent pas" en cas de spam de boutons). clear_activity ne
-        # nécessite pas d'avoir résolu le membre, donc le callback de fin peut être posé tout
-        # de suite ; seul l'enregistrement de l'activité (affichage) attend la tâche de fond.
+        # Le son part D'ABORD ; la résolution du membre Discord (highlight/avatar) — un appel
+        # réseau si non déjà en cache — se fait ENSUITE en tâche de fond, pour ne jamais
+        # retarder la lecture elle-même.
         str_user_id = str(user_id) if user_id else None
         on_finish = (lambda: self.clear_activity(sound_id, str_user_id)) if str_user_id else None
 

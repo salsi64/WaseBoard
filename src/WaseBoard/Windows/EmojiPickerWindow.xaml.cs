@@ -38,11 +38,8 @@ namespace WaseBoard.Windows
 
             foreach (var emoji in Palette)
             {
-                // Image plutôt que texte : WPF ne sait pas afficher en couleur le format d'emoji
-                // récent de Windows 11 (COLRv1) — voir EmojiImageResolver. Le glyphe texte
-                // (FontFamily Segoe UI Emoji) s'affichait en traits monochromes malgré la bonne
-                // police, quel que soit le réglage — une vraie limitation du framework, pas un
-                // problème de configuration.
+                // Image plutôt que texte : voir EmojiImageResolver (WPF n'affiche pas en couleur
+                // le format d'emoji récent de Windows 11).
                 var button = new Button
                 {
                     Content = new Image { Source = EmojiImageResolver.Resolve(emoji), Width = 22, Height = 22 },

@@ -8,32 +8,19 @@ using System.Windows.Media.Animation;
 namespace WaseBoard
 {
     /// <summary>
-    /// Un WrapPanel qui anime le déplacement de ses enfants quand leur position change (technique
-    /// "FLIP" : on capture la position avant/après, et on anime la différence). Utilisé pour les
-    /// grilles de boutons de son, afin que réordonner un bouton fasse visiblement "s'écarter" les
-    /// autres au lieu de sauter brutalement à leur nouvelle place.
-    ///
-    /// Fonctionne pour n'importe quel changement de position (réordonnancement en direct pendant un
-    /// glisser-déposer, ajout/suppression d'un élément, filtrage par recherche, etc.), tant que les
-    /// mêmes instances d'éléments visuels persistent entre les deux dispositions — WPF ne réutilise
-    /// les conteneurs que si la collection source notifie des changements incrémentaux (Move/Add/
-    /// Remove) plutôt que d'être entièrement remplacée.
+    /// WrapPanel qui anime le déplacement de ses enfants quand leur position change (technique
+    /// FLIP : capture la position avant/après, anime la différence). Requiert des
+    /// ObservableCollection modifiées in-place (Move/Add/Remove), pas reconstruites.
     /// </summary>
     public class AnimatedWrapPanel : WrapPanel
     {
         private static readonly TimeSpan AnimationDuration = TimeSpan.FromMilliseconds(380);
 
         /// <summary>
-        /// Grille à cellules de largeur FIXE en thème moderne : les pilules ont sinon une largeur
-        /// organique qui dépend de leur contenu (nom, favori, avatars de qui joue ce son...), donc
-        /// tout changement (ex: quelqu'un se met à jouer un son ailleurs dans la grille) décale la
-        /// position de TOUS les boutons suivants — WrapPanel recalcule où chaque ligne "casse" à
-        /// partir de la largeur réelle de chaque enfant. Avec ItemWidth fixé, cette largeur ne
-        /// dépend plus que de la fenêtre (plus ou moins de colonnes selon l'espace dispo, comme une
-        /// vraie grille responsive) : le contenu d'un bouton peut grandir sans jamais affecter ses
-        /// voisins, l'éventuel dépassement étant simplement rogné (voir ClipToBounds sur le
-        /// bouton du gabarit moderne). Le thème classique, déjà à largeur de bouton fixe de son
-        /// côté, n'a pas besoin de cette béquille (ItemWidth reste NaN, comportement par défaut).
+        /// Cellules à largeur fixe en thème moderne : les pilules ont une largeur organique qui
+        /// varie avec leur contenu, ce qui décalerait les boutons suivants dès qu'un seul change
+        /// (ex: avatar de qui joue le son). Le contenu peut grandir sans affecter ses voisins,
+        /// l'excédent étant rogné (ClipToBounds). Classique reste NaN (déjà à largeur fixe).
         /// </summary>
         protected override Size MeasureOverride(Size availableSize)
         {

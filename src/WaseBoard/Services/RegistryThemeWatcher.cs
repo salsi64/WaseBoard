@@ -5,13 +5,9 @@ namespace WaseBoard.Services
 {
     public sealed record SystemThemeSnapshot(bool IsLightTheme, Color AccentColor);
 
-    /// <summary>
-    /// Lit le thème clair/sombre et la couleur d'accent de Windows depuis le registre. Conçu pour
-    /// être interrogé par un DispatcherTimer côté appelant (cohérent avec les timers
-    /// d'activité/statut vocal déjà présents dans MainWindow) plutôt que via
-    /// SystemEvents.UserPreferenceChanged, pour ne pas ajouter de dépendance à
-    /// System.Windows.Forms pour un seul événement.
-    /// </summary>
+    /// <summary>Lit le thème clair/sombre et la couleur d'accent de Windows depuis le registre.
+    /// Interrogé par un DispatcherTimer côté appelant plutôt que via SystemEvents (évite une
+    /// dépendance à System.Windows.Forms).</summary>
     public static class RegistryThemeWatcher
     {
         private static readonly Color FallbackAccent = Color.FromRgb(0x7C, 0x5C, 0xFF);

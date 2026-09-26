@@ -5,14 +5,9 @@ using System.Windows.Media.Imaging;
 namespace WaseBoard
 {
     /// <summary>
-    /// Résout un emoji Unicode vers son image couleur (Twemoji, servi depuis GitHub via jsDelivr —
-    /// le package npm "twemoji" ne contient plus que le script d'analyse depuis la version 14, les
-    /// images vivent dans le dépôt GitHub qui maintient Twemoji aujourd'hui, jdecked/twemoji).
-    ///
-    /// WPF ne sait pas afficher en couleur le format d'emoji le plus récent de Windows 11
-    /// (COLRv1) — limitation connue et documentée du framework, pas un simple réglage de police :
-    /// même avec la bonne FontFamily, le texte s'affiche en traits monochromes. On contourne ça en
-    /// affichant de vraies images plutôt que le glyphe du son système.
+    /// Résout un emoji Unicode vers son image couleur (Twemoji, via jsDelivr/jdecked/twemoji).
+    /// Contourne l'incapacité de WPF à afficher le format d'emoji couleur récent de Windows 11
+    /// (COLRv1) en glyphe texte, quelle que soit la police.
     /// </summary>
     public static class EmojiImageResolver
     {
@@ -29,15 +24,9 @@ namespace WaseBoard
         }
 
         /// <summary>
-        /// Convertit un emoji en nom de fichier Twemoji : points de code Unicode en hexadécimal
-        /// minuscule, joints par des tirets — en gérant les paires de substitution (emoji hors du
-        /// plan de base, ex: la plupart des emoji visage/objet).
-        ///
-        /// Le sélecteur de variante U+FE0F est omis pour un emoji simple (ex: "❤️" U+2764 U+FE0F
-        /// → fichier "2764.png"), mais CONSERVÉ dès que la séquence contient un ZWJ (U+200D,
-        /// emoji combinés — ex: "❤️‍🔥" U+2764 U+FE0F U+200D U+1F525 → fichier
-        /// "2764-fe0f-200d-1f525.png", pas "2764-200d-1f525.png" qui n'existe pas dans Twemoji).
-        /// Vérifié directement contre le contenu du dépôt Twemoji plutôt que supposé.
+        /// Points de code Unicode en hexadécimal, joints par des tirets. Le sélecteur de variante
+        /// U+FE0F est omis pour un emoji simple, mais conservé dans une séquence ZWJ (U+200D) —
+        /// vérifié contre le dépôt Twemoji, les deux conventions y coexistent selon les fichiers.
         /// </summary>
         private static string ToTwemojiCodepoints(string emoji)
         {

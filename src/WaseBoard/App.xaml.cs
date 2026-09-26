@@ -14,18 +14,9 @@ namespace WaseBoard
 
         protected override void OnStartup(StartupEventArgs e)
         {
-            // Une seule instance à la fois : plusieurs processus WaseBoard.exe ouverts en même
-            // temps gardent chacun leur propre copie des réglages en mémoire, et le dernier à
-            // sauvegarder écrase silencieusement les autres — c'est ce qui a fait disparaître des
-            // catégories créées entre-temps dans une autre instance. On bascule vers la fenêtre
-            // déjà ouverte plutôt que d'en lancer une seconde.
-            //
-            // IMPORTANT : ce contrôle doit se faire AVANT base.OnStartup(e), pas après — c'est
-            // base.OnStartup qui traite StartupUri et crée/affiche MainWindow. L'appeler avant de
-            // vérifier le verrou laissait une "deuxième" fenêtre se créer et charger/sauvegarder
-            // des réglages (potentiellement vides, avant que Load() n'ait fini) avant même que le
-            // Shutdown() ci-dessous ne prenne effet — c'est ce qui a écrasé settings.json (et sa
-            // sauvegarde .bak) avec des valeurs par défaut lors du test précédent.
+            // Une seule instance à la fois (deux processus écrasent silencieusement les réglages
+            // de l'autre) : on bascule vers la fenêtre déjà ouverte plutôt que d'en lancer une
+            // seconde. Doit être vérifié AVANT base.OnStartup(e), qui crée/affiche MainWindow.
             _singleInstanceMutex = new Mutex(true, "WaseBoard_SingleInstance_Mutex", out var createdNew);
             if (!createdNew)
             {
@@ -36,9 +27,8 @@ namespace WaseBoard
 
             base.OnStartup(e);
 
-            // Capture les exceptions non gérées pour éviter un crash silencieux. Reste une
-            // MessageBox... non, une AlertDialog bloquante délibérément : l'app peut être dans un
-            // état cassé à ce stade, un toast non garanti visible ne suffit pas.
+            // Capture les exceptions non gérées : AlertDialog bloquante plutôt qu'un toast, l'app
+            // pouvant être dans un état cassé à ce stade.
             DispatcherUnhandledException += (s, ex) =>
             {
                 AlertDialog.Show(MainWindow,

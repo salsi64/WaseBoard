@@ -29,15 +29,8 @@ namespace WaseBoard
 
         private readonly SoundLibraryService _library = new();
 
-        /// <summary>
-        /// Devient vrai une fois _library.Load() exécuté. Sans ce garde-fou, un contrôle dont la
-        /// valeur initiale est écrite en XAML (ex: Slider Value="1.0") déclenche son événement
-        /// *Changed pendant InitializeComponent(), donc AVANT Load() — un handler qui enregistre
-        /// immédiatement (SaveSettings) écrase alors settings.json avec des réglages par défaut
-        /// vides. C'est ce qui a effacé le jeton serveur, l'ID Discord et les catégories : le
-        /// slider de volume de la page principale sauvegardait à chaque lancement, avant même que
-        /// les vrais réglages aient été lus depuis le disque.
-        /// </summary>
+        /// <summary>Vrai une fois _library.Load() exécuté. Évite qu'un contrôle initialisé en XAML
+        /// (ex: Slider Value="1.0") ne sauvegarde des réglages par défaut avant leur chargement.</summary>
         private bool _settingsReady;
         private readonly AudioPlaybackService _audio = new();
         private GlobalHotkeyManager? _hotkeys;
@@ -260,13 +253,8 @@ namespace WaseBoard
             res["AccentBrush"] = new SolidColorBrush(accent);
         }
 
-        /// <summary>
-        /// Bascule entre le thème classique (barre d'outils) et moderne (barre latérale, boutons en pilule).
-        /// Le bouton Paramètres et le slider de volume de la barre d'outils (MainVolumePanel) ont
-        /// chacun un équivalent dans la barre latérale (SidebarFooter) : masqués ici en thème
-        /// moderne pour ne pas les afficher en double, ils restent la seule voie d'accès en
-        /// thème classique puisque la barre latérale n'existe pas dans ce cas.
-        /// </summary>
+        /// <summary>Bascule thème classique/moderne. Paramètres/volume de la barre d'outils sont
+        /// masqués en moderne (déjà dans la barre latérale), seule voie d'accès en classique.</summary>
         private void ApplyTheme()
         {
             var isModern = _library.Settings.UiTheme == "Modern";
@@ -453,11 +441,8 @@ namespace WaseBoard
             RegisterAllHotkeys();
             RefreshSections();
 
-            // Ni le texte ni l'infobulle n'affichent l'adresse du serveur (IP/domaine) : seul
-            // l'état connecté/non est indiqué, y compris au survol — pour ne pas exposer
-            // l'adresse de qui héberge son propre serveur (visible par-dessus l'épaule, capture
-            // d'écran...). Le détail d'erreur reste affiché en cas de souci de connexion (utile
-            // pour diagnostiquer), sans jamais y concaténer l'adresse elle-même.
+            // Ni le texte ni l'infobulle n'affichent l'adresse du serveur (confidentialité) : juste
+            // l'état connecté/non, et le détail d'erreur en cas de souci.
             var connected = items.Count > 0 || string.IsNullOrEmpty(_library.LastErrorDetail);
             ServerStatusText.Text = connected ? $"Connecté — {items.Count} son(s)" : "Serveur injoignable";
             ServerStatusText.ToolTip = connected ? null : _library.LastErrorDetail;
@@ -468,10 +453,8 @@ namespace WaseBoard
         }
 
         /// <summary>
-        /// Calcule en arrière-plan (batch limité à 4 en parallèle) les mini-waveforms manquantes
-        /// pour le bouton-son classique, avec cache disque (AudioTrimService.GetOrComputeMiniWaveform)
-        /// — un redémarrage n'a donc pas à tout rescanner. Ne bloque jamais l'UI : chaque son mis à
-        /// jour se propage individuellement via SoundItem.WaveformPeaks (INotifyPropertyChanged).
+        /// Calcule en arrière-plan (4 en parallèle max) les mini-waveforms manquantes, avec cache
+        /// disque. Ne bloque jamais l'UI, chaque son se met à jour individuellement.
         /// </summary>
         private async Task PrecomputeWaveformsAsync(List<SoundItem> items)
         {
@@ -494,10 +477,8 @@ namespace WaseBoard
         }
 
         /// <summary>
-        /// Partagé par les deux sliders de volume (MainVolumeSlider en thème classique,
-        /// SidebarVolumeSlider en thème moderne — voir ApplyTheme()) : un seul des deux est
-        /// visible à la fois, mais on garde l'autre à jour pour retrouver la bonne valeur si le
-        /// thème change en cours de session.
+        /// Partagé par les deux sliders de volume (classique/moderne, voir ApplyTheme()) : garde
+        /// l'autre à jour même si un seul est visible, pour un changement de thème en session.
         /// </summary>
         private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -710,10 +691,8 @@ namespace WaseBoard
         private IEnumerable<SoundItem> SortAllSounds(IEnumerable<SoundItem> sounds) =>
             SortAllSounds(sounds, _library.Settings.AllSoundsSortMode);
 
-        /// <summary>Présélectionne le tri courant à chaque (re)création du ComboBox — la section
-        /// "Tous les sons" (comme toutes les sections) est entièrement reconstruite à chaque
-        /// RefreshSections(), donc ce ComboBox n'a pas de binding réactif vers Settings, juste cet
-        /// état initial lu une fois chargé.</summary>
+        /// <summary>Présélectionne le tri courant à chaque recréation du ComboBox (pas de binding
+        /// réactif, les sections étant reconstruites à chaque RefreshSections()).</summary>
         private void AllSoundsSortCombo_Loaded(object sender, RoutedEventArgs e)
         {
             if (sender is not ComboBox { DataContext: SectionViewModel { IsAllSounds: true } } combo) return;
@@ -799,11 +778,8 @@ namespace WaseBoard
                     }
                 }
 
-                // Détection de doublons : hash du fichier final (après découpe) contre celui de
-                // chaque son déjà présent dans le catalogue, avant même d'envoyer quoi que ce
-                // soit au serveur. À défaut de correspondance exacte de contenu, un même nom
-                // (catalogue partagé entre tous les utilisateurs d'un serveur) reste un signal
-                // utile, plus faible, qu'on remonte différemment.
+                // Détection de doublons : hash du fichier final contre le catalogue existant ; à
+                // défaut, un même nom reste un signal plus faible, remonté différemment.
                 var contentHash = SoundLibraryService.ComputeFileHash(trimWindow.ResultFilePath);
                 var hashMatch = Sounds.FirstOrDefault(s => s.ContentHash is not null && s.ContentHash == contentHash);
                 var nameMatch = hashMatch is null
@@ -984,9 +960,7 @@ namespace WaseBoard
                 if (ok)
                 {
                     // Après le retrait (pas avant) : ResyncHotkeys() reconstruit depuis Sounds, donc
-                    // le raccourci de ce son ne disparaît vraiment que s'il n'est plus dans la
-                    // collection au moment de l'appel — sinon il resterait actif jusqu'au prochain
-                    // resync et redéclencherait Play() sur un son qui n'existe plus côté serveur.
+                    // le son doit déjà être absent pour que son raccourci disparaisse vraiment.
                     Sounds.Remove(item);
                     ResyncHotkeys();
                     RefreshSections();
@@ -1081,13 +1055,8 @@ namespace WaseBoard
             _isDragging = false;
         }
 
-        /// <summary>
-        /// Copie semi-transparente du bouton, affichée sur un calque flottant et repositionnée à
-        /// chaque Window_PreviewDragOver : le bouton d'origine ne fait que se balancer sur place
-        /// (StartWiggle), ce qui ne montre pas que le son "voyage" jusqu'à l'endroit visé pendant
-        /// qu'on maintient le clic. Ce visuel suit le curseur pour combler ce manque, le vrai
-        /// classement restant appliqué au dépôt (Section_Drop / SoundButton_DragOver).
-        /// </summary>
+        /// <summary>Copie semi-transparente du bouton, suit le curseur pendant le glisser (repositionnée
+        /// à chaque Window_PreviewDragOver) ; le classement réel s'applique au dépôt.</summary>
         private void ShowDragVisual(Button source, Point startPosition)
         {
             _dragVisual = new Border
@@ -1151,12 +1120,8 @@ namespace WaseBoard
             button.RenderTransform = Transform.Identity;
         }
 
-        /// <summary>
-        /// Met en valeur le bouton survolé ET réordonne EN DIRECT pendant le survol (pas seulement
-        /// au dépôt) : c'est ce qui déclenche l'animation d'AnimatedWrapPanel — les autres boutons
-        /// s'écartent visiblement pendant qu'on glisse, comme sur un écran d'accueil de smartphone,
-        /// plutôt qu'un simple saut brutal une fois le bouton relâché.
-        /// </summary>
+        /// <summary>Met en valeur le bouton survolé et réordonne en direct pendant le survol (pas
+        /// seulement au dépôt), pour déclencher l'animation d'écartement d'AnimatedWrapPanel.</summary>
         private DateTime _lastLiveReorder = DateTime.MinValue;
         private static readonly TimeSpan LiveReorderThrottle = TimeSpan.FromMilliseconds(220);
 
@@ -1174,10 +1139,8 @@ namespace WaseBoard
 
             if (ReferenceEquals(draggedItem, targetItem)) return;
 
-            // Espace les réordonnancements en direct d'au moins ~220ms : sans ça, le moindre
-            // frôlement d'un bouton voisin pendant le survol redéclenche l'animation en boucle
-            // très rapidement, ce qui donne une impression de nervosité même avec une transition
-            // individuellement douce. Le highlight de la cible (ci-dessus), lui, reste instantané.
+            // Espace les réordonnancements en direct d'au moins ~220ms pour éviter une animation
+            // nerveuse ; le highlight de la cible, lui, reste instantané.
             if (DateTime.Now - _lastLiveReorder < LiveReorderThrottle) return;
             _lastLiveReorder = DateTime.Now;
 
@@ -1188,10 +1151,8 @@ namespace WaseBoard
             if (masterOld >= 0 && masterNew >= 0 && masterOld != masterNew)
                 Sounds.Move(masterOld, masterNew);
 
-            // Et la section affichée elle-même (sa propre collection filtrée), pour que
-            // l'animation soit visible immédiatement sans reconstruire toute la page — seulement
-            // si le son survolé est déjà membre de cette section (sinon, ce sera un classement,
-            // géré au dépôt par ApplySectionMembership, pas un simple réordonnancement).
+            // Et la section affichée elle-même, si le son en fait déjà partie (sinon c'est un
+            // classement, géré au dépôt par ApplySectionMembership).
             var section = _currentSections.FirstOrDefault(s => s.Sounds.Contains(draggedItem) && s.Sounds.Contains(targetItem));
             if (section is not null)
             {
@@ -1210,10 +1171,8 @@ namespace WaseBoard
 
         private void ClearDragOverHighlight()
         {
-            // ClearValue (et non "Effect = null") : le bouton classique pilote aussi son Effect
-            // via un déclencheur de style pour le highlight de lecture partagé — une simple
-            // affectation à null resterait en valeur locale et bloquerait ce highlight en
-            // permanence après un glisser-déposer. ClearValue laisse le déclencheur reprendre la main.
+            // ClearValue (pas "Effect = null") : laisse le déclencheur de style du highlight de
+            // lecture reprendre la main, plutôt que de bloquer sur une valeur locale.
             _dragOverButton?.ClearValue(UIElement.EffectProperty);
             _dragOverButton = null;
         }
@@ -1223,10 +1182,8 @@ namespace WaseBoard
             if (sender is not FrameworkElement { Tag: SectionViewModel section }) return;
             if (e.Data.GetData(typeof(SoundItem)) is not SoundItem draggedItem) return;
 
-            // Si le son était déjà membre de cette section, le survol a déjà tout réordonné en
-            // direct (voir SoundButton_DragOver) : inutile de reconstruire, ça casserait
-            // l'animation en cours. Seul un VRAI nouveau classement (favoris/catégorie qu'il ne
-            // possédait pas encore) nécessite de reconstruire les sections.
+            // Déjà membre ? Le survol a déjà tout réordonné (SoundButton_DragOver) ; reconstruire
+            // casserait l'animation. Seul un nouveau classement nécessite RefreshSections().
             var wasAlreadyMember = section.CategoryKey == AllSoundsKey || section.Sounds.Contains(draggedItem);
 
             await ApplySectionMembership(section, draggedItem);
@@ -1256,19 +1213,10 @@ namespace WaseBoard
 
         // ---------- Gestion des catégories ----------
 
-        /// <summary>
-        /// Glisser-déposer d'un en-tête de section (page principale) pour réordonner les
-        /// catégories personnelles ET partagées — même logique que NavItem_Drop côté sidebar.
-        /// Les gestionnaires de détection (Preview*) sont posés sur l'Expander lui-même, pas sur
-        /// l'en-tête imbriqué : le ToggleButton interne (bascule ouverture/fermeture) capture la
-        /// souris dès le clic, ce qui coupe le tunneling des événements suivants vers un élément
-        /// imbriqué à l'intérieur de lui — l'Expander, étant un ANCÊTRE du ToggleButton, continue
-        /// lui de recevoir les événements malgré la capture. Piège : une fois la capture active,
-        /// e.OriginalSource ne reflète plus l'élément précis sous le curseur (il "remonte" vers
-        /// l'élément capturant) — la vérification "vient du header, pas du contenu" doit donc être
-        /// faite UNE FOIS au clic initial (avant toute capture) et mémorisée, jamais recalculée
-        /// pendant le déplacement.
-        /// </summary>
+        /// <summary>Glisser-déposer d'un en-tête de section pour réordonner les catégories (même
+        /// logique que NavItem_Drop). Gestionnaires posés sur l'Expander (ancêtre), pas l'en-tête :
+        /// le ToggleButton interne capture la souris au clic, donc "vient du header" doit être
+        /// vérifié une fois au clic initial et mémorisé, jamais recalculé pendant le déplacement.</summary>
         private static bool IsDescendantOf(DependencyObject? element, DependencyObject ancestor)
         {
             while (element is not null)
@@ -1355,16 +1303,9 @@ namespace WaseBoard
         }
 
         /// <summary>
-        /// Filet de sécurité pour TOUTES les sections : le binding OneTime initial d'IsExpanded ne
-        /// déclenche Section_Expanded/Collapsed que si sa valeur diffère du défaut de l'Expander
-        /// (false), et le fait avant que le contrôle soit réellement chargé — ce qui peut échouer à
-        /// synchroniser la hauteur visible (ExpandSiteBorder.MaxHeight) avec l'état voulu. Comme
-        /// RefreshSections() recrée systématiquement tous les Expanders (nouvelle liste, pas de
-        /// notification incrémentale), une catégorie que l'utilisateur avait ouverte se retrouvait
-        /// ainsi visuellement repliée après un ajout de son (ou toute autre action qui rafraîchit
-        /// les sections) même si IsExpanded valait bien true. On force donc ici, une fois le
-        /// contrôle réellement chargé, la hauteur à correspondre à IsExpanded — sans animation,
-        /// pour ne pas provoquer de "pop" au premier affichage.
+        /// Filet de sécurité pour toutes les sections : le binding OneTime initial d'IsExpanded ne
+        /// synchronise pas toujours fiablement la hauteur visible avant que le contrôle soit
+        /// chargé. Force ici la hauteur à correspondre à IsExpanded, sans animation (pas de "pop").
         /// </summary>
         private void Section_Loaded(object sender, RoutedEventArgs e)
         {
@@ -1407,13 +1348,8 @@ namespace WaseBoard
             AnimateExpanderHeight(expander, expanding: false);
         }
 
-        /// <summary>
-        /// Anime la hauteur visible du contenu d'une section (MaxHeight, 0 ↔ hauteur naturelle
-        /// mesurée). Les sections sont reconstruites à chaque RefreshSections() (recherche,
-        /// changement de thème...) : tant que l'Expander n'a pas encore été chargé (IsLoaded), le
-        /// déclenchement vient du binding OneTime initial, pas d'un clic utilisateur — on applique
-        /// alors l'état directement, sans animation, pour éviter un "pop" à chaque frappe de recherche.
-        /// </summary>
+        /// <summary>Anime la hauteur visible d'une section. Avant IsLoaded (binding OneTime initial,
+        /// pas un clic), applique l'état directement pour éviter un "pop" à chaque RefreshSections().</summary>
         private static void AnimateExpanderHeight(Expander expander, bool expanding)
         {
             expander.ApplyTemplate();
@@ -1476,10 +1412,8 @@ namespace WaseBoard
             RefreshSections();
         }
 
-        /// <summary>Format du fichier produit par ExportCategory / lu par ImportCategoryAsync.
-        /// Le nom est conservé en plus de l'id de chaque son : ça permet de retrouver un son par
-        /// nom si le fichier est importé sur un autre serveur WaseBoard (catalogue différent, donc
-        /// ids différents) qui possède malgré tout un son de même nom.</summary>
+        /// <summary>Format du fichier d'ExportCategory/ImportCategoryAsync. Le nom est conservé en
+        /// plus de l'id, pour retrouver un son par nom si importé sur un autre serveur.</summary>
         private class CategoryExport
         {
             public string Category { get; set; } = "";
@@ -1543,10 +1477,8 @@ namespace WaseBoard
             return string.IsNullOrEmpty(cleaned) ? "categorie" : cleaned;
         }
 
-        /// <summary>Crée une nouvelle catégorie personnelle à partir d'un fichier exporté par
-        /// ExportCategory_Click. Les sons sont retrouvés par id, puis par nom en repli (utile si le
-        /// fichier vient d'un autre serveur WaseBoard, donc d'un catalogue avec d'autres ids) ;
-        /// ceux introuvables sur CE serveur sont simplement ignorés et comptés dans le résumé.</summary>
+        /// <summary>Importe une catégorie exportée : sons retrouvés par id puis par nom en repli,
+        /// ceux introuvables sur ce serveur sont ignorés et comptés dans le résumé.</summary>
         private async Task ImportCategoryAsync()
         {
             var dialog = new OpenFileDialog
@@ -1601,11 +1533,9 @@ namespace WaseBoard
                 skipped > 0 ? ToastKind.Warning : ToastKind.Success);
         }
 
-        // Pas de bouton de création pour les catégories partagées : une existe automatiquement
-        // pour chaque serveur Discord dont l'utilisateur est membre (voir RefreshSharedCategoriesAsync).
-        // Pour la même raison, renommer/supprimer une catégorie partagée n'a pas de sens (son nom
-        // suit celui du serveur Discord, et elle disparaît d'elle-même si on n'en est plus membre) :
-        // ces deux actions ne concernent donc plus que les catégories personnelles.
+        // Catégories partagées : créées automatiquement par serveur Discord (voir
+        // RefreshSharedCategoriesAsync), non renommables/supprimables — rename/delete ci-dessous
+        // ne concernent que les catégories personnelles.
 
         private void RenameCategory_Click(object sender, RoutedEventArgs e)
         {
@@ -1631,10 +1561,8 @@ namespace WaseBoard
         // ---------- Lecture audio ----------
 
         /// <summary>
-        /// Joue un son dans le vocal Discord : envoie l'ordre au serveur, qui retrouve tout seul
-        /// le bon salon (via votre présence vocale) et enregistre l'activité pour tous. On sonde
-        /// immédiatement après l'envoi (sans attendre le prochain cycle programmé) pour que le
-        /// highlight apparaisse instantanément sur votre propre clic.
+        /// Joue un son dans le vocal Discord et sonde l'activité immédiatement après (highlight
+        /// instantané sur son propre clic, sans attendre le cycle de sondage régulier).
         /// </summary>
         private void Play(SoundItem item) => _ = PlayAndPollAsync(item);
 

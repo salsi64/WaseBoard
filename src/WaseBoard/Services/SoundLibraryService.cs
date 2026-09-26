@@ -12,13 +12,8 @@ using WaseBoard.Models;
 
 namespace WaseBoard.Services
 {
-    /// <summary>
-    /// Gère le catalogue de sons partagé, hébergé sur le serveur WaseBoard : récupération
-    /// de la liste, upload, suppression, déclenchement/arrêt de la lecture côté bot Discord,
-    /// activité partagée (highlight + avatars), et mise en cache locale des fichiers pour
-    /// l'aperçu. Gère aussi les préférences locales propres à chaque utilisateur : identité
-    /// Discord, favoris, catégories, ordre d'affichage, raccourcis, volumes et emojis par son.
-    /// </summary>
+    /// <summary>Client HTTP du serveur WaseBoard (catalogue, upload, lecture, activité partagée)
+    /// et gestion des préférences locales (favoris, catégories, ordre, raccourcis, volumes).</summary>
     public class SoundLibraryService
     {
         private readonly string _appDataFolder;
@@ -215,13 +210,8 @@ namespace WaseBoard.Services
             SaveSettings();
         }
 
-        /// <summary>
-        /// Ordre d'affichage des catégories personnelles, et des catégories partagées si leurs
-        /// GuildId sont passés en paramètre (sinon personnelles uniquement, ex: menu "Ajouter à une
-        /// catégorie" qui les liste dans deux groupes séparés). Auto-corrige et persiste
-        /// CategoryOrder : ajoute les clés inconnues (nouvelle catégorie, nouveau serveur Discord
-        /// rejoint) en fin de liste, retire les clés obsolètes (catégorie supprimée, serveur quitté).
-        /// </summary>
+        /// <summary>Ordre des catégories personnelles (+ partagées si des GuildId sont fournis).
+        /// Auto-corrige CategoryOrder : ajoute les clés inconnues, retire les obsolètes.</summary>
         public List<string> GetCategoriesInOrder(IEnumerable<string>? sharedGuildIds = null)
         {
             var validKeys = new HashSet<string>(Settings.Categories.Keys);

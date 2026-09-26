@@ -5,12 +5,9 @@ using System.Windows.Media.Imaging;
 namespace WaseBoard
 {
     /// <summary>
-    /// Charge et met en cache une image distante par URL, partagé par UriToBitmapImageConverter
-    /// (avatars/icônes Discord) et EmojiToImageSourceConverter (emojis couleur, voir ce fichier
-    /// pour le pourquoi). `BitmapCacheOption.OnDemand` : le téléchargement/décodage se fait en
-    /// arrière-plan sans bloquer le thread UI (contrairement à `OnLoad`, qui force EndInit() à
-    /// attendre la fin du téléchargement HTTP). Cache volontairement non borné : quelques
-    /// dizaines/centaines d'images par session, pas une source de fuite mémoire significative ici.
+    /// Charge et met en cache une image distante par URL (avatars/icônes Discord, emojis).
+    /// `OnDemand` charge en arrière-plan sans bloquer l'UI (contrairement à `OnLoad`). Cache non
+    /// borné, volontairement (peu d'images par session).
     /// </summary>
     internal static class RemoteImageCache
     {
