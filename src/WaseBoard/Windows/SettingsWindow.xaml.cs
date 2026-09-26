@@ -204,7 +204,7 @@ namespace WaseBoard.Windows
         private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
             _settings.ServerUrl = string.IsNullOrWhiteSpace(ServerUrlBox.Text)
-                ? "http://VOTRE_IP:5005" : ServerUrlBox.Text.Trim();
+                ? _settings.ServerUrl : ServerUrlBox.Text.Trim();
             _settings.ServerToken = ServerTokenBox.Text;
             _settings.LocalPlaybackVolume = (float)LocalVolumeSlider.Value;
             _settings.BackgroundColorHex = _selectedBgColorHex;

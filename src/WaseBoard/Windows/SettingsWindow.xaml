@@ -26,7 +26,8 @@
                     <TextBlock Text="Le catalogue de sons et le bot Discord sont hébergés sur ce serveur, partagé entre tous les utilisateurs." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
 
                     <TextBlock Text="Adresse du serveur" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                    <TextBox x:Name="ServerUrlBox" Height="28" Margin="0,0,0,10"/>
+                    <TextBox x:Name="ServerUrlBox" Height="28" Margin="0,0,0,10"
+                             ToolTip="Ex: http://mon-serveur.exemple:5005 — voir server/README.md pour héberger le vôtre"/>
 
                     <TextBlock Text="Jeton d'accès" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                     <TextBox x:Name="ServerTokenBox" Height="28" Margin="0,0,0,10"/>

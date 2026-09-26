@@ -4,8 +4,10 @@ namespace WaseBoard.Models
 {
     public class AppSettings
     {
-        /// <summary>Adresse du serveur WaseBoard (catalogue de sons + bot Discord).</summary>
-        public string ServerUrl { get; set; } = "http://VOTRE_IP:5005";
+        /// <summary>Adresse du serveur WaseBoard (catalogue de sons + bot Discord). Vide par défaut :
+        /// chaque installation cible son propre serveur (voir server/README.md pour l'héberger),
+        /// aucune adresse par défaut n'est fournie avec l'application.</summary>
+        public string ServerUrl { get; set; } = "";
 
         /// <summary>Jeton d'accès partagé avec le serveur (doit correspondre à shared_secret côté serveur).</summary>
         public string? ServerToken { get; set; }

@@ -453,13 +453,14 @@ namespace WaseBoard
             RegisterAllHotkeys();
             RefreshSections();
 
-            // L'adresse du serveur n'est plus affichée en clair sur la page principale (visible
-            // au survol via l'infobulle, pour le débogage) : seul l'état connecté/non est indiqué.
+            // Ni le texte ni l'infobulle n'affichent l'adresse du serveur (IP/domaine) : seul
+            // l'état connecté/non est indiqué, y compris au survol — pour ne pas exposer
+            // l'adresse de qui héberge son propre serveur (visible par-dessus l'épaule, capture
+            // d'écran...). Le détail d'erreur reste affiché en cas de souci de connexion (utile
+            // pour diagnostiquer), sans jamais y concaténer l'adresse elle-même.
             var connected = items.Count > 0 || string.IsNullOrEmpty(_library.LastErrorDetail);
             ServerStatusText.Text = connected ? $"Connecté — {items.Count} son(s)" : "Serveur injoignable";
-            ServerStatusText.ToolTip = connected
-                ? _library.Settings.ServerUrl
-                : $"{_library.Settings.ServerUrl}\n{_library.LastErrorDetail}";
+            ServerStatusText.ToolTip = connected ? null : _library.LastErrorDetail;
             SetStatusDot(connected ? Color.FromRgb(0x4C, 0xAF, 0x50) : Color.FromRgb(0xE8, 0x11, 0x23), pulsing: false);
 
             _ = _library.PrefetchAllAsync(items);

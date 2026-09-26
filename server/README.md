@@ -2,14 +2,15 @@
 
 Serveur central : héberge le catalogue de sons partagé (upload/liste/suppression) et le bot
 Discord qui les joue dans le salon vocal. Prévu pour tourner en continu sur une machine
-dédiée (ici : `VOTRE_IP`, Linux Mint), accessible par des clients WaseBoard qui ne sont
-**pas** sur le même réseau local.
+dédiée (Linux — testé sur Linux Mint/Ubuntu), accessible par des clients WaseBoard qui ne sont
+**pas** sur le même réseau local. Chacun héberge sa propre instance : il n'y a pas de serveur
+central partagé fourni avec le projet — voir ce guide pour mettre en place le vôtre.
 
 ## Architecture en un coup d'œil
 
 ```
 [PC utilisateur A]  ──┐
-[PC utilisateur B]  ──┼── HTTP (port 5005) ──►  [Serveur VOTRE_IP]  ──► Discord (voix)
+[PC utilisateur B]  ──┼── HTTP (port 5005) ──►  [Votre serveur]  ──► Discord (voix)
 [PC utilisateur C]  ──┘                          - catalogue de sons
                                                   - fichiers audio
                                                   - bot Discord (multi-serveurs)
@@ -98,8 +99,8 @@ machine. Deux niveaux à vérifier :
    ```
 2. **Box/routeur internet** (si le serveur est derrière une box) : redirection de port
    (port forwarding) du port 5005 TCP vers l'IP locale de cette machine sur votre réseau.
-   Si `VOTRE_IP` est déjà l'IP publique directe du serveur (hébergement dédié/VPS), cette
-   étape ne s'applique pas.
+   Si votre machine a déjà une IP publique directe (hébergement dédié/VPS), cette étape ne
+   s'applique pas.
 
 Le trafic vocal Discord lui-même (UDP) ne nécessite **aucune ouverture de port entrant** :
 c'est le bot qui se connecte *vers* Discord, jamais l'inverse.
@@ -144,7 +145,8 @@ sudo journalctl -u waseboard -f   # pour suivre les logs
 
 ## 6. Utilisation
 
-1. Chaque utilisateur configure l'adresse (`http://VOTRE_IP:5005`), le `shared_secret` et
+1. Chaque utilisateur configure l'adresse de VOTRE serveur (ex: `http://mon-serveur.exemple:5005`
+   ou `http://VOTRE_IP:5005`), le `shared_secret` et
    son ID Discord dans les Paramètres de son WaseBoard (voir "Identité Discord" dans le README
    principal). Rien d'autre à choisir : le serveur cible (guild) est déduit automatiquement à
    partir du salon vocal où cet utilisateur se trouve — aucun ID de serveur à renseigner
