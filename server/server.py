@@ -71,7 +71,14 @@ def load_catalog() -> list[dict]:
         return json.load(f)
 
 
-def record_play_stat(sound_id: str, user_id: str, username: Optional[str], avatar_url: Optional[str]) -> None:
+def record_play_stat(
+    sound_id: str,
+    user_id: str,
+    username: Optional[str],
+    avatar_url: Optional[str],
+    guild_id: Optional[int],
+    guild_name: Optional[str],
+) -> None:
     """Ajoute un evenement de lecture au journal de statistiques (une ligne JSON par lecture),
     uniquement pour les utilisateurs ayant renseigne leur ID Discord."""
     entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
@@ -83,6 +90,8 @@ def record_play_stat(sound_id: str, user_id: str, username: Optional[str], avata
         "sound_id": sound_id,
         "sound_name": entry["name"] if entry else None,
         "emoji": entry.get("emoji") if entry else None,
+        "guild_id": str(guild_id) if guild_id is not None else None,
+        "guild_name": guild_name,
     }
     try:
         with open(STATS_PATH, "a", encoding="utf-8") as f:
@@ -760,7 +769,8 @@ class WaseBoardServer(commands.Bot):
             username = member.display_name if member else None
             avatar_url = str(member.display_avatar.url) if member else None
             self.record_activity(sound_id, user_id, username, avatar_url, guild_id)
-            record_play_stat(sound_id, user_id, username, avatar_url)
+            guild = self.get_guild(guild_id)
+            record_play_stat(sound_id, user_id, username, avatar_url, guild_id, guild.name if guild else None)
         except Exception:
             log.exception("Échec de l'enregistrement d'activité en arrière-plan")
 
