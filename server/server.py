@@ -29,6 +29,7 @@ CONFIG_PATH = BASE_DIR / "config.json"
 SOUNDS_DIR = BASE_DIR / "sounds_data"
 CATALOG_PATH = SOUNDS_DIR / "catalog.json"
 SHARED_CATEGORIES_PATH = BASE_DIR / "shared_categories.json"
+STATS_PATH = BASE_DIR / "stats.jsonl"
 
 if not CONFIG_PATH.exists():
     raise SystemExit(
@@ -68,6 +69,26 @@ def load_catalog() -> list[dict]:
         return []
     with open(CATALOG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def record_play_stat(sound_id: str, user_id: str, username: Optional[str], avatar_url: Optional[str]) -> None:
+    """Ajoute un evenement de lecture au journal de statistiques (une ligne JSON par lecture),
+    uniquement pour les utilisateurs ayant renseigne leur ID Discord."""
+    entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
+    record = {
+        "ts": time.time(),
+        "user_id": user_id,
+        "username": username,
+        "avatar_url": avatar_url,
+        "sound_id": sound_id,
+        "sound_name": entry["name"] if entry else None,
+        "emoji": entry.get("emoji") if entry else None,
+    }
+    try:
+        with open(STATS_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        log.exception("Échec de l'enregistrement des statistiques de lecture")
 
 
 def save_catalog(catalog: list[dict]) -> None:
@@ -739,6 +760,7 @@ class WaseBoardServer(commands.Bot):
             username = member.display_name if member else None
             avatar_url = str(member.display_avatar.url) if member else None
             self.record_activity(sound_id, user_id, username, avatar_url, guild_id)
+            record_play_stat(sound_id, user_id, username, avatar_url)
         except Exception:
             log.exception("Échec de l'enregistrement d'activité en arrière-plan")
 
