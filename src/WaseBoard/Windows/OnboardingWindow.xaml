@@ -71,7 +71,8 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBox x:Name="DiscordIdBox" Grid.Column="0" Height="28" Margin="0,0,8,0"/>
+                        <TextBox x:Name="DiscordIdBox" Grid.Column="0" Height="28" Margin="0,0,8,0"
+                                 TextChanged="DiscordIdBox_TextChanged"/>
                         <Button x:Name="VerifyButton" Grid.Column="1" Content="Vérifier" Padding="10,0" Click="VerifyButton_Click"
                                 Background="Transparent" Foreground="{DynamicResource TextBrush}"
                                 BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>

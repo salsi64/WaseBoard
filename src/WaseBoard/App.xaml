@@ -96,6 +96,18 @@
             </Setter>
         </Style>
 
+        <!-- Bouton de navigation latérale de la fenêtre Paramètres (état "actif" géré en code-behind,
+             même motif que ClassicThemeButton/ModernThemeButton). -->
+        <Style x:Key="SettingsNavButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+
         <!-- Cadre "carte" réutilisable pour regrouper des sections dans les fenêtres de configuration -->
         <Style x:Key="CardBorder" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>

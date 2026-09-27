@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -15,6 +16,7 @@ namespace WaseBoard.Windows
         private readonly SoundLibraryService _library;
         private string? _selectedBgColorHex;
         private string _selectedTheme = "Classic";
+        private string? _latestReleaseUrl;
 
         public SettingsWindow(AppSettings settings, SoundLibraryService library)
         {
@@ -39,6 +41,41 @@ namespace WaseBoard.Windows
             FollowSystemThemeCheckBox.IsChecked = _settings.FollowSystemTheme;
             FollowSystemAccentCheckBox.IsChecked = _settings.FollowSystemAccent;
             UpdateManualColorSectionEnabled();
+
+            var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            CurrentVersionText.Text = $"Version actuelle : {currentVersion?.ToString(3) ?? "?"}";
+
+            SelectPage("Server");
+        }
+
+        // ---------- Navigation latérale ----------
+
+        private void NavButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { Tag: string key }) SelectPage(key);
+        }
+
+        /// <summary>Affiche une seule page à la fois et met en valeur le bouton de nav correspondant
+        /// — même motif que UpdateThemeButtons (Background accent/transparent géré en code-behind).</summary>
+        private void SelectPage(string key)
+        {
+            var pages = new (string Key, StackPanel Page, Button Nav)[]
+            {
+                ("Server", PageServer, NavServerButton),
+                ("Discord", PageDiscord, NavDiscordButton),
+                ("Appearance", PageAppearance, NavAppearanceButton),
+                ("Volume", PageVolume, NavVolumeButton),
+                ("Updates", PageUpdates, NavUpdatesButton),
+            };
+
+            var accent = (Brush)FindResource("AccentBrush");
+            foreach (var (pageKey, page, nav) in pages)
+            {
+                var isSelected = pageKey == key;
+                page.Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed;
+                nav.Background = isSelected ? accent : Brushes.Transparent;
+                nav.Foreground = isSelected ? Brushes.White : (Brush)FindResource("TextBrush");
+            }
         }
 
         private void FollowSystemTheme_Changed(object sender, RoutedEventArgs e) => UpdateManualColorSectionEnabled();
@@ -207,6 +244,40 @@ namespace WaseBoard.Windows
             {
                 VerifyAvatarBorder.Visibility = Visibility.Collapsed;
             }
+        }
+
+        private async void CheckUpdateButton_Click(object sender, RoutedEventArgs e)
+        {
+            var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version ?? new System.Version(0, 0, 0);
+
+            CheckUpdateButton.IsEnabled = false;
+            OpenReleaseButton.Visibility = Visibility.Collapsed;
+            UpdateResultText.Text = "Recherche en cours...";
+
+            var result = await UpdateCheckService.CheckForUpdateAsync(currentVersion);
+
+            CheckUpdateButton.IsEnabled = true;
+
+            if (!string.IsNullOrEmpty(result.Error))
+            {
+                UpdateResultText.Text = $"❌ Recherche impossible : {result.Error}";
+            }
+            else if (result.Available)
+            {
+                UpdateResultText.Text = $"🎉 Une nouvelle version est disponible : v{result.LatestVersion}.";
+                _latestReleaseUrl = result.ReleaseUrl;
+                OpenReleaseButton.Visibility = string.IsNullOrEmpty(_latestReleaseUrl) ? Visibility.Collapsed : Visibility.Visible;
+            }
+            else
+            {
+                UpdateResultText.Text = "✅ Vous avez déjà la dernière version.";
+            }
+        }
+
+        private void OpenReleaseButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_latestReleaseUrl)) return;
+            Process.Start(new ProcessStartInfo(_latestReleaseUrl) { UseShellExecute = true });
         }
 
         private void SaveButton_Click(object sender, RoutedEventArgs e)

@@ -22,12 +22,20 @@ namespace WaseBoard.Windows
         private int _currentStep;
         private string? _verifiedDiscordId;
 
-        public OnboardingWindow(AppSettings settings, SoundLibraryService library)
+        private const int DiscordStepIndex = 2;
+
+        /// <summary>
+        /// startAtDiscordStep : vrai quand l'assistant a déjà été vu (Bienvenue/Serveur déjà
+        /// remplis lors d'un lancement précédent) mais que l'ID Discord, désormais obligatoire,
+        /// manque encore — évite de refaire revoir les deux premières étapes à chaque lancement.
+        /// </summary>
+        public OnboardingWindow(AppSettings settings, SoundLibraryService library, bool startAtDiscordStep = false)
         {
             InitializeComponent();
             _settings = settings;
             _library = library;
             _steps = new[] { StepWelcome, StepServer, StepDiscord };
+            _currentStep = startAtDiscordStep ? DiscordStepIndex : 0;
 
             ServerUrlBox.Text = _settings.ServerUrl;
             ServerTokenBox.Text = _settings.ServerToken;
@@ -44,6 +52,23 @@ namespace WaseBoard.Windows
             BackButton.Visibility = _currentStep > 0 ? Visibility.Visible : Visibility.Collapsed;
             NextButton.Content = _currentStep == _steps.Length - 1 ? "Terminer" : "Suivant";
             StepIndicatorText.Text = $"Étape {_currentStep + 1} sur {_steps.Length}";
+
+            // L'ID Discord est obligatoire : impossible de "Passer" une fois sur cette étape, et
+            // "Terminer" reste désactivé tant qu'aucun ID numérique n'est saisi.
+            var onDiscordStep = _currentStep == DiscordStepIndex;
+            SkipButton.Visibility = onDiscordStep ? Visibility.Collapsed : Visibility.Visible;
+            if (onDiscordStep) UpdateDiscordNextEnabled();
+            else NextButton.IsEnabled = true;
+        }
+
+        private void UpdateDiscordNextEnabled()
+        {
+            NextButton.IsEnabled = DiscordIdBox.Text.Any(char.IsDigit);
+        }
+
+        private void DiscordIdBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_currentStep == DiscordStepIndex) UpdateDiscordNextEnabled();
         }
 
         private void Back_Click(object sender, RoutedEventArgs e)

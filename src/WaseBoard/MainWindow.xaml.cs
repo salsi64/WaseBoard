@@ -149,12 +149,16 @@ namespace WaseBoard
             SidebarVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
             UpdateMainVolumeLabel();
 
-            if (!_library.Settings.HasSeenOnboarding)
+            // L'ID Discord est désormais obligatoire (à partir de cette version) : tant qu'il est
+            // vide, l'assistant se rouvre à CHAQUE lancement, pas seulement au premier — mais
+            // directement sur l'étape Discord si les étapes Bienvenue/Serveur ont déjà été vues.
+            var needsFirstRun = !_library.Settings.HasSeenOnboarding;
+            var needsDiscordId = string.IsNullOrWhiteSpace(_library.Settings.DiscordUserId);
+            if (needsFirstRun || needsDiscordId)
             {
-                var onboarding = new OnboardingWindow(_library.Settings, _library) { Owner = this };
+                var onboarding = new OnboardingWindow(_library.Settings, _library,
+                    startAtDiscordStep: !needsFirstRun) { Owner = this };
                 onboarding.ShowDialog();
-                // Marqué vu qu'importe le résultat (Terminer ou Passer) : sinon, tant que le jeton/l'ID
-                // restent vides, l'assistant se rouvrirait à chaque lancement au lieu d'une seule fois.
                 _library.Settings.HasSeenOnboarding = true;
                 _library.SaveSettings();
             }
@@ -185,6 +189,18 @@ namespace WaseBoard
             _themeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
             _themeTimer.Tick += (_, _) => ApplyColorSchemeIfSystemChanged();
             _themeTimer.Start();
+
+            _ = CheckForUpdateOnStartupAsync();
+        }
+
+        /// <summary>Vérification passive, non bloquante : affiche un toast si une nouvelle version
+        /// est disponible. Le bouton manuel équivalent est dans Paramètres > Mises à jour.</summary>
+        private async Task CheckForUpdateOnStartupAsync()
+        {
+            var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0);
+            var result = await UpdateCheckService.CheckForUpdateAsync(currentVersion);
+            if (result.Available)
+                ToastService.Show($"🎉 Une nouvelle version de WaseBoard est disponible (v{result.LatestVersion}) — voir Paramètres.", ToastKind.Info);
         }
 
         /// <summary>Applique la couleur de fond personnalisée (si définie) à toute l'application, immédiatement.</summary>

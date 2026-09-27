@@ -4,7 +4,7 @@
 ;   dotnet publish src/WaseBoard/WaseBoard.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 
 #define MyAppName "WaseBoard"
-#define MyAppVersion "2.4.2"
+#define MyAppVersion "2.5.0"
 ; ↑ Pensez à incrémenter ce numéro à chaque nouvelle version distribuée à vos utilisateurs
 ; (pas obligatoire pour que la mise à jour fonctionne — c'est l'AppId ci-dessous qui compte —
 ; mais ça permet de distinguer les versions dans le nom du fichier et dans Windows).
@@ -23,7 +23,7 @@ OutputDir=Output
 OutputBaseFilename=WaseBoard-Setup-{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
-ArchitecturesInstallIn64BitMode=x64
+ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 WizardStyle=modern
 ; --- Mise à jour propre : si WaseBoard est déjà installé (même AppId), l'installeur le
