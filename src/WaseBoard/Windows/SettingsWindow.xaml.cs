@@ -18,11 +18,19 @@ namespace WaseBoard.Windows
         private string _selectedTheme = "Classic";
         private string? _latestReleaseUrl;
 
+        // Les boutons "Tester"/"Vérifier"/"Rechercher une mise à jour" lancent un appel réseau
+        // (async void) puis touchent l'UI une fois la réponse reçue ; si l'utilisateur ferme cette
+        // fenêtre pendant l'attente (ex: réponse lente, ou serveur injoignable), la continuation
+        // reprend sur une fenêtre déjà fermée — AlertDialog.Show(this, ...) plante alors
+        // ("Owner sur une fenêtre fermée"). Ce drapeau permet d'abandonner proprement.
+        private bool _isClosed;
+
         public SettingsWindow(AppSettings settings, SoundLibraryService library)
         {
             InitializeComponent();
             _settings = settings;
             _library = library;
+            Closed += (_, _) => _isClosed = true;
 
             ServerUrlBox.Text = _settings.ServerUrl;
             ServerTokenBox.Text = _settings.ServerToken;
@@ -164,6 +172,7 @@ namespace WaseBoard.Windows
 
             TestConnectionButton.IsEnabled = false;
             var (result, channel) = await _library.GetServerStatusAsync();
+            if (_isClosed) return;
             TestConnectionButton.IsEnabled = true;
 
             var message = result switch
@@ -208,6 +217,7 @@ namespace WaseBoard.Windows
             VerifyResultBorder.Visibility = Visibility.Collapsed;
 
             var (found, username, avatarUrl, guildName, error) = await _library.VerifyUserIdAsync(digitsOnly);
+            if (_isClosed) return;
 
             VerifyUserIdButton.IsEnabled = true;
             _settings.ServerUrl = previousUrl;
@@ -255,6 +265,7 @@ namespace WaseBoard.Windows
             UpdateResultText.Text = "Recherche en cours...";
 
             var result = await UpdateCheckService.CheckForUpdateAsync(currentVersion);
+            if (_isClosed) return;
 
             CheckUpdateButton.IsEnabled = true;
 

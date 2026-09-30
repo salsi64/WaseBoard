@@ -92,6 +92,9 @@ namespace WaseBoard
         {
             InitializeComponent();
             Title = AppIdentity.Name;
+            ChromeTitleBar.TitleText = AppIdentity.Name;
+            SidebarHeaderTitle.Text = "🎛️ " + AppIdentity.Name;
+            TitleText.Text = "🎛️ " + AppIdentity.Name;
 
             // La lecture LOCALE (aperçu uniquement) pilote IsPreviewing, distinct de IsPlaying
             // qui reflète l'activité PARTAGÉE (sondée depuis le serveur, voir PollActivityAsync).

@@ -324,7 +324,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <chrome:TitleBarControl Grid.Row="0" TitleText="WaseBoard" ShowMinMax="True"/>
+        <chrome:TitleBarControl x:Name="ChromeTitleBar" Grid.Row="0" TitleText="WaseBoard" ShowMinMax="True"/>
 
         <!-- "Now playing" : qui joue quoi en ce moment, dérivé du même sondage d'activité que le
              highlight des boutons (aucun appel réseau supplémentaire). Barre fixe (hauteur stable),
@@ -411,7 +411,7 @@
                             Click="SidebarToggle_Click" ToolTip="Réduire/agrandir la barre latérale" Cursor="Hand"
                             Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
                     <StackPanel x:Name="SidebarHeaderText">
-                        <TextBlock Text="🎛️ WaseBoard" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
+                        <TextBlock x:Name="SidebarHeaderTitle" Text="🎛️ WaseBoard" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
                         <TextBlock Text="Ta base de sons, toujours avec toi." FontSize="10" Opacity="0.6" Foreground="{DynamicResource TextBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </DockPanel>
