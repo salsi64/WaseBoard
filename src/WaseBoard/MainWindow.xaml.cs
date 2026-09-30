@@ -319,7 +319,7 @@ namespace WaseBoard
                 return;
             }
 
-            var (connected, channel, guildName, channelMembers, error) = await _library.GetLiveVoiceStatusAsync();
+            var (connected, channel, _, guildName, channelMembers, error) = await _library.GetLiveVoiceStatusAsync();
             var who = _library.Settings.DiscordUsername ?? "vous";
 
             if (error is not null)
@@ -781,13 +781,20 @@ namespace WaseBoard
             }
             else
             {
-                var guildPicker = new GuildPickerWindow(_sharedCategories, _library.Settings.LastUploadGuildId) { Owner = this };
+                // Présélectionne le serveur où l'utilisateur est actuellement connecté en vocal
+                // (le cas le plus probable), les autres restant choisissables dans la liste.
+                var (_, _, currentGuildId, _, _, _) = await _library.GetLiveVoiceStatusAsync();
+                var guildPicker = new GuildPickerWindow(_sharedCategories, currentGuildId) { Owner = this };
                 if (guildPicker.ShowDialog() != true || guildPicker.ResultGuildId is null) return;
                 guildId = guildPicker.ResultGuildId;
             }
 
-            _library.Settings.LastUploadGuildId = guildId;
-            _library.SaveSettings();
+            // Détection de doublons scopée à la guilde ciblée : un son identique existant dans une
+            // autre guilde (que l'utilisateur ne partage pas forcément avec tout le monde) ne doit
+            // pas être signalé comme doublon ici.
+            var targetGuildSharedIds = new HashSet<string>(
+                _sharedCategories.FirstOrDefault(s => s.GuildId == guildId)?.SoundIds ?? new List<string>());
+            var soundsInTargetGuild = Sounds.Where(s => s.GuildId == guildId || targetGuildSharedIds.Contains(s.Id)).ToList();
 
             var rejected = new List<string>();
 
@@ -817,9 +824,9 @@ namespace WaseBoard
                 // Détection de doublons : hash du fichier final contre le catalogue existant ; à
                 // défaut, un même nom reste un signal plus faible, remonté différemment.
                 var contentHash = SoundLibraryService.ComputeFileHash(trimWindow.ResultFilePath);
-                var hashMatch = Sounds.FirstOrDefault(s => s.ContentHash is not null && s.ContentHash == contentHash);
+                var hashMatch = soundsInTargetGuild.FirstOrDefault(s => s.ContentHash is not null && s.ContentHash == contentHash);
                 var nameMatch = hashMatch is null
-                    ? Sounds.FirstOrDefault(s => string.Equals(s.Name, trimWindow.ResultName, StringComparison.OrdinalIgnoreCase))
+                    ? soundsInTargetGuild.FirstOrDefault(s => string.Equals(s.Name, trimWindow.ResultName, StringComparison.OrdinalIgnoreCase))
                     : null;
 
                 if (hashMatch is not null)

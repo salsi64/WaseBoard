@@ -6,7 +6,8 @@ using WaseBoard.Services;
 namespace WaseBoard.Windows
 {
     /// <summary>Choix du serveur Discord cible d'un upload, quand l'utilisateur appartient à
-    /// plusieurs serveurs — inutile (et masqué par l'appelant) s'il n'en a qu'un.</summary>
+    /// plusieurs serveurs — inutile (et masqué par l'appelant) s'il n'en a qu'un. Présélectionne
+    /// le serveur où l'utilisateur est actuellement connecté en vocal, si connu.</summary>
     public partial class GuildPickerWindow : Window
     {
         /// <summary>Guilde choisie, ou null si annulé.</summary>
@@ -15,21 +16,21 @@ namespace WaseBoard.Windows
         public GuildPickerWindow(IEnumerable<SoundLibraryService.SharedCategoryInfo> guilds, string? preselectGuildId)
         {
             InitializeComponent();
-            GuildList.ItemsSource = guilds.ToList();
+            GuildCombo.ItemsSource = guilds.ToList();
 
-            var toSelect = GuildList.Items.Cast<SoundLibraryService.SharedCategoryInfo>()
+            var toSelect = GuildCombo.Items.Cast<SoundLibraryService.SharedCategoryInfo>()
                 .FirstOrDefault(g => g.GuildId == preselectGuildId);
-            if (toSelect is not null) GuildList.SelectedItem = toSelect;
+            if (toSelect is not null) GuildCombo.SelectedItem = toSelect;
         }
 
-        private void GuildList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        private void GuildCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            OkButton.IsEnabled = GuildList.SelectedItem is not null;
+            OkButton.IsEnabled = GuildCombo.SelectedItem is not null;
         }
 
         private void Ok_Click(object sender, RoutedEventArgs e)
         {
-            if (GuildList.SelectedItem is SoundLibraryService.SharedCategoryInfo selected)
+            if (GuildCombo.SelectedItem is SoundLibraryService.SharedCategoryInfo selected)
             {
                 ResultGuildId = selected.GuildId;
                 DialogResult = true;

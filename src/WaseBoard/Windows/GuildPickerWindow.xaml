@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:chrome="clr-namespace:WaseBoard.Windows.Chrome"
         Title="Choisir un serveur Discord"
-        Height="360" Width="360"
+        Height="220" Width="360"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource BgBrush}"
         chrome:WindowChromeBehavior.Enable="True"
@@ -19,24 +19,22 @@
                 <TextBlock Text="Ajouter ce son au catalogue de quel serveur ?" FontWeight="Bold"
                            Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
 
-                <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" Margin="0,0,0,14">
-                    <ListBox x:Name="GuildList" BorderThickness="0" Background="Transparent"
-                             SelectionMode="Single" SelectionChanged="GuildList_SelectionChanged">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Margin="2,4">
-                                    <Ellipse Width="24" Height="24" Margin="0,0,8,0">
-                                        <Ellipse.Fill>
-                                            <ImageBrush ImageSource="{Binding IconUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
-                                        </Ellipse.Fill>
-                                    </Ellipse>
-                                    <TextBlock Text="{Binding GuildName}" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource TextBrush}"/>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </ScrollViewer>
+                <ComboBox x:Name="GuildCombo" Height="36" Margin="0,0,0,16"
+                          SelectionChanged="GuildCombo_SelectionChanged">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="2,2">
+                                <Ellipse Width="20" Height="20" Margin="0,0,8,0">
+                                    <Ellipse.Fill>
+                                        <ImageBrush ImageSource="{Binding IconUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                                <TextBlock Text="{Binding GuildName}" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextBrush}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="CancelButton" Content="Annuler" Padding="10,6" Margin="0,0,8,0" Click="Cancel_Click"

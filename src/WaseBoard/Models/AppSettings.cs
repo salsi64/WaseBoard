@@ -45,9 +45,6 @@ namespace WaseBoard.Models
         /// glisser-déposer manuel), "NameAsc" ou "NameDesc".</summary>
         public string AllSoundsSortMode { get; set; } = "Custom";
 
-        /// <summary>Dernière guilde Discord choisie lors d'un upload (préremplit le sélecteur quand
-        /// l'utilisateur appartient à plusieurs guildes). Null si jamais uploadé ou une seule guilde.</summary>
-        public string? LastUploadGuildId { get; set; }
 
         /// <summary>Couleur de fond personnalisée de l'application (hex, ex: "#1E1E2E"). Null = thème par défaut.</summary>
         public string? BackgroundColorHex { get; set; }

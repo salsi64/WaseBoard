@@ -579,9 +579,9 @@ namespace WaseBoard.Services
         /// "connecté" que si l'utilisateur est RÉELLEMENT présent dans ce salon vocal en ce moment —
         /// utilisé pour l'indicateur de la barre latérale, qui ne doit jamais mentir.
         /// </summary>
-        public async Task<(bool Connected, string? Channel, string? GuildName, List<UserActivity> ChannelMembers, string? Error)> GetLiveVoiceStatusAsync()
+        public async Task<(bool Connected, string? Channel, string? GuildId, string? GuildName, List<UserActivity> ChannelMembers, string? Error)> GetLiveVoiceStatusAsync()
         {
-            if (string.IsNullOrEmpty(Settings.DiscordUserId)) return (false, null, null, new(), null);
+            if (string.IsNullOrEmpty(Settings.DiscordUserId)) return (false, null, null, null, new(), null);
 
             try
             {
@@ -590,7 +590,7 @@ namespace WaseBoard.Services
                 var raw = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
-                    return (false, null, null, new(), $"Le serveur a répondu {(int)response.StatusCode}.");
+                    return (false, null, null, null, new(), $"Le serveur a répondu {(int)response.StatusCode}.");
 
                 JsonDocument doc;
                 try { doc = JsonDocument.Parse(raw); }
@@ -599,13 +599,14 @@ namespace WaseBoard.Services
                     // Réponse qui n'est pas du JSON (ex: page d'erreur 404 générique d'aiohttp) :
                     // presque toujours le signe que le serveur tourne encore avec une ancienne
                     // version de server.py, sans cette route/ce champ.
-                    return (false, null, null, new(),
+                    return (false, null, null, null, new(),
                         "Réponse inattendue du serveur — server.py a-t-il bien été redéployé avec la dernière version ?");
                 }
                 using (doc)
                 {
                     var connected = doc.RootElement.TryGetProperty("connected", out var c) && c.GetBoolean();
                     string? channel = doc.RootElement.TryGetProperty("channel", out var ch) && ch.ValueKind == JsonValueKind.String ? ch.GetString() : null;
+                    string? guildId = doc.RootElement.TryGetProperty("guild_id", out var gi) && gi.ValueKind == JsonValueKind.String ? gi.GetString() : null;
                     string? guildName = doc.RootElement.TryGetProperty("guild_name", out var g) && g.ValueKind == JsonValueKind.String ? g.GetString() : null;
 
                     var members = new List<UserActivity>();
@@ -618,12 +619,12 @@ namespace WaseBoard.Services
                                 AvatarUrl = m.GetProperty("avatar_url").GetString() ?? ""
                             });
 
-                    return (connected, channel, guildName, members, null);
+                    return (connected, channel, guildId, guildName, members, null);
                 }
             }
             catch (Exception ex)
             {
-                return (false, null, null, new(), ex.Message);
+                return (false, null, null, null, new(), ex.Message);
             }
         }
 
