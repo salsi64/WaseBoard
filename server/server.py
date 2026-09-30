@@ -831,7 +831,10 @@ class WaseBoardServer(commands.Bot):
             return web.json_response({"error": f"son introuvable : {sound_id}"}, status=404)
 
         if not self.sound_visible_to(entry, {str(guild_id)}):
-            return web.json_response({"error": f"son introuvable : {sound_id}"}, status=403)
+            return web.json_response(
+                {"error": "Ce son n'appartient pas à ce serveur Discord et n'y a pas été partagé."},
+                status=403,
+            )
 
         file_path = SOUNDS_DIR / f"{sound_id}{entry['extension']}"
         if not file_path.exists():

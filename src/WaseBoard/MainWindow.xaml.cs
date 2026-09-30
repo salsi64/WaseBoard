@@ -1598,7 +1598,13 @@ namespace WaseBoard
 
         private async Task PlayAndPollAsync(SoundItem item)
         {
-            await _library.PlayOnServerAsync(item.Id, item.Volume);
+            var ok = await _library.PlayOnServerAsync(item.Id, item.Volume);
+            if (!ok)
+            {
+                ToastService.Show(
+                    $"Impossible de jouer « {item.Name} »." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    ToastKind.Error);
+            }
             await PollActivityAsync();
         }
 
