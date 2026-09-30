@@ -91,6 +91,7 @@ namespace WaseBoard
         public MainWindow()
         {
             InitializeComponent();
+            Title = AppIdentity.Name;
 
             // La lecture LOCALE (aperçu uniquement) pilote IsPreviewing, distinct de IsPlaying
             // qui reflète l'activité PARTAGÉE (sondée depuis le serveur, voir PollActivityAsync).

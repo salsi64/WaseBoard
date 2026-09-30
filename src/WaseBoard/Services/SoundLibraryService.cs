@@ -56,7 +56,7 @@ namespace WaseBoard.Services
         {
             _appDataFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "WaseBoard");
+                AppIdentity.DataFolderName);
             _cacheFolder = Path.Combine(_appDataFolder, "Cache");
             _settingsFilePath = Path.Combine(_appDataFolder, "settings.json");
 

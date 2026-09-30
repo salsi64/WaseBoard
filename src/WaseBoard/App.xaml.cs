@@ -17,7 +17,7 @@ namespace WaseBoard
             // Une seule instance à la fois (deux processus écrasent silencieusement les réglages
             // de l'autre) : on bascule vers la fenêtre déjà ouverte plutôt que d'en lancer une
             // seconde. Doit être vérifié AVANT base.OnStartup(e), qui crée/affiche MainWindow.
-            _singleInstanceMutex = new Mutex(true, "WaseBoard_SingleInstance_Mutex", out var createdNew);
+            _singleInstanceMutex = new Mutex(true, AppIdentity.MutexName, out var createdNew);
             if (!createdNew)
             {
                 BringExistingInstanceToFront();
@@ -42,7 +42,7 @@ namespace WaseBoard
         {
             try
             {
-                var hwnd = FindWindow(null, "WaseBoard");
+                var hwnd = FindWindow(null, AppIdentity.Name);
                 if (hwnd == IntPtr.Zero) return;
                 ShowWindow(hwnd, SW_RESTORE);
                 SetForegroundWindow(hwnd);

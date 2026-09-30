@@ -18,6 +18,16 @@
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <Configurations>Debug;Release;Dev</Configurations>
+  </PropertyGroup>
+
+  <!-- Configuration "Dev" : build de test pointée vers le serveur/bot Discord isolés
+       (feature/multi-tenant), avec sa propre identité (dossier AppData, mutex, titre, nom
+       d'exe) pour ne jamais lire/écrire les réglages de l'installation WaseBoard normale et
+       pouvoir tourner en même temps qu'elle (dotnet build -c Dev / dotnet run -c Dev). -->
+  <PropertyGroup Condition="'$(Configuration)'=='Dev'">
+    <DefineConstants>$(DefineConstants);WASEBOARD_DEV</DefineConstants>
+    <AssemblyName>WaseBoard-Dev</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
