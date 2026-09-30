@@ -41,9 +41,13 @@ namespace WaseBoard.Models
         /// <summary>Clés des sections repliées sur la page principale.</summary>
         public List<string> CollapsedSections { get; set; } = new();
 
-        /// <summary>Tri appliqué à la section "Tous les sons" : "Custom" (ordre d'affichage actuel,
+        /// <summary>Tri appliqué à chaque section de guilde : "Custom" (ordre d'affichage actuel,
         /// glisser-déposer manuel), "NameAsc" ou "NameDesc".</summary>
         public string AllSoundsSortMode { get; set; } = "Custom";
+
+        /// <summary>Dernière guilde Discord choisie lors d'un upload (préremplit le sélecteur quand
+        /// l'utilisateur appartient à plusieurs guildes). Null si jamais uploadé ou une seule guilde.</summary>
+        public string? LastUploadGuildId { get; set; }
 
         /// <summary>Couleur de fond personnalisée de l'application (hex, ex: "#1E1E2E"). Null = thème par défaut.</summary>
         public string? BackgroundColorHex { get; set; }

@@ -25,7 +25,6 @@ namespace WaseBoard
     public partial class MainWindow : Window
     {
         private const string FavoritesKey = "__favorites__";
-        private const string AllSoundsKey = "__all_sounds__";
 
         private readonly SoundLibraryService _library = new();
 
@@ -82,7 +81,7 @@ namespace WaseBoard
             /// <summary>Vrai pour les catégories personnelles et partagées (pas Favoris/Tous les sons) : affiche les flèches ↑/↓.</summary>
             public bool IsReorderable { get; set; }
 
-            /// <summary>Vrai uniquement pour "Tous les sons" : affiche le sélecteur de tri dans l'en-tête.</summary>
+            /// <summary>Vrai pour les sections de guilde : affiche le sélecteur de tri dans l'en-tête.</summary>
             public bool IsAllSounds { get; set; }
         }
 
@@ -608,7 +607,7 @@ namespace WaseBoard
             RefreshSections();
         }
 
-        /// <summary>Reconstruit les sections affichées (★ Favoris, catégories perso/partagées, Tous les sons), en appliquant la recherche en cours.</summary>
+        /// <summary>Reconstruit les sections affichées (★ Favoris, catégories personnelles, une par guilde Discord), en appliquant la recherche en cours.</summary>
         private void RefreshSections()
         {
             IEnumerable<SoundItem> Filtered(IEnumerable<SoundItem> src) =>
@@ -649,29 +648,24 @@ namespace WaseBoard
                 var shared = _sharedCategories.FirstOrDefault(s => s.GuildId == key);
                 if (shared is null) continue;
 
+                // Section native de la guilde : union des sons dont c'est la guilde d'origine
+                // ET de ceux partagés manuellement dans sa catégorie (shared_categories.json) —
+                // remplace l'ancienne vue "partagés uniquement", cohérent avec le filtrage serveur.
                 var idSet = new HashSet<string>(shared.SoundIds);
+                var guildSounds = Sounds.Where(s => s.GuildId == shared.GuildId || idSet.Contains(s.Id));
                 sections.Add(new SectionViewModel
                 {
                     Name = "🌐 " + shared.GuildName,
                     CategoryKey = shared.GuildId,
-                    Sounds = new ObservableCollection<SoundItem>(Filtered(Sounds.Where(s => idSet.Contains(s.Id)))),
+                    Sounds = new ObservableCollection<SoundItem>(SortAllSounds(Filtered(guildSounds))),
                     IsManageable = false, // catégorie automatique : pas de renommage/suppression manuel
                     IsShared = true,
                     IsReorderable = true,
+                    IsAllSounds = true, // affiche le sélecteur de tri dans l'en-tête
                     IconUrl = shared.IconUrl,
                     IsExpanded = !_library.Settings.CollapsedSections.Contains(shared.GuildId)
                 });
             }
-
-            sections.Add(new SectionViewModel
-            {
-                Name = "Tous les sons",
-                CategoryKey = AllSoundsKey,
-                Sounds = new ObservableCollection<SoundItem>(SortAllSounds(Filtered(Sounds))),
-                IsManageable = false,
-                IsAllSounds = true,
-                IsExpanded = true // toujours ouverte
-            });
 
             _currentSections = sections;
             SectionsItemsControl.ItemsSource = sections;
@@ -694,9 +688,9 @@ namespace WaseBoard
                 .ToList();
         }
 
-        /// <summary>Tri appliqué uniquement à "Tous les sons" (la seule section vouée à devenir
-        /// vraiment longue) : "Custom" garde l'ordre d'affichage actuel (glisser-déposer manuel,
-        /// celui de Sounds), les autres trient par nom. Choix mémorisé (Settings.AllSoundsSortMode).</summary>
+        /// <summary>Tri appliqué à chaque section de guilde (les seules vouées à devenir vraiment
+        /// longues) : "Custom" garde l'ordre d'affichage actuel (glisser-déposer manuel, celui de
+        /// Sounds), les autres trient par nom. Choix mémorisé (Settings.AllSoundsSortMode).</summary>
         private static IEnumerable<SoundItem> SortAllSounds(IEnumerable<SoundItem> sounds, string sortMode) => sortMode switch
         {
             "NameAsc" => sounds.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase),
@@ -769,6 +763,28 @@ namespace WaseBoard
 
         private async Task AddSoundFiles(IEnumerable<string> filePaths)
         {
+            string? guildId;
+            if (_sharedCategories.Count == 0)
+            {
+                ToastService.Show(
+                    "Impossible d'ajouter un son : vous ne semblez membre d'aucun serveur Discord où WaseBoard est installé.",
+                    ToastKind.Error);
+                return;
+            }
+            else if (_sharedCategories.Count == 1)
+            {
+                guildId = _sharedCategories[0].GuildId;
+            }
+            else
+            {
+                var guildPicker = new GuildPickerWindow(_sharedCategories, _library.Settings.LastUploadGuildId) { Owner = this };
+                if (guildPicker.ShowDialog() != true || guildPicker.ResultGuildId is null) return;
+                guildId = guildPicker.ResultGuildId;
+            }
+
+            _library.Settings.LastUploadGuildId = guildId;
+            _library.SaveSettings();
+
             var rejected = new List<string>();
 
             foreach (var file in filePaths)
@@ -815,7 +831,7 @@ namespace WaseBoard
                     if (!proceed) { CleanupTempFile(); continue; }
                 }
 
-                var uploaded = await _library.UploadSoundAsync(trimWindow.ResultFilePath, trimWindow.ResultName);
+                var uploaded = await _library.UploadSoundAsync(trimWindow.ResultFilePath, trimWindow.ResultName, guildId);
                 CleanupTempFile();
 
                 if (uploaded is not null)
@@ -991,7 +1007,10 @@ namespace WaseBoard
             // retrouvée en remontant l'arbre visuel jusqu'au conteneur de la section — un même
             // son étant potentiellement affiché dans plusieurs sections à la fois.
             var section = FindEnclosingSection(button);
-            if (section is not null && section.CategoryKey != AllSoundsKey && section.CategoryKey != FavoritesKey)
+            // Pas de "Retirer" pour un son dans sa guilde d'origine : ce n'est pas un ajout
+            // manuel à retirer (voir Supprimer, plus bas, pour l'effacer réellement).
+            var isNativeToGuildSection = section is not null && section.IsShared && item.GuildId == section.CategoryKey;
+            if (section is not null && !isNativeToGuildSection && section.CategoryKey != FavoritesKey)
             {
                 var label = section.IsShared
                     ? $"Retirer de « {StripSharedPrefix(section.Name)} » (partagée)"
@@ -1200,7 +1219,7 @@ namespace WaseBoard
 
             // Déjà membre ? Le survol a déjà tout réordonné (SoundButton_DragOver) ; reconstruire
             // casserait l'animation. Seul un nouveau classement nécessite RefreshSections().
-            var wasAlreadyMember = section.CategoryKey == AllSoundsKey || section.Sounds.Contains(draggedItem);
+            var wasAlreadyMember = section.Sounds.Contains(draggedItem);
 
             await ApplySectionMembership(section, draggedItem);
             _library.SaveSoundOrder(Sounds);
@@ -1221,7 +1240,7 @@ namespace WaseBoard
                 await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, true);
                 _sharedCategories = await _library.FetchSharedCategoriesAsync();
             }
-            else if (section.CategoryKey != AllSoundsKey)
+            else
             {
                 _library.AddSoundToCategory(section.CategoryKey, item);
             }
@@ -1346,15 +1365,6 @@ namespace WaseBoard
         private void Section_Collapsed(object sender, RoutedEventArgs e)
         {
             if (sender is not Expander expander) return;
-
-            // "Tous les sons" reste toujours ouverte (potentiellement très longue liste, pas
-            // d'intérêt à la replier) : on annule immédiatement le repli au lieu de le persister.
-            // "Favoris", elle, est repliable comme n'importe quelle autre catégorie.
-            if (expander.Tag is string key0 && key0 == AllSoundsKey)
-            {
-                expander.IsExpanded = true;
-                return;
-            }
 
             if (expander.Tag is string key && !_library.Settings.CollapsedSections.Contains(key))
             {

@@ -40,6 +40,9 @@ namespace WaseBoard.Models
         /// <summary>Emoji affiché à côté du nom (préférence locale, purement décorative).</summary>
         public string? Emoji { get; set; }
 
+        /// <summary>Guilde Discord d'origine (celle où ce son a été uploadé) — donnée serveur, pas une préférence locale.</summary>
+        public string? GuildId { get; set; }
+
         /// <summary>Raccourci clavier optionnel, ex: "Ctrl+Alt+1" (préférence locale).</summary>
         public string? Hotkey { get; set; }
 

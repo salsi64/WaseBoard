@@ -64,11 +64,21 @@ ACTIVITY_TTL_SECONDS = 30.0
 ONLINE_TTL_SECONDS = 12.0
 
 
+def migrate_catalog_entry(entry: dict) -> dict:
+    """Rétro-compatibilité : les sons uploadés avant l'isolation par guilde n'ont pas de
+    guild_id. On les rattache à la guilde configurée pour cette instance (config.json),
+    en mémoire uniquement — ne réécrit jamais catalog.json depuis un chemin de lecture."""
+    if not entry.get("guild_id") and GUILD_ID:
+        entry["guild_id"] = str(GUILD_ID)
+    return entry
+
+
 def load_catalog() -> list[dict]:
     if not CATALOG_PATH.exists():
         return []
     with open(CATALOG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+        catalog = json.load(f)
+    return [migrate_catalog_entry(e) for e in catalog]
 
 
 def record_play_stat(
@@ -354,6 +364,31 @@ class WaseBoardServer(commands.Bot):
                 found.append(guild)
         return found
 
+    async def resolve_visible_guild_ids(self, user_id: int) -> set[str]:
+        """Guildes (en str) dont cet utilisateur est membre, parmi celles où le bot est présent."""
+        guilds = await self.find_all_guilds_for_user(user_id)
+        return {str(g.id) for g in guilds}
+
+    @staticmethod
+    def catalog_visible_to(catalog: list[dict], visible_guild_ids: set[str]) -> list[dict]:
+        """Filtre un catalogue aux sons natifs des guildes de l'utilisateur, plus ceux
+        partagés dans ces guildes via shared_categories.json. Fail-closed : aucune guilde
+        résolue => liste vide plutôt que le catalogue complet (jamais de fuite cross-guild)."""
+        if not visible_guild_ids:
+            return []
+        shared = load_shared_categories()
+        shared_ids = {sid for gid in visible_guild_ids for sid in shared.get(gid, [])}
+        return [e for e in catalog if e.get("guild_id") in visible_guild_ids or e["id"] in shared_ids]
+
+    @staticmethod
+    def sound_visible_to(entry: dict, visible_guild_ids: set[str]) -> bool:
+        if not visible_guild_ids:
+            return False
+        if entry.get("guild_id") in visible_guild_ids:
+            return True
+        shared = load_shared_categories()
+        return any(entry["id"] in shared.get(gid, []) for gid in visible_guild_ids)
+
     async def find_current_voice_channel(self, user_id: int) -> Optional[tuple[int, discord.VoiceChannel]]:
         """Cherche, sur TOUS les serveurs Discord du bot (pas seulement ceux où il est déjà
         connecté en vocal), le salon vocal où cet utilisateur se trouve actuellement — pour le
@@ -459,7 +494,13 @@ class WaseBoardServer(commands.Bot):
     async def _handle_list_sounds(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
-        return web.json_response({"sounds": load_catalog()})
+
+        user_id = request.query.get("user_id")
+        if not user_id or not user_id.isdigit():
+            return web.json_response({"sounds": []})
+
+        visible = await self.resolve_visible_guild_ids(int(user_id))
+        return web.json_response({"sounds": self.catalog_visible_to(load_catalog(), visible)})
 
     async def _handle_get_file(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
@@ -468,6 +509,13 @@ class WaseBoardServer(commands.Bot):
         sound_id = request.match_info["id"]
         entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
         if entry is None:
+            return web.json_response({"error": "son introuvable"}, status=404)
+
+        user_id = request.query.get("user_id")
+        if not user_id or not user_id.isdigit():
+            return web.json_response({"error": "son introuvable"}, status=404)
+        visible = await self.resolve_visible_guild_ids(int(user_id))
+        if not self.sound_visible_to(entry, visible):
             return web.json_response({"error": "son introuvable"}, status=404)
 
         file_path = SOUNDS_DIR / f"{sound_id}{entry['extension']}"
@@ -484,9 +532,15 @@ class WaseBoardServer(commands.Bot):
             data = await request.post()
             name = str(data.get("name", "")).strip()
             file_field = data.get("file")
+            raw_guild_id = str(data.get("guild_id", "")).strip()
+            raw_user_id = str(data.get("user_id", "")).strip()
 
-            if not name or file_field is None:
-                return web.json_response({"error": "champs 'name' et 'file' requis"}, status=400)
+            if not name or file_field is None or not raw_guild_id or not raw_user_id.isdigit():
+                return web.json_response({"error": "champs 'name', 'file', 'guild_id' et 'user_id' requis"}, status=400)
+
+            guilds = await self.find_all_guilds_for_user(int(raw_user_id))
+            if not any(str(g.id) == raw_guild_id for g in guilds):
+                return web.json_response({"error": "vous n'êtes pas membre de ce serveur Discord"}, status=403)
 
             original_filename = getattr(file_field, "filename", "") or ""
             extension = Path(original_filename).suffix.lower()
@@ -506,7 +560,7 @@ class WaseBoardServer(commands.Bot):
                 out_file.write(file_bytes)
 
             catalog = load_catalog()
-            entry = {"id": sound_id, "name": name, "extension": extension, "hash": content_hash}
+            entry = {"id": sound_id, "name": name, "extension": extension, "hash": content_hash, "guild_id": raw_guild_id}
             catalog.append(entry)
             save_catalog(catalog)
 
@@ -533,6 +587,13 @@ class WaseBoardServer(commands.Bot):
         if entry is None:
             return web.json_response({"error": "son introuvable"}, status=404)
 
+        user_id = str(data.get("user_id", "")).strip()
+        if not user_id.isdigit():
+            return web.json_response({"error": "'user_id' requis"}, status=400)
+        visible = await self.resolve_visible_guild_ids(int(user_id))
+        if not self.sound_visible_to(entry, visible):
+            return web.json_response({"error": "son introuvable"}, status=404)
+
         if "name" not in data and "emoji" not in data:
             return web.json_response({"error": "'name' ou 'emoji' requis"}, status=400)
 
@@ -556,6 +617,13 @@ class WaseBoardServer(commands.Bot):
         catalog = load_catalog()
         entry = next((s for s in catalog if s["id"] == sound_id), None)
         if entry is None:
+            return web.json_response({"error": "son introuvable"}, status=404)
+
+        user_id = request.query.get("user_id")
+        if not user_id or not user_id.isdigit():
+            return web.json_response({"error": "'user_id' requis"}, status=400)
+        visible = await self.resolve_visible_guild_ids(int(user_id))
+        if not self.sound_visible_to(entry, visible):
             return web.json_response({"error": "son introuvable"}, status=404)
 
         file_path = SOUNDS_DIR / f"{sound_id}{entry['extension']}"
@@ -681,8 +749,13 @@ class WaseBoardServer(commands.Bot):
             return web.json_response({"error": "unauthorized"}, status=401)
 
         guild_id = request.query.get("guild_id")
-        if not guild_id:
-            return web.json_response({"error": "guild_id requis"}, status=400)
+        user_id = request.query.get("user_id")
+        if not guild_id or not user_id or not user_id.isdigit():
+            return web.json_response({"error": "guild_id et user_id requis"}, status=400)
+
+        guilds = await self.find_all_guilds_for_user(int(user_id))
+        if not any(str(g.id) == guild_id for g in guilds):
+            return web.json_response({"sound_ids": []}, status=403)
 
         shared = load_shared_categories()
         return web.json_response({"sound_ids": shared.get(guild_id, [])})
@@ -700,6 +773,20 @@ class WaseBoardServer(commands.Bot):
         guild_id = str(data.get("guild_id", ""))
         sound_id = str(data.get("sound_id", ""))
         action = data.get("action", "add")
+        user_id = str(data.get("user_id", "")).strip()
+
+        if not user_id.isdigit():
+            return web.json_response({"error": "'user_id' requis"}, status=400)
+
+        guilds = await self.find_all_guilds_for_user(int(user_id))
+        if not any(str(g.id) == guild_id for g in guilds):
+            return web.json_response({"error": "vous n'êtes pas membre de ce serveur Discord"}, status=403)
+
+        if action == "add":
+            visible = await self.resolve_visible_guild_ids(int(user_id))
+            entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
+            if entry is None or not self.sound_visible_to(entry, visible):
+                return web.json_response({"error": "son introuvable"}, status=404)
 
         shared = load_shared_categories()
         sound_ids = shared.setdefault(guild_id, [])
@@ -742,6 +829,9 @@ class WaseBoardServer(commands.Bot):
         entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
         if entry is None:
             return web.json_response({"error": f"son introuvable : {sound_id}"}, status=404)
+
+        if not self.sound_visible_to(entry, {str(guild_id)}):
+            return web.json_response({"error": f"son introuvable : {sound_id}"}, status=403)
 
         file_path = SOUNDS_DIR / f"{sound_id}{entry['extension']}"
         if not file_path.exists():

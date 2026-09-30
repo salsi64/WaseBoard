@@ -42,6 +42,9 @@ namespace WaseBoard.Services
             /// <summary>Emoji du son, partagé entre tous les utilisateurs (contrairement à
             /// favoris/catégories/volume/raccourcis, qui restent des préférences locales).</summary>
             public string? emoji { get; set; }
+
+            /// <summary>Guilde Discord d'origine (celle où ce son a été uploadé).</summary>
+            public string? guild_id { get; set; }
         }
 
         private class CatalogResponse
@@ -246,7 +249,7 @@ namespace WaseBoard.Services
             try
             {
                 using var request = CreateRequest(HttpMethod.Patch, $"/sounds/{item.Id}");
-                var payload = JsonSerializer.Serialize(new { name = newName });
+                var payload = JsonSerializer.Serialize(new { name = newName, user_id = Settings.DiscordUserId });
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
                 using var response = await _http.SendAsync(request);
@@ -276,7 +279,7 @@ namespace WaseBoard.Services
             try
             {
                 using var request = CreateRequest(HttpMethod.Patch, $"/sounds/{item.Id}");
-                var payload = JsonSerializer.Serialize(new { emoji = trimmed ?? "" });
+                var payload = JsonSerializer.Serialize(new { emoji = trimmed ?? "", user_id = Settings.DiscordUserId });
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
                 using var response = await _http.SendAsync(request);
@@ -311,9 +314,15 @@ namespace WaseBoard.Services
         public async Task<List<SoundItem>> FetchCatalogAsync()
         {
             LastErrorDetail = null;
+            if (string.IsNullOrEmpty(Settings.DiscordUserId))
+            {
+                LastErrorDetail = "Identité Discord non configurée.";
+                return new List<SoundItem>();
+            }
             try
             {
-                using var request = CreateRequest(HttpMethod.Get, "/sounds");
+                var userId = Uri.EscapeDataString(Settings.DiscordUserId);
+                using var request = CreateRequest(HttpMethod.Get, $"/sounds?user_id={userId}");
                 using var response = await _http.SendAsync(request);
 
                 if (!response.IsSuccessStatusCode)
@@ -334,7 +343,8 @@ namespace WaseBoard.Services
                     IsFavorite = Settings.FavoriteSoundIds.Contains(entry.id),
                     Hotkey = Settings.SoundHotkeys.TryGetValue(entry.id, out var hk) ? hk : null,
                     Volume = Settings.SoundVolumes.TryGetValue(entry.id, out var vol) ? vol : 1.0f,
-                    Emoji = string.IsNullOrEmpty(entry.emoji) ? null : entry.emoji
+                    Emoji = string.IsNullOrEmpty(entry.emoji) ? null : entry.emoji,
+                    GuildId = entry.guild_id
                 }).ToList();
 
                 return ApplyCustomOrder(items);
@@ -353,7 +363,8 @@ namespace WaseBoard.Services
 
             try
             {
-                using var request = CreateRequest(HttpMethod.Get, $"/sounds/{item.Id}/file");
+                var userId = Uri.EscapeDataString(Settings.DiscordUserId ?? "");
+                using var request = CreateRequest(HttpMethod.Get, $"/sounds/{item.Id}/file?user_id={userId}");
                 using var response = await _http.SendAsync(request);
 
                 if (!response.IsSuccessStatusCode)
@@ -394,7 +405,7 @@ namespace WaseBoard.Services
             return Convert.ToHexString(sha256.ComputeHash(stream)).ToLowerInvariant();
         }
 
-        public async Task<SoundItem?> UploadSoundAsync(string localFilePath, string name)
+        public async Task<SoundItem?> UploadSoundAsync(string localFilePath, string name, string guildId)
         {
             LastErrorDetail = null;
             try
@@ -406,6 +417,8 @@ namespace WaseBoard.Services
 
                 form.Add(new StringContent(name, Encoding.UTF8), "name");
                 form.Add(fileContent, "file", Path.GetFileName(localFilePath));
+                form.Add(new StringContent(guildId, Encoding.UTF8), "guild_id");
+                form.Add(new StringContent(Settings.DiscordUserId ?? "", Encoding.UTF8), "user_id");
                 request.Content = form;
 
                 using var response = await _http.SendAsync(request);
@@ -419,7 +432,7 @@ namespace WaseBoard.Services
                 var entry = JsonSerializer.Deserialize<CatalogEntry>(json);
                 if (entry is null) return null;
 
-                return new SoundItem { Id = entry.id, Name = entry.name, Extension = entry.extension, ContentHash = entry.hash, Emoji = entry.emoji };
+                return new SoundItem { Id = entry.id, Name = entry.name, Extension = entry.extension, ContentHash = entry.hash, Emoji = entry.emoji, GuildId = entry.guild_id };
             }
             catch (Exception ex)
             {
@@ -433,8 +446,15 @@ namespace WaseBoard.Services
             LastErrorDetail = null;
             try
             {
-                using var request = CreateRequest(HttpMethod.Delete, $"/sounds/{item.Id}");
+                var userId = Uri.EscapeDataString(Settings.DiscordUserId ?? "");
+                using var request = CreateRequest(HttpMethod.Delete, $"/sounds/{item.Id}?user_id={userId}");
                 using var response = await _http.SendAsync(request);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    LastErrorDetail = $"Suppression échouée ({(int)response.StatusCode}).";
+                    return false;
+                }
 
                 var cachePath = Path.Combine(_cacheFolder, item.Id + item.Extension);
                 if (File.Exists(cachePath)) File.Delete(cachePath);
@@ -446,11 +466,6 @@ namespace WaseBoard.Services
                 foreach (var list in Settings.Categories.Values) list.Remove(item.Id);
                 SaveSettings();
 
-                if (!response.IsSuccessStatusCode)
-                {
-                    LastErrorDetail = $"Suppression échouée ({(int)response.StatusCode}).";
-                    return false;
-                }
                 return true;
             }
             catch (Exception ex)
@@ -790,7 +805,8 @@ namespace WaseBoard.Services
         {
             try
             {
-                using var request = CreateRequest(HttpMethod.Get, $"/shared-categories?guild_id={Uri.EscapeDataString(guildId)}");
+                var userId = Uri.EscapeDataString(Settings.DiscordUserId ?? "");
+                using var request = CreateRequest(HttpMethod.Get, $"/shared-categories?guild_id={Uri.EscapeDataString(guildId)}&user_id={userId}");
                 using var response = await _http.SendAsync(request);
                 if (!response.IsSuccessStatusCode) return new();
 
@@ -807,7 +823,7 @@ namespace WaseBoard.Services
             try
             {
                 using var request = CreateRequest(HttpMethod.Post, "/shared-categories/sounds");
-                var payload = JsonSerializer.Serialize(new { guild_id = guildId, sound_id = item.Id, action = add ? "add" : "remove" });
+                var payload = JsonSerializer.Serialize(new { guild_id = guildId, sound_id = item.Id, action = add ? "add" : "remove", user_id = Settings.DiscordUserId });
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
                 using var response = await _http.SendAsync(request);
                 if (!response.IsSuccessStatusCode) LastErrorDetail = $"Le serveur a répondu {(int)response.StatusCode}.";

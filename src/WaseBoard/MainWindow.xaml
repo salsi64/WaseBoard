@@ -227,7 +227,7 @@
             </Button>
         </DataTemplate>
 
-        <!-- Gabarit d'une section (★ Favoris, une catégorie, ou "Tous les sons") : un accordéon repliable. -->
+        <!-- Gabarit d'une section (★ Favoris, une catégorie personnelle, ou une guilde Discord) : un accordéon repliable. -->
         <DataTemplate x:Key="SectionTemplate">
             <Expander IsExpanded="{Binding IsExpanded, Mode=OneTime}" Tag="{Binding CategoryKey}"
                       Expanded="Section_Expanded" Collapsed="Section_Collapsed" Loaded="Section_Loaded" Margin="0,0,0,10"
@@ -269,9 +269,9 @@
                         </ItemsControl>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <!-- Tri, "Tous les sons" uniquement : seule section vouée à devenir vraiment
-                                 longue (catalogue entier), les autres restent des sélections courtes et
-                                 manuelles où un tri n'apporterait rien. -->
+                            <!-- Tri, sections de guilde uniquement : seules vouées à devenir vraiment
+                                 longues (catalogue d'un serveur entier), les autres restent des sélections
+                                 courtes et manuelles où un tri n'apporterait rien. -->
                             <ComboBox Width="132" FontSize="11" Margin="0,0,10,0" VerticalAlignment="Center"
                                       SelectionChanged="AllSoundsSort_SelectionChanged" Loaded="AllSoundsSortCombo_Loaded"
                                       Visibility="{Binding IsAllSounds, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -458,7 +458,7 @@
                         Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
 
                 <!-- Liste dynamique : une entrée par section actuellement affichée (Favoris, chaque
-                     catégorie perso/partagée, Tous les sons), pas seulement des raccourcis fixes. -->
+                     catégorie perso, chaque guilde Discord), pas seulement des raccourcis fixes. -->
                 <ScrollViewer x:Name="SidebarNavScroll" Grid.Row="3" VerticalScrollBarVisibility="Auto">
                     <ItemsControl x:Name="SidebarNavItemsControl">
                         <ItemsControl.ItemTemplate>
@@ -565,7 +565,7 @@
                 </Grid>
             </DockPanel>
 
-            <!-- Sections : ★ Favoris, catégories personnalisées, puis Tous les sons -->
+            <!-- Sections : ★ Favoris, catégories personnalisées, puis une par guilde Discord -->
             <ScrollViewer x:Name="SectionsScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="SectionsItemsControl" ItemTemplate="{StaticResource SectionTemplate}"/>
             </ScrollViewer>
