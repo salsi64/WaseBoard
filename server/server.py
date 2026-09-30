@@ -830,9 +830,14 @@ class WaseBoardServer(commands.Bot):
         if entry is None:
             return web.json_response({"error": f"son introuvable : {sound_id}"}, status=404)
 
-        if not self.sound_visible_to(entry, {str(guild_id)}):
+        # Visibilité sur TOUTES les guildes de l'utilisateur, pas seulement celle où il se trouve
+        # actuellement en vocal : un utilisateur membre de plusieurs guildes doit pouvoir jouer
+        # n'importe lequel de ses sons dans le salon où il est, sans avoir à le partager
+        # explicitement vers chaque guilde au préalable.
+        visible = await self.resolve_visible_guild_ids(int(user_id)) if user_id and str(user_id).isdigit() else set()
+        if not self.sound_visible_to(entry, visible):
             return web.json_response(
-                {"error": "Ce son n'appartient pas à ce serveur Discord et n'y a pas été partagé."},
+                {"error": "Ce son n'appartient à aucune de vos guildes Discord connues."},
                 status=403,
             )
 
