@@ -6,7 +6,6 @@ avec sa propre connexion vocale et son propre mixeur audio.
 Voir README.md pour la mise en place complète.
 """
 
-import array
 import asyncio
 import hashlib
 import json
@@ -18,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 import discord
+import numpy as np
 from discord.ext import commands
 from aiohttp import web
 
@@ -190,16 +190,21 @@ class MixingAudioSource(discord.AudioSource):
         if not frames:
             return SILENCE
 
-        mixed = array.array('h', SILENCE)
+        if len(frames) == 1:
+            data = frames[0]
+            return data if len(data) == FRAME_BYTES else data.ljust(FRAME_BYTES, b"\x00")
+
+        # Saturation appliquée après chaque son ajouté (pas une somme brute clampée une seule
+        # fois à la fin) : reproduit exactement le comportement de l'ancienne boucle scalaire,
+        # où l'ordre d'empilement des sons peut influencer un résultat déjà saturé.
+        mixed = np.zeros(1920, dtype=np.int32)
         for data in frames:
             if len(data) < FRAME_BYTES:
                 data = data.ljust(FRAME_BYTES, b"\x00")
-            samples = array.array('h', data[:FRAME_BYTES])
-            for i in range(len(mixed)):
-                total = mixed[i] + samples[i]
-                mixed[i] = 32767 if total > 32767 else (-32768 if total < -32768 else total)
+            samples = np.frombuffer(data[:FRAME_BYTES], dtype=np.int16).astype(np.int32)
+            mixed = np.clip(mixed + samples, -32768, 32767)
 
-        return mixed.tobytes()
+        return mixed.astype(np.int16).tobytes()
 
     @staticmethod
     def _finish_entries(entries) -> None:
