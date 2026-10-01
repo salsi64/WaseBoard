@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,6 +12,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
@@ -147,6 +149,15 @@ namespace WaseBoard
             _library.Load();
             _settingsReady = true;
             ApplyColorScheme();
+
+            // Lien waseboard:// reçu en argument de lancement (voir App.OnStartup) — appliqué
+            // AVANT le bloc d'onboarding juste en dessous, qui s'ouvrira normalement si c'est un
+            // premier lancement et affichera alors les champs déjà pré-remplis.
+            if (App.PendingDeepLink is not null)
+                await ApplyDeepLinkAsync(App.PendingDeepLink, isRuntimeTrigger: false);
+
+            var hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            hwndSource?.AddHook(DeepLinkHwndHook);
 
             MainVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
             SidebarVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
@@ -315,6 +326,95 @@ namespace WaseBoard
                     _reloginPromptShowing = false;
                 }
             });
+        }
+
+        // ---------- Lien de connexion waseboard:// ----------
+
+        private const int WM_COPYDATA = 0x004A;
+        // Doit correspondre à App.DeepLinkMessageTag — sert juste à reconnaître nos propres
+        // messages WM_COPYDATA parmi d'éventuels autres envoyés à cette fenêtre.
+        private const int DeepLinkMessageTag = 0x5742;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct COPYDATASTRUCT
+        {
+            public IntPtr dwData;
+            public int cbData;
+            public IntPtr lpData;
+        }
+
+        /// <summary>Reçoit le lien envoyé par une seconde tentative de lancement (voir
+        /// App.OnStartup/SendDeepLinkTo) pendant que cette instance est déjà ouverte.</summary>
+        private IntPtr DeepLinkHwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_COPYDATA)
+            {
+                var cds = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
+                if (cds.dwData == (IntPtr)DeepLinkMessageTag)
+                {
+                    var uri = Marshal.PtrToStringUni(cds.lpData);
+                    if (!string.IsNullOrEmpty(uri))
+                        _ = ApplyDeepLinkAsync(uri, isRuntimeTrigger: true);
+                    handled = true;
+                }
+            }
+            return IntPtr.Zero;
+        }
+
+        /// <summary>Applique un lien waseboard://connect?url=...&amp;token=... — pré-remplit
+        /// silencieusement si l'app n'était pas encore configurée (l'onboarding qui suit sert de
+        /// confirmation visuelle), ou demande une confirmation explicite sinon (un tel lien peut
+        /// en théorie être déclenché par n'importe quelle page/appli sur la machine).</summary>
+        private async Task ApplyDeepLinkAsync(string uri, bool isRuntimeTrigger)
+        {
+            string? url = null, token = null;
+            try
+            {
+                var parsed = new Uri(uri);
+                foreach (var pair in parsed.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var kv = pair.Split('=', 2);
+                    if (kv.Length != 2) continue;
+                    if (kv[0] == "url") url = Uri.UnescapeDataString(kv[1]);
+                    else if (kv[0] == "token") token = Uri.UnescapeDataString(kv[1]);
+                }
+            }
+            catch { /* lien malformé : ignoré, pas une raison de planter */ }
+
+            if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
+            {
+                ToastService.Show("Lien de connexion WaseBoard invalide ou incomplet.", ToastKind.Warning);
+                return;
+            }
+
+            var isFreshInstall = string.IsNullOrEmpty(_library.Settings.ServerUrl) || !_library.Settings.HasSeenOnboarding;
+            if (!isFreshInstall)
+            {
+                var confirmed = ConfirmDialog.Show(this,
+                    $"Se connecter à un nouveau serveur WaseBoard ?\n\n{url}\n\nVos réglages de connexion actuels seront remplacés.");
+                if (!confirmed) return;
+            }
+
+            _library.Settings.ServerUrl = url;
+            _library.Settings.ServerToken = token;
+            _library.Settings.DiscordSessionToken = null;
+            _library.Settings.DiscordUserId = null;
+            _library.Settings.DiscordUsername = null;
+            _library.Settings.DiscordAvatarUrl = null;
+            _library.SaveSettings();
+
+            if (isRuntimeTrigger)
+            {
+                var onboarding = new OnboardingWindow(_library.Settings, _library) { Owner = this };
+                onboarding.ShowDialog();
+                _library.Settings.HasSeenOnboarding = true;
+                _library.SaveSettings();
+                await RefreshCatalogAsync();
+                await RefreshSharedCategoriesAsync();
+                await RefreshVoiceStatusAsync();
+            }
+            // Sinon (reçu avant que Window_Loaded ait fini) : le bloc d'onboarding normal juste
+            // après s'en charge déjà, pas besoin de dupliquer la logique ici.
         }
 
         /// <summary>

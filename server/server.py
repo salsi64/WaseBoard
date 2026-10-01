@@ -17,10 +17,12 @@ import time
 import uuid
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 import aiohttp
 import discord
 import numpy as np
+from discord import app_commands
 from discord.ext import commands
 from aiohttp import web
 
@@ -58,6 +60,7 @@ HTTP_PORT: int = CONFIG.get("http_port", 5005)
 SHARED_SECRET: str = CONFIG.get("shared_secret", "")
 OAUTH2_CLIENT_ID: str = CONFIG.get("oauth2_client_id", "")
 OAUTH2_CLIENT_SECRET: str = CONFIG.get("oauth2_client_secret", "")
+PUBLIC_URL: str = CONFIG.get("public_url", "")
 
 SOUNDS_DIR.mkdir(exist_ok=True)
 
@@ -282,6 +285,29 @@ intents.members = True  # requis pour résoudre un membre par id ; à activer au
                          # Portail Développeur > Bot > "Server Members Intent".
 
 
+class InviteView(discord.ui.View):
+    """Bouton persistant (voir setup_hook : bot.add_view) posté par /configurer-invitation —
+    répond en message éphémère avec le lien waseboard://connect de cette instance. Le lien
+    est identique pour tout le monde (adresse + secret partagé de ce déploiement) ; seule la
+    visibilité du message qui porte ce bouton est restreinte, nativement via les permissions
+    du salon Discord où l'admin l'a posté — aucun contrôle de rôle à faire ici."""
+
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="📬 Recevoir mon lien WaseBoard", style=discord.ButtonStyle.primary,
+                        custom_id="waseboard_invite_button")
+    async def send_link(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not PUBLIC_URL or not SHARED_SECRET:
+            await interaction.response.send_message(
+                "Lien non configuré côté serveur (public_url/shared_secret manquants dans config.json).",
+                ephemeral=True,
+            )
+            return
+        link = f"waseboard://connect?url={quote(PUBLIC_URL, safe='')}&token={quote(SHARED_SECRET, safe='')}"
+        await interaction.response.send_message(f"Votre lien de connexion WaseBoard :\n{link}", ephemeral=True)
+
+
 class WaseBoardServer(commands.Bot):
     def __init__(self) -> None:
         super().__init__(command_prefix="!", intents=intents)
@@ -304,6 +330,11 @@ class WaseBoardServer(commands.Bot):
 
     async def setup_hook(self) -> None:
         self.http_session = aiohttp.ClientSession()
+
+        # Enregistrement persistant (custom_id fixe) : le bouton reste fonctionnel sur le
+        # message déjà posté par /configurer-invitation après un redémarrage, sans avoir à
+        # retenir où il a été posté.
+        self.add_view(InviteView())
 
         if GUILD_ID:
             guild = discord.Object(id=GUILD_ID)
@@ -1164,6 +1195,21 @@ async def leave(interaction: discord.Interaction) -> None:
         "Déconnecté du salon vocal." if left else "Je ne suis connecté à aucun salon vocal ici.",
         ephemeral=True
     )
+
+
+@bot.tree.command(name="configurer-invitation",
+                   description="Poste un bouton pour que les membres récupèrent leur lien de connexion WaseBoard")
+@app_commands.checks.has_permissions(administrator=True)
+async def configurer_invitation(interaction: discord.Interaction) -> None:
+    if not PUBLIC_URL or not SHARED_SECRET:
+        await interaction.response.send_message(
+            "⚠️ `public_url` ou `shared_secret` manquant dans config.json — le bouton serait "
+            "posté mais ne produirait aucun lien utilisable. Configurez-les puis réessayez.",
+            ephemeral=True,
+        )
+        return
+    await interaction.channel.send("Cliquez pour recevoir votre lien de connexion WaseBoard :", view=InviteView())
+    await interaction.response.send_message("Bouton posté.", ephemeral=True)
 
 
 @bot.event

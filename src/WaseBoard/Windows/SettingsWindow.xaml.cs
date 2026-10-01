@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Diagnostics;
 using System.Windows;
@@ -198,6 +199,29 @@ namespace WaseBoard.Windows
 
             _settings.ServerUrl = previousUrl;
             _settings.ServerToken = previousToken;
+        }
+
+        /// <summary>Construit un lien waseboard://connect à partir des champs actuellement
+        /// affichés (pas besoin d'avoir cliqué "Enregistrer") et le copie dans le presse-papier,
+        /// pour inviter quelqu'un sans qu'il ait à saisir l'adresse/le jeton lui-même.</summary>
+        private void CopyInviteLinkButton_Click(object sender, RoutedEventArgs e)
+        {
+            var url = ServerUrlBox.Text.Trim();
+            var token = ServerTokenBox.Text;
+            if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
+            {
+                AlertDialog.Show(this, "Renseignez d'abord l'adresse du serveur et le jeton d'accès.", "WaseBoard", AlertKind.Warning);
+                return;
+            }
+
+            var link = $"waseboard://connect?url={Uri.EscapeDataString(url)}&token={Uri.EscapeDataString(token)}";
+            Clipboard.SetText(link);
+
+            var original = CopyInviteLinkButton.Content;
+            CopyInviteLinkButton.Content = "✅ Copié !";
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = System.TimeSpan.FromSeconds(2) };
+            timer.Tick += (_, _) => { CopyInviteLinkButton.Content = original; timer.Stop(); };
+            timer.Start();
         }
 
         private async void ConnectDiscordButton_Click(object sender, RoutedEventArgs e)

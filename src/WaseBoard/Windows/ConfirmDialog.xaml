@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:chrome="clr-namespace:WaseBoard.Windows.Chrome"
         Title="Confirmer"
-        FontFamily="Segoe UI Emoji, Segoe UI" Height="170" Width="380"
+        FontFamily="Segoe UI Emoji, Segoe UI" SizeToContent="Height" Width="380"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource BgBrush}"
         chrome:WindowChromeBehavior.Enable="True"

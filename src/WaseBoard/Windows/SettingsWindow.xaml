@@ -53,10 +53,17 @@
                         <TextBlock Text="Jeton d'accès" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                         <TextBox x:Name="ServerTokenBox" Height="28" Margin="0,0,0,14"/>
 
-                        <Button x:Name="TestConnectionButton" Content="Tester la connexion" Height="34" HorizontalAlignment="Left" Padding="16,0"
-                                Click="TestConnectionButton_Click"
-                                Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                                BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="TestConnectionButton" Content="Tester la connexion" Height="34" HorizontalAlignment="Left" Padding="16,0" Margin="0,0,8,0"
+                                    Click="TestConnectionButton_Click"
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                            <Button x:Name="CopyInviteLinkButton" Content="Copier le lien d'invitation" Height="34" HorizontalAlignment="Left" Padding="16,0"
+                                    Click="CopyInviteLinkButton_Click"
+                                    ToolTip="Génère un lien waseboard:// à partir de l'adresse/jeton ci-dessus, pour inviter quelqu'un sans qu'il ait à les saisir"
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- Page : Discord -->

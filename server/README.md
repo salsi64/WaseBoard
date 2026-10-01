@@ -51,6 +51,10 @@ Copiez `config.example.json` vers `config.json` et renseignez :
 - `shared_secret` : un mot de passe long et aléatoire (32+ caractères) — c'est la seule
   protection de l'API, choisissez-le en conséquence.
 - `http_host` : laissez `0.0.0.0`.
+- `public_url` : l'adresse par laquelle **les clients WaseBoard** joignent ce serveur (ex:
+  `https://waseboard.exemple.com` une fois l'étape 6 faite, ou l'IP locale en test). Sert
+  uniquement à construire le lien de connexion cliquable (voir étape 7) — peut rester vide
+  en attendant, le reste du serveur fonctionne sans.
 
 ## 4. Activer la connexion Discord (OAuth2)
 
@@ -159,11 +163,21 @@ domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit u
 6. Chaque client configure `https://VOTRE_SOUS_DOMAINE.duckdns.org` (sans port) comme adresse
    de serveur dans WaseBoard.
 
-## 7. Utilisation
+## 7. Distribuer le lien de connexion
 
-1. Chaque utilisateur configure, dans les Paramètres de son WaseBoard : l'adresse du serveur
-   (`https://votre-domaine.duckdns.org`), le `shared_secret`, et son ID Discord (voir le
-   README principal).
+Une fois `public_url` et `shared_secret` renseignés (étape 3), tapez `/configurer-invitation`
+dans un salon Discord — ça poste un bouton persistant (survit aux redémarrages du bot).
+Toute personne pouvant voir ce salon peut cliquer dessus pour recevoir, en message visible
+d'elle seule, un lien `waseboard://connect?...` qui pré-remplit automatiquement l'adresse et
+le jeton d'accès dans WaseBoard (rien à copier-coller). Qui voit ce bouton se règle en
+restreignant l'accès au salon via les permissions Discord habituelles — rien à configurer
+côté WaseBoard.
+
+## 8. Utilisation
+
+1. Chaque utilisateur installe WaseBoard et clique le lien de connexion reçu via le bouton
+   ci-dessus (ou configure manuellement l'adresse/le jeton dans les Paramètres), puis se
+   connecte avec Discord lors de l'onboarding.
 2. `/join` dans Discord fait rejoindre le bot au salon vocal (ou le bouton "🔊 Rejoindre mon
    vocal" dans WaseBoard). `/leave` pour le déconnecter — il part aussi seul si le salon se vide.
 3. Les sons ajoutés/joués depuis n'importe quel client sont partagés entre tous les
