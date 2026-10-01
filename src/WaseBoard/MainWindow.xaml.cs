@@ -152,12 +152,13 @@ namespace WaseBoard
             SidebarVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
             UpdateMainVolumeLabel();
 
-            // L'ID Discord est désormais obligatoire (à partir de cette version) : tant qu'il est
-            // vide, l'assistant se rouvre à CHAQUE lancement, pas seulement au premier — mais
+            // La connexion Discord est désormais obligatoire (OAuth2) : tant qu'elle est absente,
+            // l'assistant se rouvre à CHAQUE lancement, pas seulement au premier — mais
             // directement sur l'étape Discord si les étapes Bienvenue/Serveur ont déjà été vues.
+            // Couvre aussi le cas d'une session invalidée en cours de route (voir SessionInvalidated).
             var needsFirstRun = !_library.Settings.HasSeenOnboarding;
-            var needsDiscordId = string.IsNullOrWhiteSpace(_library.Settings.DiscordUserId);
-            if (needsFirstRun || needsDiscordId)
+            var needsLogin = string.IsNullOrWhiteSpace(_library.Settings.DiscordSessionToken);
+            if (needsFirstRun || needsLogin)
             {
                 var onboarding = new OnboardingWindow(_library.Settings, _library,
                     startAtDiscordStep: !needsFirstRun) { Owner = this };
@@ -166,11 +167,12 @@ namespace WaseBoard
                 _library.SaveSettings();
             }
 
+            _library.SessionInvalidated += OnSessionInvalidated;
+
             _hotkeys = new GlobalHotkeyManager(this);
             ApplyTheme();
             await RefreshCatalogAsync();
             await RefreshSharedCategoriesAsync();
-            await CacheMyUsernameAsync();
             await RefreshVoiceStatusAsync();
 
             // Intervalle court (300ms, au lieu d'1s auparavant) : avec un sondage plus lent, un
@@ -290,18 +292,29 @@ namespace WaseBoard
             RefreshSections();
         }
 
-        /// <summary>Résout votre pseudo/avatar Discord une fois au démarrage (mise en cache locale, pas un indicateur de présence).</summary>
-        private async Task CacheMyUsernameAsync()
-        {
-            if (string.IsNullOrEmpty(_library.Settings.DiscordUserId)) return;
+        private bool _reloginPromptShowing;
 
-            var (found, username, avatarUrl, _, _) = await _library.VerifyUserIdAsync(_library.Settings.DiscordUserId);
-            if (found)
+        /// <summary>Déclenché une seule fois par invalidation réelle de session (voir
+        /// SoundLibraryService.SendAsync) — ouvre Paramètres directement sur la page Discord
+        /// pour reconnecter, en évitant les invites en double si plusieurs appels échouent
+        /// avant que l'utilisateur ait eu le temps de réagir.</summary>
+        private void OnSessionInvalidated()
+        {
+            if (_reloginPromptShowing) return;
+            _reloginPromptShowing = true;
+            Dispatcher.BeginInvoke(() =>
             {
-                _library.Settings.DiscordUsername = username;
-                _library.Settings.DiscordAvatarUrl = avatarUrl;
-                _library.SaveSettings();
-            }
+                try
+                {
+                    ToastService.Show("Votre connexion Discord a expiré — reconnectez-vous dans Paramètres.", ToastKind.Warning);
+                    var window = new SettingsWindow(_library.Settings, _library, initialPage: "Discord") { Owner = this };
+                    window.ShowDialog();
+                }
+                finally
+                {
+                    _reloginPromptShowing = false;
+                }
+            });
         }
 
         /// <summary>
@@ -312,9 +325,9 @@ namespace WaseBoard
         /// </summary>
         private async Task RefreshVoiceStatusAsync()
         {
-            if (string.IsNullOrEmpty(_library.Settings.DiscordUserId))
+            if (string.IsNullOrEmpty(_library.Settings.DiscordSessionToken))
             {
-                SidebarConnectionText.Text = "🔴 Identité Discord non configurée";
+                SidebarConnectionText.Text = "🔴 Non connecté à Discord";
                 VoiceChannelMembers.Clear();
                 return;
             }
@@ -1656,7 +1669,6 @@ namespace WaseBoard
                 ApplyTheme();
                 await RefreshCatalogAsync();
                 await RefreshSharedCategoriesAsync();
-                await CacheMyUsernameAsync();
                 await RefreshVoiceStatusAsync();
             }
         }

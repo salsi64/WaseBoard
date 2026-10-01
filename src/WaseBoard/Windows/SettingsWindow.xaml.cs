@@ -25,7 +25,7 @@ namespace WaseBoard.Windows
         // ("Owner sur une fenêtre fermée"). Ce drapeau permet d'abandonner proprement.
         private bool _isClosed;
 
-        public SettingsWindow(AppSettings settings, SoundLibraryService library)
+        public SettingsWindow(AppSettings settings, SoundLibraryService library, string initialPage = "Server")
         {
             InitializeComponent();
             _settings = settings;
@@ -34,7 +34,12 @@ namespace WaseBoard.Windows
 
             ServerUrlBox.Text = _settings.ServerUrl;
             ServerTokenBox.Text = _settings.ServerToken;
-            ManualUserIdBox.Text = _settings.DiscordUserId;
+
+            if (!string.IsNullOrEmpty(_settings.DiscordSessionToken))
+            {
+                ConnectDiscordButton.Content = "Changer de compte";
+                ShowVerifyResult(true, $"✅ Connecté en tant que {_settings.DiscordUsername}", _settings.DiscordAvatarUrl);
+            }
 
             LocalVolumeSlider.Value = _settings.LocalPlaybackVolume;
             UpdateVolumeLabel(LocalVolumeLabel, _settings.LocalPlaybackVolume);
@@ -53,7 +58,7 @@ namespace WaseBoard.Windows
             var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
             CurrentVersionText.Text = $"Version actuelle : {currentVersion?.ToString(3) ?? "?"}";
 
-            SelectPage("Server");
+            SelectPage(initialPage);
         }
 
         // ---------- Navigation latérale ----------
@@ -195,38 +200,43 @@ namespace WaseBoard.Windows
             _settings.ServerToken = previousToken;
         }
 
-        private async void VerifyUserIdButton_Click(object sender, RoutedEventArgs e)
+        private async void ConnectDiscordButton_Click(object sender, RoutedEventArgs e)
         {
-            var digitsOnly = new string(ManualUserIdBox.Text.Where(char.IsDigit).ToArray());
-            if (digitsOnly.Length == 0)
-            {
-                ShowVerifyResult(false, "Entrez d'abord un ID Discord (uniquement des chiffres).", null);
-                return;
-            }
-
             // Applique temporairement l'URL/le jeton actuellement saisis (comme "Tester la
-            // connexion") : sinon, tant que "Enregistrer" n'a pas été cliqué, cette vérification
-            // utilise l'ancien jeton enregistré (potentiellement vide) et échoue en 401 même avec
-            // un jeton correct fraîchement tapé.
+            // connexion") : sinon, tant que "Enregistrer" n'a pas été cliqué, la connexion
+            // utilise l'ancien jeton enregistré (potentiellement vide) et échoue en 401 même
+            // avec un jeton correct fraîchement tapé.
             var previousUrl = _settings.ServerUrl;
             var previousToken = _settings.ServerToken;
             _settings.ServerUrl = string.IsNullOrWhiteSpace(ServerUrlBox.Text) ? previousUrl : ServerUrlBox.Text.Trim();
             _settings.ServerToken = ServerTokenBox.Text;
 
-            VerifyUserIdButton.IsEnabled = false;
-            VerifyResultBorder.Visibility = Visibility.Collapsed;
+            ConnectDiscordButton.IsEnabled = false;
+            ShowVerifyResult(true, "Connexion en cours — suivez les instructions dans votre navigateur...", null);
 
-            var (found, username, avatarUrl, guildName, error) = await _library.VerifyUserIdAsync(digitsOnly);
+            var oauth = new DiscordOAuthService(_library);
+            var result = await oauth.LoginAsync();
             if (_isClosed) return;
 
-            VerifyUserIdButton.IsEnabled = true;
+            ConnectDiscordButton.IsEnabled = true;
             _settings.ServerUrl = previousUrl;
             _settings.ServerToken = previousToken;
 
-            if (found)
-                ShowVerifyResult(true, $"✅ Trouvé : {username} (sur {guildName})", avatarUrl);
+            if (result.Success)
+            {
+                _settings.DiscordSessionToken = result.SessionToken;
+                _settings.DiscordUserId = result.UserId;
+                _settings.DiscordUsername = result.Username;
+                _settings.DiscordAvatarUrl = result.AvatarUrl;
+                _library.SaveSettings();
+
+                ConnectDiscordButton.Content = "Changer de compte";
+                ShowVerifyResult(true, $"✅ Connecté en tant que {result.Username}", result.AvatarUrl);
+            }
             else
-                ShowVerifyResult(false, "❌ " + (error ?? "ID introuvable."), null);
+            {
+                ShowVerifyResult(false, "❌ " + (result.Error ?? "Connexion échouée."), null);
+            }
         }
 
         private void ShowVerifyResult(bool success, string message, string? avatarUrl)
@@ -301,28 +311,6 @@ namespace WaseBoard.Windows
             _settings.UiTheme = _selectedTheme;
             _settings.FollowSystemTheme = FollowSystemThemeCheckBox.IsChecked == true;
             _settings.FollowSystemAccent = FollowSystemAccentCheckBox.IsChecked == true;
-
-            // On ne garde que les chiffres du champ collé : un copier-coller depuis Discord ou un
-            // gestionnaire de presse-papiers peut ajouter des espaces ou des caractères invisibles
-            // que .Trim() seul ne retire pas, ce qui faisait échouer la validation silencieusement.
-            var digitsOnly = new string(ManualUserIdBox.Text.Where(char.IsDigit).ToArray());
-
-            if (digitsOnly.Length > 0)
-            {
-                _settings.DiscordUserId = digitsOnly;
-                _settings.DiscordUsername = null;
-                _settings.DiscordAvatarUrl = null;
-            }
-            else if (!string.IsNullOrWhiteSpace(ManualUserIdBox.Text))
-            {
-                AlertDialog.Show(this, "L'ID Discord doit être un nombre (ex: 123456789012345678).",
-                    "WaseBoard", AlertKind.Warning);
-                return;
-            }
-            else
-            {
-                _settings.DiscordUserId = null;
-            }
 
             DialogResult = true;
             Close();

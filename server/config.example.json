@@ -3,5 +3,7 @@
   "guild_id": null,
   "http_host": "0.0.0.0",
   "http_port": 5005,
-  "shared_secret": "changez-moi"
+  "shared_secret": "changez-moi",
+  "oauth2_client_id": "",
+  "oauth2_client_secret": ""
 }

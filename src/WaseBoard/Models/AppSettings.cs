@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace WaseBoard.Models
 {
@@ -9,10 +10,31 @@ namespace WaseBoard.Models
         /// aucune adresse par défaut n'est fournie avec l'application.</summary>
         public string ServerUrl { get; set; } = "";
 
-        /// <summary>Jeton d'accès partagé avec le serveur (doit correspondre à shared_secret côté serveur).</summary>
+        /// <summary>Jeton d'accès partagé avec le serveur (doit correspondre à shared_secret côté
+        /// serveur). En mémoire uniquement — la valeur persistée (chiffrée) est EncryptedServerToken,
+        /// voir SoundLibraryService.Load()/SaveSettings().</summary>
+        [JsonIgnore]
         public string? ServerToken { get; set; }
 
-        /// <summary>Identité Discord de l'utilisateur (choisie une fois dans les Paramètres), pour le highlight/avatar partagés et la résolution automatique du salon Discord ciblé.</summary>
+        /// <summary>Forme chiffrée (DPAPI) de ServerToken, seule persistée dans settings.json.</summary>
+        public string? EncryptedServerToken { get; set; }
+
+        /// <summary>Ancien champ en clair (avant chiffrement) — lu une seule fois pour migrer les
+        /// installations existantes vers EncryptedServerToken, jamais réécrit après.</summary>
+        [JsonPropertyName("ServerToken")]
+        public string? LegacyServerTokenPlaintext { get; set; }
+
+        /// <summary>Jeton de session WaseBoard (identité Discord vérifiée par OAuth2). En mémoire
+        /// uniquement — la valeur persistée (chiffrée) est EncryptedDiscordSessionToken.</summary>
+        [JsonIgnore]
+        public string? DiscordSessionToken { get; set; }
+
+        /// <summary>Forme chiffrée (DPAPI) de DiscordSessionToken, seule persistée dans settings.json.</summary>
+        public string? EncryptedDiscordSessionToken { get; set; }
+
+        /// <summary>Identité Discord affichée (pseudo/avatar), renseignée par la connexion OAuth2 —
+        /// purement informatif, plus jamais envoyé au serveur (l'identité réelle vient du jeton de
+        /// session ci-dessus).</summary>
         public string? DiscordUserId { get; set; }
         public string? DiscordUsername { get; set; }
         public string? DiscordAvatarUrl { get; set; }
@@ -59,7 +81,7 @@ namespace WaseBoard.Models
         public bool FollowSystemAccent { get; set; } = true;
 
         /// <summary>Vrai dès que l'assistant de premier lancement a été fermé une fois (Terminer ou Passer) —
-        /// évite de le rouvrir à chaque démarrage tant que le jeton/l'ID Discord ne sont pas remplis.</summary>
+        /// évite de le rouvrir à chaque démarrage tant que le jeton/la connexion Discord ne sont pas remplis.</summary>
         public bool HasSeenOnboarding { get; set; }
     }
 }

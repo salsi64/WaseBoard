@@ -10,12 +10,15 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
+import secrets
 import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Optional
 
+import aiohttp
 import discord
 import numpy as np
 from discord.ext import commands
@@ -29,7 +32,15 @@ CONFIG_PATH = BASE_DIR / "config.json"
 SOUNDS_DIR = BASE_DIR / "sounds_data"
 CATALOG_PATH = SOUNDS_DIR / "catalog.json"
 SHARED_CATEGORIES_PATH = BASE_DIR / "shared_categories.json"
+OAUTH_SESSIONS_PATH = BASE_DIR / "oauth_sessions.json"
 STATS_PATH = BASE_DIR / "stats.jsonl"
+
+DISCORD_API_BASE = "https://discord.com/api/v10"
+# Marge de sécurité avant l'expiration réelle du token Discord sous-jacent : couvre la
+# latence du round-trip de rafraîchissement, pas un éventuel décalage d'horloge (le calcul
+# d'expiration est toujours relatif à time.time() local, jamais à une valeur absolue
+# fournie par Discord — aucun risque de désynchronisation d'horloge possible).
+DISCORD_TOKEN_EXPIRY_SKEW_SECONDS = 60
 
 if not CONFIG_PATH.exists():
     raise SystemExit(
@@ -45,6 +56,8 @@ GUILD_ID: Optional[int] = CONFIG.get("guild_id")
 HTTP_HOST: str = CONFIG.get("http_host", "0.0.0.0")
 HTTP_PORT: int = CONFIG.get("http_port", 5005)
 SHARED_SECRET: str = CONFIG.get("shared_secret", "")
+OAUTH2_CLIENT_ID: str = CONFIG.get("oauth2_client_id", "")
+OAUTH2_CLIENT_SECRET: str = CONFIG.get("oauth2_client_secret", "")
 
 SOUNDS_DIR.mkdir(exist_ok=True)
 
@@ -62,6 +75,11 @@ ACTIVITY_TTL_SECONDS = 30.0
 # Durée après laquelle un client silencieux (n'ayant pas sondé /activity récemment) n'est
 # plus considéré comme "application ouverte".
 ONLINE_TTL_SECONDS = 12.0
+
+
+class DiscordAuthRevoked(Exception):
+    """Discord a répondu invalid_grant à un échange/rafraîchissement de token OAuth2 —
+    l'utilisateur a révoqué l'autorisation WaseBoard, ou le code a déjà été utilisé."""
 
 
 def migrate_catalog_entry(entry: dict) -> dict:
@@ -125,6 +143,25 @@ def load_shared_categories() -> dict:
 def save_shared_categories(data: dict) -> None:
     with open(SHARED_CATEGORIES_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def load_oauth_sessions() -> dict:
+    if not OAUTH_SESSIONS_PATH.exists():
+        return {}
+    with open(OAUTH_SESSIONS_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_oauth_sessions(data: dict) -> None:
+    # Écriture atomique (temp + os.replace) : contrairement à shared_categories.json (écrit
+    # seulement sur action utilisateur explicite), ce fichier est réécrit à chaque connexion
+    # ET à chaque rafraîchissement paresseux de token — un crash en plein write ne doit
+    # jamais laisser un JSON tronqué (ce fichier contient des jetons Discord vivants).
+    tmp_path = OAUTH_SESSIONS_PATH.with_suffix(".json.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    os.chmod(tmp_path, 0o600)
+    os.replace(tmp_path, OAUTH_SESSIONS_PATH)
 
 
 class MixingAudioSource(discord.AudioSource):
@@ -259,7 +296,15 @@ class WaseBoardServer(commands.Bot):
         self._activity_lock = threading.Lock()
         self._web_runner: Optional[web.AppRunner] = None
 
+        # Sessions OAuth2 Discord : session_token (émis par WaseBoard) -> identité vérifiée +
+        # jetons Discord. Chargées depuis disque pour survivre à un redémarrage.
+        self.oauth_sessions: dict[str, dict] = load_oauth_sessions()
+        self._session_refresh_locks: dict[str, asyncio.Lock] = {}
+        self.http_session: Optional[aiohttp.ClientSession] = None
+
     async def setup_hook(self) -> None:
+        self.http_session = aiohttp.ClientSession()
+
         if GUILD_ID:
             guild = discord.Object(id=GUILD_ID)
             self.tree.copy_global_to(guild=guild)
@@ -270,6 +315,11 @@ class WaseBoardServer(commands.Bot):
             log.info("Commandes slash synchronisées globalement (peut prendre jusqu'à 1h à apparaître).")
 
         await self._start_http_server()
+
+    async def close(self) -> None:
+        if self.http_session is not None:
+            await self.http_session.close()
+        await super().close()
 
     # ---------- Salons vocaux ----------
 
@@ -404,6 +454,103 @@ class WaseBoardServer(commands.Bot):
                 return guild.id, member.voice.channel
         return None
 
+    # ---------- OAuth2 Discord ----------
+
+    async def _discord_token_request(self, payload: dict) -> dict:
+        """POST vers l'endpoint token de Discord (échange de code ou rafraîchissement).
+        Lève DiscordAuthRevoked si Discord répond invalid_grant (code déjà utilisé, ou
+        refresh_token révoqué par l'utilisateur), sinon une exception générique."""
+        async with self.http_session.post(
+            f"{DISCORD_API_BASE}/oauth2/token",
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        ) as resp:
+            body = await resp.json()
+            if resp.status != 200:
+                if body.get("error") == "invalid_grant":
+                    raise DiscordAuthRevoked(body.get("error_description", "invalid_grant"))
+                raise RuntimeError(f"Discord a répondu {resp.status} : {body}")
+            return body
+
+    async def _refresh_identity_from_discord(self, session: dict) -> None:
+        """Appelle /users/@me avec le token d'accès de la session et met à jour
+        user_id/username/avatar_url en place."""
+        async with self.http_session.get(
+            f"{DISCORD_API_BASE}/users/@me",
+            headers={"Authorization": f"Bearer {session['discord_access_token']}"},
+        ) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"/users/@me a répondu {resp.status}")
+            me = await resp.json()
+        session["user_id"] = str(me["id"])
+        session["username"] = me.get("global_name") or me.get("username", "")
+        avatar_hash = me.get("avatar")
+        session["avatar_url"] = (
+            f"https://cdn.discordapp.com/avatars/{me['id']}/{avatar_hash}.png"
+            if avatar_hash else None
+        )
+
+    async def _ensure_discord_token_fresh(self, token: str, session: dict) -> bool:
+        """Rafraîchit le token Discord sous-jacent si son expiration approche. Renvoie False
+        si la session a dû être révoquée (refresh_token invalide/retiré côté Discord — force
+        une reconnexion propre plutôt que de faire échouer silencieusement chaque requête)."""
+        if session["discord_token_expires_at"] - time.time() > DISCORD_TOKEN_EXPIRY_SKEW_SECONDS:
+            return True
+
+        lock = self._session_refresh_locks.setdefault(token, asyncio.Lock())
+        async with lock:
+            # Une requête concurrente a pu déjà rafraîchir pendant l'attente du verrou.
+            if session["discord_token_expires_at"] - time.time() > DISCORD_TOKEN_EXPIRY_SKEW_SECONDS:
+                return True
+            try:
+                data = await self._discord_token_request({
+                    "grant_type": "refresh_token",
+                    "refresh_token": session["discord_refresh_token"],
+                    "client_id": OAUTH2_CLIENT_ID,
+                    "client_secret": OAUTH2_CLIENT_SECRET,
+                })
+            except DiscordAuthRevoked:
+                self.oauth_sessions.pop(token, None)
+                save_oauth_sessions(self.oauth_sessions)
+                return False
+            except Exception:
+                # Échec transitoire (réseau vers discord.com) : garde l'ancien token (encore
+                # valide pendant la marge) plutôt que de déconnecter sur un blip réseau.
+                log.exception("Échec transitoire du rafraîchissement du jeton Discord")
+                return True
+
+            session["discord_access_token"] = data["access_token"]
+            session["discord_refresh_token"] = data.get("refresh_token", session["discord_refresh_token"])
+            session["discord_token_expires_at"] = time.time() + data["expires_in"]
+            try:
+                await self._refresh_identity_from_discord(session)
+            except Exception:
+                log.exception("Échec de la mise à jour d'identité après rafraîchissement")
+            save_oauth_sessions(self.oauth_sessions)
+            return True
+
+    async def _require_session(self, request: web.Request, required: bool = True):
+        """Renvoie (session, None) si l'en-tête Authorization porte une session valide,
+        sinon (None, réponse_401). required=False laisse passer l'absence totale d'en-tête
+        (utilisé par les endpoints accessibles avant toute connexion Discord) ; un en-tête
+        présent mais invalide/révoqué est TOUJOURS un 401, quel que soit `required` — c'est
+        le signal que le client utilise pour déclencher une reconnexion propre."""
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            if required:
+                return None, web.json_response({"error": "unauthorized", "reason": "missing_session"}, status=401)
+            return None, None
+
+        token = auth[len("Bearer "):].strip()
+        session = self.oauth_sessions.get(token)
+        if session is None:
+            return None, web.json_response({"error": "unauthorized", "reason": "invalid_session"}, status=401)
+
+        session["last_used_at"] = time.time()
+        if not await self._ensure_discord_token_fresh(token, session):
+            return None, web.json_response({"error": "unauthorized", "reason": "revoked"}, status=401)
+        return session, None
+
     # ---------- Activité (highlight + avatars partagés) & présence ----------
 
     def record_activity(self, sound_id: str, user_id: str, username: Optional[str], avatar_url: Optional[str], guild_id: int) -> None:
@@ -474,9 +621,10 @@ class WaseBoardServer(commands.Bot):
         app.router.add_get("/status", self._handle_status)
         app.router.add_get("/activity", self._handle_activity)
         app.router.add_get("/my-guilds", self._handle_my_guilds)
-        app.router.add_get("/verify-user", self._handle_verify_user)
         app.router.add_get("/shared-categories", self._handle_get_shared_categories)
         app.router.add_post("/shared-categories/sounds", self._handle_shared_category_sound)
+        app.router.add_get("/oauth/client-id", self._handle_oauth_client_id)
+        app.router.add_post("/oauth/exchange", self._handle_oauth_exchange)
 
         self._web_runner = web.AppRunner(app)
         await self._web_runner.setup()
@@ -494,27 +642,26 @@ class WaseBoardServer(commands.Bot):
     async def _handle_list_sounds(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
-        user_id = request.query.get("user_id")
-        if not user_id or not user_id.isdigit():
-            return web.json_response({"sounds": []})
-
-        visible = await self.resolve_visible_guild_ids(int(user_id))
+        visible = await self.resolve_visible_guild_ids(int(session["user_id"]))
         return web.json_response({"sounds": self.catalog_visible_to(load_catalog(), visible)})
 
     async def _handle_get_file(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
         sound_id = request.match_info["id"]
         entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
         if entry is None:
             return web.json_response({"error": "son introuvable"}, status=404)
 
-        user_id = request.query.get("user_id")
-        if not user_id or not user_id.isdigit():
-            return web.json_response({"error": "son introuvable"}, status=404)
-        visible = await self.resolve_visible_guild_ids(int(user_id))
+        visible = await self.resolve_visible_guild_ids(int(session["user_id"]))
         if not self.sound_visible_to(entry, visible):
             return web.json_response({"error": "son introuvable"}, status=404)
 
@@ -527,18 +674,20 @@ class WaseBoardServer(commands.Bot):
     async def _handle_upload_sound(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
         try:
             data = await request.post()
             name = str(data.get("name", "")).strip()
             file_field = data.get("file")
             raw_guild_id = str(data.get("guild_id", "")).strip()
-            raw_user_id = str(data.get("user_id", "")).strip()
 
-            if not name or file_field is None or not raw_guild_id or not raw_user_id.isdigit():
-                return web.json_response({"error": "champs 'name', 'file', 'guild_id' et 'user_id' requis"}, status=400)
+            if not name or file_field is None or not raw_guild_id:
+                return web.json_response({"error": "champs 'name', 'file' et 'guild_id' requis"}, status=400)
 
-            guilds = await self.find_all_guilds_for_user(int(raw_user_id))
+            guilds = await self.find_all_guilds_for_user(int(session["user_id"]))
             if not any(str(g.id) == raw_guild_id for g in guilds):
                 return web.json_response({"error": "vous n'êtes pas membre de ce serveur Discord"}, status=403)
 
@@ -575,6 +724,9 @@ class WaseBoardServer(commands.Bot):
         utilisateurs, contrairement aux favoris/categories/volume/raccourcis, locaux)."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
         sound_id = request.match_info["id"]
         try:
@@ -587,10 +739,7 @@ class WaseBoardServer(commands.Bot):
         if entry is None:
             return web.json_response({"error": "son introuvable"}, status=404)
 
-        user_id = str(data.get("user_id", "")).strip()
-        if not user_id.isdigit():
-            return web.json_response({"error": "'user_id' requis"}, status=400)
-        visible = await self.resolve_visible_guild_ids(int(user_id))
+        visible = await self.resolve_visible_guild_ids(int(session["user_id"]))
         if not self.sound_visible_to(entry, visible):
             return web.json_response({"error": "son introuvable"}, status=404)
 
@@ -612,6 +761,9 @@ class WaseBoardServer(commands.Bot):
     async def _handle_delete_sound(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
         sound_id = request.match_info["id"]
         catalog = load_catalog()
@@ -619,10 +771,7 @@ class WaseBoardServer(commands.Bot):
         if entry is None:
             return web.json_response({"error": "son introuvable"}, status=404)
 
-        user_id = request.query.get("user_id")
-        if not user_id or not user_id.isdigit():
-            return web.json_response({"error": "'user_id' requis"}, status=400)
-        visible = await self.resolve_visible_guild_ids(int(user_id))
+        visible = await self.resolve_visible_guild_ids(int(session["user_id"]))
         if not self.sound_visible_to(entry, visible):
             return web.json_response({"error": "son introuvable"}, status=404)
 
@@ -651,12 +800,11 @@ class WaseBoardServer(commands.Bot):
         automatiquement sa propre catégorie partagée côté client, sans rien à créer."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
-        user_id = request.query.get("user_id")
-        if not user_id or not user_id.isdigit():
-            return web.json_response({"guilds": []})
-
-        guilds = await self.find_all_guilds_for_user(int(user_id))
+        guilds = await self.find_all_guilds_for_user(int(session["user_id"]))
         return web.json_response({
             "guilds": [
                 {"id": str(g.id), "name": g.name, "icon_url": str(g.icon.url) if g.icon else None}
@@ -664,29 +812,74 @@ class WaseBoardServer(commands.Bot):
             ]
         })
 
-    async def _handle_verify_user(self, request: web.Request) -> web.Response:
-        """Vérifie qu'un ID Discord correspond bien à un membre connu d'au moins un serveur du
-        bot, et retourne son nom/avatar si oui — pour donner un retour concret dans les
-        Paramètres de WaseBoard au lieu de coller un ID à l'aveugle."""
+    async def _handle_oauth_client_id(self, request: web.Request) -> web.Response:
+        """Renvoie l'identifiant client OAuth2 Discord de cette instance — pas un secret,
+        mais propre à chaque déploiement auto-hébergé, donc le client ne peut pas le
+        connaître à l'avance."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        if not OAUTH2_CLIENT_ID:
+            return web.json_response({"error": "oauth2_client_id non configuré côté serveur"}, status=500)
+        return web.json_response({"client_id": OAUTH2_CLIENT_ID})
 
-        user_id = request.query.get("user_id")
-        if not user_id or not user_id.isdigit():
-            return web.json_response({"found": False, "error": "ID invalide (doit être un nombre)."})
+    async def _handle_oauth_exchange(self, request: web.Request) -> web.Response:
+        """Échange un code d'autorisation Discord contre une session WaseBoard. Le
+        client_secret Discord reste ici, jamais transmis au client."""
+        if not self._check_auth(request):
+            return web.json_response({"error": "unauthorized"}, status=401)
+        if not OAUTH2_CLIENT_ID or not OAUTH2_CLIENT_SECRET:
+            return web.json_response({"error": "OAuth2 non configuré côté serveur"}, status=500)
 
-        member = await self.find_member_async(int(user_id))
-        if member is None:
-            return web.json_response({
-                "found": False,
-                "error": "Aucun membre correspondant sur les serveurs Discord où le bot est présent."
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "corps JSON invalide"}, status=400)
+
+        code = data.get("code")
+        redirect_uri = data.get("redirect_uri")
+        if not code or not redirect_uri:
+            return web.json_response({"error": "'code' et 'redirect_uri' requis"}, status=400)
+        # Défense en profondeur : n'accepte que des redirections en boucle locale, cohérent
+        # avec la restriction que Discord impose déjà côté autorisation — évite d'utiliser cet
+        # endpoint comme proxy générique d'échange de code vers un redirect_uri arbitraire.
+        if not (redirect_uri.startswith("http://127.0.0.1:") or redirect_uri.startswith("http://localhost:")):
+            return web.json_response({"error": "redirect_uri non autorisé"}, status=400)
+
+        try:
+            token_data = await self._discord_token_request({
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": OAUTH2_CLIENT_ID,
+                "client_secret": OAUTH2_CLIENT_SECRET,
             })
+        except Exception as ex:
+            log.exception("Échec de l'échange de code OAuth2 Discord")
+            return web.json_response({"error": f"Échange avec Discord échoué : {ex}"}, status=502)
+
+        session = {
+            "discord_access_token": token_data["access_token"],
+            "discord_refresh_token": token_data["refresh_token"],
+            "discord_token_expires_at": time.time() + token_data["expires_in"],
+            "created_at": time.time(),
+            "last_used_at": time.time(),
+        }
+        try:
+            await self._refresh_identity_from_discord(session)
+        except Exception as ex:
+            log.exception("Échec de /users/@me après échange OAuth2")
+            return web.json_response({"error": f"Identité Discord introuvable : {ex}"}, status=502)
+
+        session_token = secrets.token_urlsafe(32)
+        self.oauth_sessions[session_token] = session
+        save_oauth_sessions(self.oauth_sessions)
+        log.info("Nouvelle session OAuth2 pour %s (%s)", session["user_id"], session["username"])
 
         return web.json_response({
-            "found": True,
-            "username": member.display_name,
-            "avatar_url": str(member.display_avatar.url),
-            "guild_name": member.guild.name,
+            "session_token": session_token,
+            "user_id": session["user_id"],
+            "username": session["username"],
+            "avatar_url": session["avatar_url"],
         })
 
     async def _handle_status(self, request: web.Request) -> web.Response:
@@ -694,7 +887,16 @@ class WaseBoardServer(commands.Bot):
             return web.json_response({"error": "unauthorized"}, status=401)
 
         strict = request.query.get("strict") == "1"
-        guild_id = self.resolve_guild_id(request.query.get("guild_id"), request.query.get("user_id"), strict=strict)
+        # Non-strict : utilisable sans session (secret partagé seul) — nécessaire pour
+        # "Tester la connexion" dans l'onboarding, AVANT toute connexion Discord. Strict
+        # (indicateur de présence vocale fiable, affiché en continu dans la barre latérale)
+        # exige en revanche une session valide.
+        session, err = await self._require_session(request, required=strict)
+        if err is not None:
+            return err
+
+        user_id = session["user_id"] if session else None
+        guild_id = self.resolve_guild_id(request.query.get("guild_id"), user_id, strict=strict)
         vc = self.voice_clients_map.get(guild_id) if guild_id is not None else None
         connected = vc is not None and vc.is_connected()
         guild = self.get_guild(guild_id) if guild_id is not None else None
@@ -721,9 +923,15 @@ class WaseBoardServer(commands.Bot):
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
 
-        user_id = request.query.get("user_id")
+        # Sondé toutes les 300ms, y compris AVANT toute connexion Discord : reste utilisable
+        # sans session (comportement inchangé dans ce cas — aucune présence enregistrée).
+        session, err = await self._require_session(request, required=False)
+        if err is not None:
+            return err
+
         guild_id = None
-        if user_id and user_id.isdigit():
+        if session is not None:
+            user_id = session["user_id"]
             member = self.find_member(int(user_id))
             self.record_presence(
                 user_id,
@@ -747,13 +955,15 @@ class WaseBoardServer(commands.Bot):
     async def _handle_get_shared_categories(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
         guild_id = request.query.get("guild_id")
-        user_id = request.query.get("user_id")
-        if not guild_id or not user_id or not user_id.isdigit():
-            return web.json_response({"error": "guild_id et user_id requis"}, status=400)
+        if not guild_id:
+            return web.json_response({"error": "guild_id requis"}, status=400)
 
-        guilds = await self.find_all_guilds_for_user(int(user_id))
+        guilds = await self.find_all_guilds_for_user(int(session["user_id"]))
         if not any(str(g.id) == guild_id for g in guilds):
             return web.json_response({"sound_ids": []}, status=403)
 
@@ -764,6 +974,9 @@ class WaseBoardServer(commands.Bot):
         """Ajoute ou retire un son de la catégorie partagée d'un serveur Discord. Body: {guild_id, sound_id, action: "add"|"remove"}."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
         try:
             data = await request.json()
@@ -773,10 +986,7 @@ class WaseBoardServer(commands.Bot):
         guild_id = str(data.get("guild_id", ""))
         sound_id = str(data.get("sound_id", ""))
         action = data.get("action", "add")
-        user_id = str(data.get("user_id", "")).strip()
-
-        if not user_id.isdigit():
-            return web.json_response({"error": "'user_id' requis"}, status=400)
+        user_id = session["user_id"]
 
         guilds = await self.find_all_guilds_for_user(int(user_id))
         if not any(str(g.id) == guild_id for g in guilds):
@@ -804,13 +1014,16 @@ class WaseBoardServer(commands.Bot):
     async def _handle_play(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
         try:
             data = await request.json()
         except Exception:
             return web.json_response({"error": "corps JSON invalide"}, status=400)
 
-        user_id = data.get("user_id")
+        user_id = session["user_id"]
         guild_id = self.resolve_guild_id(data.get("guild_id"), user_id)
         if guild_id is None:
             return web.json_response({
@@ -834,7 +1047,7 @@ class WaseBoardServer(commands.Bot):
         # actuellement en vocal : un utilisateur membre de plusieurs guildes doit pouvoir jouer
         # n'importe lequel de ses sons dans le salon où il est, sans avoir à le partager
         # explicitement vers chaque guilde au préalable.
-        visible = await self.resolve_visible_guild_ids(int(user_id)) if user_id and str(user_id).isdigit() else set()
+        visible = await self.resolve_visible_guild_ids(int(user_id))
         if not self.sound_visible_to(entry, visible):
             return web.json_response(
                 {"error": "Ce son n'appartient à aucune de vos guildes Discord connues."},
@@ -880,13 +1093,16 @@ class WaseBoardServer(commands.Bot):
     async def _handle_stop_all(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
         try:
             data = await request.json()
         except Exception:
             data = {}
 
-        guild_id = self.resolve_guild_id(data.get("guild_id"), data.get("user_id"))
+        guild_id = self.resolve_guild_id(data.get("guild_id"), session["user_id"])
         if guild_id is None:
             return web.json_response({"error": "Impossible de déterminer le salon Discord cible."}, status=400)
 
@@ -902,17 +1118,11 @@ class WaseBoardServer(commands.Bot):
         sans passer par la commande /join dans Discord."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
 
-        try:
-            data = await request.json()
-        except Exception:
-            return web.json_response({"error": "corps JSON invalide"}, status=400)
-
-        user_id = data.get("user_id")
-        if not user_id or not str(user_id).isdigit():
-            return web.json_response({"error": "user_id requis"}, status=400)
-
-        found = await self.find_current_voice_channel(int(user_id))
+        found = await self.find_current_voice_channel(int(session["user_id"]))
         if found is None:
             return web.json_response({
                 "error": "Vous n'êtes dans aucun salon vocal sur les serveurs Discord où je suis présent."

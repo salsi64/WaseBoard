@@ -52,7 +52,20 @@ Copiez `config.example.json` vers `config.json` et renseignez :
   protection de l'API, choisissez-le en conséquence.
 - `http_host` : laissez `0.0.0.0`.
 
-## 4. Lancer le serveur
+## 4. Activer la connexion Discord (OAuth2)
+
+Nécessaire pour que les utilisateurs se connectent d'un clic dans WaseBoard plutôt que de
+coller leur ID Discord à la main.
+
+1. Sur la même application Discord (étape 1), onglet **OAuth2**.
+2. Copiez le **Client ID** et le **Client Secret** (bouton "Reset Secret" si besoin) dans
+   `config.json` (`oauth2_client_id`/`oauth2_client_secret`).
+3. Section **Redirects**, ajoutez exactement (barre oblique finale incluse) :
+   `http://127.0.0.1:48899/callback/`
+   (le client WaseBoard héberge lui-même un petit serveur local le temps de la connexion —
+   rien à exposer publiquement, ça fonctionne même sans nom de domaine).
+
+## 5. Lancer le serveur
 
 ```bash
 source venv/bin/activate
@@ -84,7 +97,7 @@ sudo systemctl enable --now waseboard
 sudo journalctl -u waseboard -f   # suivre les logs
 ```
 
-## 5. Rendre le serveur accessible en HTTPS
+## 6. Rendre le serveur accessible en HTTPS
 
 Le `shared_secret` doit passer par une connexion chiffrée. Let's Encrypt exige un nom de
 domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit un gratuitement.
@@ -146,7 +159,7 @@ domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit u
 6. Chaque client configure `https://VOTRE_SOUS_DOMAINE.duckdns.org` (sans port) comme adresse
    de serveur dans WaseBoard.
 
-## 6. Utilisation
+## 7. Utilisation
 
 1. Chaque utilisateur configure, dans les Paramètres de son WaseBoard : l'adresse du serveur
    (`https://votre-domaine.duckdns.org`), le `shared_secret`, et son ID Discord (voir le
