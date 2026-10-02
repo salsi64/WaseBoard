@@ -128,22 +128,19 @@
                                 </Border.Style>
                                 <TextBlock Text="{Binding Hotkey}" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
                             </Border>
-                            <ItemsControl ItemsSource="{Binding ActiveUsers}" VerticalAlignment="Center">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Width="14" Height="14" CornerRadius="7" Margin="0,0,2,0"
-                                                BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
-                                                ToolTip="{Binding Username}">
-                                            <Border.Background>
-                                                <ImageBrush ImageSource="{Binding AvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
-                                            </Border.Background>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                        Visibility="{Binding HasActivePlayers, Converter={StaticResource BoolToVisibilityConverter}}"
+                                        ToolTip="{Binding ActiveUsersTooltip}">
+                                <Border Width="14" Height="14" CornerRadius="7"
+                                        BorderBrush="{DynamicResource TextBrush}" BorderThickness="1.5">
+                                    <Border.Background>
+                                        <ImageBrush ImageSource="{Binding PrimaryAvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
+                                    </Border.Background>
+                                </Border>
+                                <TextBlock Text="{Binding ExtraActiveUsersText}" FontSize="10" FontWeight="Bold" Margin="3,0,0,0"
+                                           VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"
+                                           Visibility="{Binding HasExtraActivePlayers, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
                         </StackPanel>
 
                         <!-- Mini-waveform : calculée en arrière-plan, voir SoundItem.WaveformPeaks -->
@@ -171,7 +168,7 @@
              s'adapte à la place restante : la pilule ne change jamais de taille pendant la lecture. Un halo de la
              couleur du son respire derrière. -->
         <DataTemplate x:Key="ModernSoundButtonTemplate">
-            <Button Height="48" Margin="3" MinWidth="118" MaxWidth="210"
+            <Button Height="50" Margin="3" MinWidth="118" MaxWidth="210"
                     Click="SoundButton_Click"
                     MouseRightButtonUp="SoundButton_RightClick"
                     PreviewMouseLeftButtonDown="SoundButton_PreviewMouseLeftButtonDown"
@@ -189,7 +186,7 @@
                                 <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
                             </Border>
                             <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="18"
-                                    BorderThickness="2" BorderBrush="Transparent" Padding="4,3,10,3">
+                                    BorderThickness="2" BorderBrush="Transparent" Padding="4,3,15,3">
                                 <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                             </Border>
                             <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="18" BorderThickness="2" IsHitTestVisible="False"
@@ -215,7 +212,7 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="12"/>
+                        <RowDefinition Height="14"/>
                     </Grid.RowDefinitions>
 
                     <!-- Ligne du haut : pastille d'icône, nom, ★, raccourci (c'est elle qui fixe la largeur de la pilule) -->
@@ -274,7 +271,7 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <local:FillWidthHost Grid.Column="0" Height="8" VerticalAlignment="Center">
+                        <local:FillWidthHost Grid.Column="0" Height="8" Margin="0,0,2,0" VerticalAlignment="Center">
                             <Path Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Opacity="0.85"
                                   Stretch="Fill"
                                   Data="{Binding WaveformPeaks, Converter={StaticResource WaveformPeaksToPathConverter}, ConverterParameter='40,8'}">
@@ -287,22 +284,21 @@
                                 </Path.OpacityMask>
                             </Path>
                         </local:FillWidthHost>
-                        <ItemsControl Grid.Column="1" ItemsSource="{Binding ActiveUsers}" Margin="8,0,0,0" VerticalAlignment="Center">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Width="18" Height="18" CornerRadius="9" Margin="3,0,0,0"
-                                            BorderBrush="{DynamicResource TextBrush}" BorderThickness="1.5"
-                                            ToolTip="{Binding Username}">
-                                        <Border.Background>
-                                            <ImageBrush ImageSource="{Binding AvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
-                                        </Border.Background>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <!-- Un seul avatar (le premier) et « +N » si d'autres jouent le même son ; marge droite réservée
+                             par le remplissage de la pilule pour que l'avatar ne soit jamais rogné par le coin arrondi. -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0,0,0" VerticalAlignment="Center"
+                                    Visibility="{Binding HasActivePlayers, Converter={StaticResource BoolToVisibilityConverter}}"
+                                    ToolTip="{Binding ActiveUsersTooltip}">
+                            <Border Width="16" Height="16" CornerRadius="8"
+                                    BorderBrush="{DynamicResource TextBrush}" BorderThickness="1.5">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{Binding PrimaryAvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Text="{Binding ExtraActiveUsersText}" FontSize="10" FontWeight="Bold" Margin="3,0,0,0"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"
+                                       Visibility="{Binding HasExtraActivePlayers, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </Button>
