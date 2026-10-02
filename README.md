@@ -30,8 +30,9 @@ Discord) :
 - **Plusieurs sons en même temps**, sans s'annuler entre utilisateurs.
 - **Favoris**, **catégories personnelles** et **catégorie automatique par serveur Discord**,
   glisser-déposer pour classer/réorganiser, recherche en temps réel.
-- **Emoji obligatoire par son**, en couleur, palette prédéfinie ou personnalisée.
-- **Découpe waveform** à l'ajout d'un son, pour choisir l'extrait exact.
+- **Emoji obligatoire par son**, en 3D brillante (Fluent Emoji), palette prédéfinie ou personnalisée.
+- **Découpe waveform** non destructive : le son complet est conservé, on peut recouper plus tard
+  (clic droit › Redécouper), et choisir l'emoji dans la même fenêtre.
 - **Raccourcis clavier globaux**, thème clair/sombre et interface classique ou moderne
   (barre latérale), au choix.
 - **Identification automatique** : votre compte Discord suffit, WaseBoard retrouve tout seul
@@ -50,3 +51,9 @@ Personne dans votre groupe n'a encore de serveur ? Suivez
 - Historique des sons les plus joués.
 - Installeur plus léger (mode "framework-dependent", au prix de nécessiter le
   [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) sur chaque poste).
+
+## Crédits
+
+- **Emojis** : [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (Microsoft, licence MIT), affichés
+  depuis le dépôt via jsDelivr — les rares emojis absents de ce jeu (certaines variantes de teinte de peau, 🅾️...)
+  retombent sur [Twemoji](https://github.com/jdecked/twemoji) (graphismes CC-BY 4.0).

@@ -1,0 +1,1596 @@
+# Index Fluent Emoji 3D (microsoft/fluentui-emoji, MIT) @ 1ffb34c752ecf5d402f04cfb4b392c77f57c54bc
+# cle (points de code hex, sans FE0F)|dossier|1 si Default/
+0023-20e3|Keycap hashtag|0
+002a-20e3|Keycap asterisk|0
+0030-20e3|Keycap 0|0
+0031-20e3|Keycap 1|0
+0032-20e3|Keycap 2|0
+0033-20e3|Keycap 3|0
+0034-20e3|Keycap 4|0
+0035-20e3|Keycap 5|0
+0036-20e3|Keycap 6|0
+0037-20e3|Keycap 7|0
+0038-20e3|Keycap 8|0
+0039-20e3|Keycap 9|0
+00a9|Copyright|0
+00ae|Registered|0
+1f004|Mahjong red dragon|0
+1f0cf|Joker|0
+1f170|A button blood type|0
+1f171|B button blood type|0
+1f17f|P button|0
+1f18e|Ab button blood type|0
+1f191|Cl button|0
+1f192|Cool button|0
+1f193|Free button|0
+1f194|Id button|0
+1f195|New button|0
+1f196|Ng button|0
+1f197|Ok button|0
+1f198|Sos button|0
+1f199|Up! button|0
+1f19a|Vs button|0
+1f201|Japanese here button|0
+1f202|Japanese service charge button|0
+1f21a|Japanese free of charge button|0
+1f22f|Japanese reserved button|0
+1f232|Japanese prohibited button|0
+1f233|Japanese vacancy button|0
+1f234|Japanese passing grade button|0
+1f235|Japanese no vacancy button|0
+1f236|Japanese not free of charge button|0
+1f237|Japanese monthly amount button|0
+1f238|Japanese application button|0
+1f239|Japanese discount button|0
+1f23a|Japanese open for business button|0
+1f250|Japanese bargain button|0
+1f251|Japanese acceptable button|0
+1f300|Cyclone|0
+1f301|Foggy|0
+1f302|Closed umbrella|0
+1f303|Night with stars|0
+1f304|Sunrise over mountains|0
+1f305|Sunrise|0
+1f306|Cityscape at dusk|0
+1f307|Sunset|0
+1f308|Rainbow|0
+1f309|Bridge at night|0
+1f30a|Water wave|0
+1f30b|Volcano|0
+1f30c|Milky way|0
+1f30d|Globe showing europe-africa|0
+1f30e|Globe showing americas|0
+1f30f|Globe showing asia-australia|0
+1f310|Globe with meridians|0
+1f311|New moon|0
+1f312|Waxing crescent moon|0
+1f313|First quarter moon|0
+1f314|Waxing gibbous moon|0
+1f315|Full moon|0
+1f316|Waning gibbous moon|0
+1f317|Last quarter moon|0
+1f318|Waning crescent moon|0
+1f319|Crescent moon|0
+1f31a|New moon face|0
+1f31b|First quarter moon face|0
+1f31c|Last quarter moon face|0
+1f31d|Full moon face|0
+1f31e|Sun with face|0
+1f31f|Glowing star|0
+1f320|Shooting star|0
+1f321|Thermometer|0
+1f324|Sun behind small cloud|0
+1f325|Sun behind large cloud|0
+1f326|Sun behind rain cloud|0
+1f327|Cloud with rain|0
+1f328|Cloud with snow|0
+1f329|Cloud with lightning|0
+1f32a|Tornado|0
+1f32b|Fog|0
+1f32c|Wind face|0
+1f32d|Hot dog|0
+1f32e|Taco|0
+1f32f|Burrito|0
+1f330|Chestnut|0
+1f331|Seedling|0
+1f332|Evergreen tree|0
+1f333|Deciduous tree|0
+1f334|Palm tree|0
+1f335|Cactus|0
+1f336|Hot pepper|0
+1f337|Tulip|0
+1f338|Cherry blossom|0
+1f339|Rose|0
+1f33a|Hibiscus|0
+1f33b|Sunflower|0
+1f33c|Blossom|0
+1f33d|Ear of corn|0
+1f33e|Sheaf of rice|0
+1f33f|Herb|0
+1f340|Four leaf clover|0
+1f341|Maple leaf|0
+1f342|Fallen leaf|0
+1f343|Leaf fluttering in wind|0
+1f344|Mushroom|0
+1f344-200d-1f7eb|Brown mushroom|0
+1f345|Tomato|0
+1f346|Eggplant|0
+1f347|Grapes|0
+1f348|Melon|0
+1f349|Watermelon|0
+1f34a|Tangerine|0
+1f34b|Lemon|0
+1f34b-200d-1f7e9|Lime|0
+1f34c|Banana|0
+1f34d|Pineapple|0
+1f34e|Red apple|0
+1f34f|Green apple|0
+1f350|Pear|0
+1f351|Peach|0
+1f352|Cherries|0
+1f353|Strawberry|0
+1f354|Hamburger|0
+1f355|Pizza|0
+1f356|Meat on bone|0
+1f357|Poultry leg|0
+1f358|Rice cracker|0
+1f359|Rice ball|0
+1f35a|Cooked rice|0
+1f35b|Curry rice|0
+1f35c|Steaming bowl|0
+1f35d|Spaghetti|0
+1f35e|Bread|0
+1f35f|French fries|0
+1f360|Roasted sweet potato|0
+1f361|Dango|0
+1f362|Oden|0
+1f363|Sushi|0
+1f364|Fried shrimp|0
+1f365|Fish cake with swirl|0
+1f366|Soft ice cream|0
+1f367|Shaved ice|0
+1f368|Ice cream|0
+1f369|Doughnut|0
+1f36a|Cookie|0
+1f36b|Chocolate bar|0
+1f36c|Candy|0
+1f36d|Lollipop|0
+1f36e|Custard|0
+1f36f|Honey pot|0
+1f370|Shortcake|0
+1f371|Bento box|0
+1f372|Pot of food|0
+1f373|Cooking|0
+1f374|Fork and knife|0
+1f375|Teacup without handle|0
+1f376|Sake|0
+1f377|Wine glass|0
+1f378|Cocktail glass|0
+1f379|Tropical drink|0
+1f37a|Beer mug|0
+1f37b|Clinking beer mugs|0
+1f37c|Baby bottle|0
+1f37d|Fork and knife with plate|0
+1f37e|Bottle with popping cork|0
+1f37f|Popcorn|0
+1f380|Ribbon|0
+1f381|Wrapped gift|0
+1f382|Birthday cake|0
+1f383|Jack-o-lantern|0
+1f384|Christmas tree|0
+1f385|Santa claus|1
+1f386|Fireworks|0
+1f387|Sparkler|0
+1f388|Balloon|0
+1f389|Party popper|0
+1f38a|Confetti ball|0
+1f38b|Tanabata tree|0
+1f38c|Crossed flags|0
+1f38d|Pine decoration|0
+1f38e|Japanese dolls|0
+1f38f|Carp streamer|0
+1f390|Wind chime|0
+1f391|Moon viewing ceremony|0
+1f392|Backpack|0
+1f393|Graduation cap|0
+1f396|Military medal|0
+1f397|Reminder ribbon|0
+1f399|Studio microphone|0
+1f39a|Level slider|0
+1f39b|Control knobs|0
+1f39e|Film frames|0
+1f39f|Admission tickets|0
+1f3a0|Carousel horse|0
+1f3a1|Ferris wheel|0
+1f3a2|Roller coaster|0
+1f3a3|Fishing pole|0
+1f3a4|Microphone|0
+1f3a5|Movie camera|0
+1f3a6|Cinema|0
+1f3a7|Headphone|0
+1f3a8|Artist palette|0
+1f3a9|Top hat|0
+1f3aa|Circus tent|0
+1f3ab|Ticket|0
+1f3ac|Clapper board|0
+1f3ad|Performing arts|0
+1f3ae|Video game|0
+1f3af|Bullseye|0
+1f3b0|Slot machine|0
+1f3b1|Pool 8 ball|0
+1f3b2|Game die|0
+1f3b3|Bowling|0
+1f3b4|Flower playing cards|0
+1f3b5|Musical note|0
+1f3b6|Musical notes|0
+1f3b7|Saxophone|0
+1f3b8|Guitar|0
+1f3b9|Musical keyboard|0
+1f3ba|Trumpet|0
+1f3bb|Violin|0
+1f3bc|Musical score|0
+1f3bd|Running shirt|0
+1f3be|Tennis|0
+1f3bf|Skis|0
+1f3c0|Basketball|0
+1f3c1|Chequered flag|0
+1f3c2|Snowboarder|1
+1f3c3|Person running|1
+1f3c3-200d-2640|Woman running|1
+1f3c3-200d-2640-200d-27a1|Woman running facing right|1
+1f3c3-200d-2642|Man running|1
+1f3c3-200d-2642-200d-27a1|Man running facing right|1
+1f3c3-200d-27a1|Person running facing right|1
+1f3c4|Person surfing|1
+1f3c4-200d-2640|Woman surfing|1
+1f3c4-200d-2642|Man surfing|1
+1f3c5|Sports medal|0
+1f3c6|Trophy|0
+1f3c7|Horse racing|1
+1f3c8|American football|0
+1f3c9|Rugby football|0
+1f3ca|Person swimming|1
+1f3ca-200d-2640|Woman swimming|1
+1f3ca-200d-2642|Man swimming|1
+1f3cb|Person lifting weights|1
+1f3cb-200d-2640|Woman lifting weights|1
+1f3cb-200d-2642|Man lifting weights|1
+1f3cc|Person golfing|1
+1f3cc-200d-2640|Woman golfing|1
+1f3cc-200d-2642|Man golfing|1
+1f3cd|Motorcycle|0
+1f3ce|Racing car|0
+1f3cf|Cricket game|0
+1f3d0|Volleyball|0
+1f3d1|Field hockey|0
+1f3d2|Ice hockey|0
+1f3d3|Ping pong|0
+1f3d4|Snow-capped mountain|0
+1f3d5|Camping|0
+1f3d6|Beach with umbrella|0
+1f3d7|Building construction|0
+1f3d8|Houses|0
+1f3d9|Cityscape|0
+1f3da|Derelict house|0
+1f3db|Classical building|0
+1f3dc|Desert|0
+1f3dd|Desert island|0
+1f3de|National park|0
+1f3df|Stadium|0
+1f3e0|House|0
+1f3e1|House with garden|0
+1f3e2|Office building|0
+1f3e3|Japanese post office|0
+1f3e4|Post office|0
+1f3e5|Hospital|0
+1f3e6|Bank|0
+1f3e7|Atm sign|0
+1f3e8|Hotel|0
+1f3e9|Love hotel|0
+1f3ea|Convenience store|0
+1f3eb|School|0
+1f3ec|Department store|0
+1f3ed|Factory|0
+1f3ee|Red paper lantern|0
+1f3ef|Japanese castle|0
+1f3f0|Castle|0
+1f3f3|White flag|0
+1f3f3-200d-1f308|Rainbow flag|0
+1f3f3-200d-26a7|Transgender flag|0
+1f3f4|Black flag|0
+1f3f4-200d-2620|Pirate flag|0
+1f3f5|Rosette|0
+1f3f7|Label|0
+1f3f8|Badminton|0
+1f3f9|Bow and arrow|0
+1f3fa|Amphora|0
+1f400|Rat|0
+1f401|Mouse|0
+1f402|Ox|0
+1f403|Water buffalo|0
+1f404|Cow|0
+1f405|Tiger|0
+1f406|Leopard|0
+1f407|Rabbit|0
+1f408|Cat|0
+1f408-200d-2b1b|Black cat|0
+1f409|Dragon|0
+1f40a|Crocodile|0
+1f40b|Whale|0
+1f40c|Snail|0
+1f40d|Snake|0
+1f40e|Horse|0
+1f40f|Ram|0
+1f410|Goat|0
+1f411|Ewe|0
+1f412|Monkey|0
+1f413|Rooster|0
+1f414|Chicken|0
+1f415|Dog|0
+1f415-200d-1f9ba|Service dog|0
+1f416|Pig|0
+1f417|Boar|0
+1f418|Elephant|0
+1f419|Octopus|0
+1f41a|Spiral shell|0
+1f41b|Bug|0
+1f41c|Ant|0
+1f41d|Honeybee|0
+1f41e|Lady beetle|0
+1f41f|Fish|0
+1f420|Tropical fish|0
+1f421|Blowfish|0
+1f422|Turtle|0
+1f423|Hatching chick|0
+1f424|Baby chick|0
+1f425|Front-facing baby chick|0
+1f426|Bird|0
+1f426-200d-1f525|Phoenix bird|0
+1f426-200d-2b1b|Blackbird|0
+1f427|Penguin|0
+1f428|Koala|0
+1f429|Poodle|0
+1f42a|Camel|0
+1f42b|Two-hump camel|0
+1f42c|Dolphin|0
+1f42d|Mouse face|0
+1f42e|Cow face|0
+1f42f|Tiger face|0
+1f430|Rabbit face|0
+1f431|Cat face|0
+1f432|Dragon face|0
+1f433|Spouting whale|0
+1f434|Horse face|0
+1f435|Monkey face|0
+1f436|Dog face|0
+1f437|Pig face|0
+1f438|Frog|0
+1f439|Hamster|0
+1f43a|Wolf|0
+1f43b|Bear|0
+1f43b-200d-2744|Polar bear|0
+1f43c|Panda|0
+1f43d|Pig nose|0
+1f43e|Paw prints|0
+1f43f|Chipmunk|0
+1f440|Eyes|0
+1f441|Eye|0
+1f441-200d-1f5e8|Eye in speech bubble|0
+1f442|Ear|1
+1f443|Nose|1
+1f444|Mouth|0
+1f445|Tongue|0
+1f446|Backhand index pointing up|1
+1f447|Backhand index pointing down|1
+1f448|Backhand index pointing left|1
+1f449|Backhand index pointing right|1
+1f44a|Oncoming fist|1
+1f44b|Waving hand|1
+1f44c|Ok hand|1
+1f44d|Thumbs up|1
+1f44e|Thumbs down|1
+1f44f|Clapping hands|1
+1f450|Open hands|1
+1f451|Crown|0
+1f452|Womans hat|0
+1f453|Glasses|0
+1f454|Necktie|0
+1f455|T-shirt|0
+1f456|Jeans|0
+1f457|Dress|0
+1f458|Kimono|0
+1f459|Bikini|0
+1f45a|Womans clothes|0
+1f45b|Purse|0
+1f45c|Handbag|0
+1f45d|Clutch bag|0
+1f45e|Mans shoe|0
+1f45f|Running shoe|0
+1f460|High-heeled shoe|0
+1f461|Womans sandal|0
+1f462|Womans boot|0
+1f463|Footprints|0
+1f464|Bust in silhouette|0
+1f465|Busts in silhouette|0
+1f466|Boy|1
+1f467|Girl|1
+1f468|Man|1
+1f468-200d-1f33e|Man farmer|1
+1f468-200d-1f373|Man cook|1
+1f468-200d-1f37c|Man feeding baby|1
+1f468-200d-1f393|Man student|1
+1f468-200d-1f3a4|Man singer|1
+1f468-200d-1f3a8|Man artist|1
+1f468-200d-1f3eb|Man teacher|1
+1f468-200d-1f3ed|Man factory worker|1
+1f468-200d-1f4bb|Man technologist|1
+1f468-200d-1f4bc|Man office worker|1
+1f468-200d-1f527|Man mechanic|1
+1f468-200d-1f52c|Man scientist|1
+1f468-200d-1f680|Man astronaut|1
+1f468-200d-1f692|Man firefighter|1
+1f468-200d-1f9af|Man with white cane|1
+1f468-200d-1f9af-200d-27a1|Man with white cane facing right|1
+1f468-200d-1f9b0|Man red hair|1
+1f468-200d-1f9b1|Man curly hair|1
+1f468-200d-1f9b2|Man bald|1
+1f468-200d-1f9b3|Man white hair|1
+1f468-200d-1f9bc|Man in motorized wheelchair|1
+1f468-200d-1f9bc-200d-27a1|Man in motorized wheelchair facing right|1
+1f468-200d-1f9bd|Man in manual wheelchair|1
+1f468-200d-1f9bd-200d-27a1|Man in manual wheelchair facing right|1
+1f468-200d-2695|Man health worker|1
+1f468-200d-2696|Man judge|1
+1f468-200d-2708|Man pilot|1
+1f469|Woman|1
+1f469-200d-1f33e|Woman farmer|1
+1f469-200d-1f373|Woman cook|1
+1f469-200d-1f37c|Woman feeding baby|1
+1f469-200d-1f393|Woman student|1
+1f469-200d-1f3a4|Woman singer|1
+1f469-200d-1f3a8|Woman artist|1
+1f469-200d-1f3eb|Woman teacher|1
+1f469-200d-1f3ed|Woman factory worker|1
+1f469-200d-1f4bb|Woman technologist|1
+1f469-200d-1f4bc|Woman office worker|1
+1f469-200d-1f527|Woman mechanic|1
+1f469-200d-1f52c|Woman scientist|1
+1f469-200d-1f680|Woman astronaut|1
+1f469-200d-1f692|Woman firefighter|1
+1f469-200d-1f9af|Woman with white cane|1
+1f469-200d-1f9af-200d-27a1|Woman with white cane facing right|1
+1f469-200d-1f9b0|Woman red hair|1
+1f469-200d-1f9b1|Woman curly hair|1
+1f469-200d-1f9b2|Woman bald|1
+1f469-200d-1f9b3|Woman white hair|1
+1f469-200d-1f9bc|Woman in motorized wheelchair|1
+1f469-200d-1f9bc-200d-27a1|Woman in motorized wheelchair facing right|1
+1f469-200d-1f9bd|Woman in manual wheelchair|1
+1f469-200d-1f9bd-200d-27a1|Woman in manual wheelchair facing right|1
+1f469-200d-2695|Woman health worker|1
+1f469-200d-2696|Woman judge|1
+1f469-200d-2708|Woman pilot|1
+1f46e|Police officer|1
+1f46e-200d-2640|Woman police officer|1
+1f46e-200d-2642|Man police officer|1
+1f46f|Person with bunny ears|0
+1f46f-200d-2640|Woman with bunny ears|0
+1f46f-200d-2642|Man with bunny ears|0
+1f470|Person with veil|1
+1f470-200d-2640|Woman with veil|1
+1f470-200d-2642|Man with veil|1
+1f471|Person blonde hair|1
+1f471-200d-2640|Woman blonde hair|1
+1f471-200d-2642|Man blonde hair|1
+1f472|Person with skullcap|1
+1f473|Person wearing turban|1
+1f473-200d-2640|Woman wearing turban|1
+1f473-200d-2642|Man wearing turban|1
+1f474|Old man|1
+1f475|Old woman|1
+1f476|Baby|1
+1f477|Construction worker|1
+1f477-200d-2640|Woman construction worker|1
+1f477-200d-2642|Man construction worker|1
+1f478|Princess|1
+1f479|Ogre|0
+1f47a|Goblin|0
+1f47b|Ghost|0
+1f47c|Baby angel|1
+1f47d|Alien|0
+1f47e|Alien monster|0
+1f47f|Angry face with horns|0
+1f480|Skull|0
+1f481|Person tipping hand|1
+1f481-200d-2640|Woman tipping hand|1
+1f481-200d-2642|Man tipping hand|1
+1f482|Guard|1
+1f482-200d-2640|Woman guard|1
+1f482-200d-2642|Man guard|1
+1f483|Woman dancing|1
+1f484|Lipstick|0
+1f485|Nail polish|1
+1f486|Person getting massage|1
+1f486-200d-2640|Woman getting massage|1
+1f486-200d-2642|Man getting massage|1
+1f487|Person getting haircut|1
+1f487-200d-2640|Woman getting haircut|1
+1f487-200d-2642|Man getting haircut|1
+1f488|Barber pole|0
+1f489|Syringe|0
+1f48a|Pill|0
+1f48b|Kiss mark|0
+1f48c|Love letter|0
+1f48d|Ring|0
+1f48e|Gem stone|0
+1f490|Bouquet|0
+1f492|Wedding|0
+1f493|Beating heart|0
+1f494|Broken heart|0
+1f495|Two hearts|0
+1f496|Sparkling heart|0
+1f497|Growing heart|0
+1f498|Heart with arrow|0
+1f499|Blue heart|0
+1f49a|Green heart|0
+1f49b|Yellow heart|0
+1f49c|Purple heart|0
+1f49d|Heart with ribbon|0
+1f49e|Revolving hearts|0
+1f49f|Heart decoration|0
+1f4a0|Diamond with a dot|0
+1f4a1|Light bulb|0
+1f4a2|Anger symbol|0
+1f4a3|Bomb|0
+1f4a4|Zzz|0
+1f4a5|Collision|0
+1f4a6|Sweat droplets|0
+1f4a7|Droplet|0
+1f4a8|Dashing away|0
+1f4a9|Pile of poo|0
+1f4aa|Flexed biceps|1
+1f4ab|Dizzy|0
+1f4ac|Speech balloon|0
+1f4ad|Thought balloon|0
+1f4ae|White flower|0
+1f4af|Hundred points|0
+1f4b0|Money bag|0
+1f4b1|Currency exchange|0
+1f4b2|Heavy dollar sign|0
+1f4b3|Credit card|0
+1f4b4|Yen banknote|0
+1f4b5|Dollar banknote|0
+1f4b6|Euro banknote|0
+1f4b7|Pound banknote|0
+1f4b8|Money with wings|0
+1f4b9|Chart increasing with yen|0
+1f4ba|Seat|0
+1f4bb|Laptop|0
+1f4bc|Briefcase|0
+1f4bd|Computer disk|0
+1f4be|Floppy disk|0
+1f4bf|Optical disk|0
+1f4c0|Dvd|0
+1f4c1|File folder|0
+1f4c2|Open file folder|0
+1f4c3|Page with curl|0
+1f4c4|Page facing up|0
+1f4c5|Calendar|0
+1f4c6|Tear-off calendar|0
+1f4c7|Card index|0
+1f4c8|Chart increasing|0
+1f4c9|Chart decreasing|0
+1f4ca|Bar chart|0
+1f4cb|Clipboard|0
+1f4cc|Pushpin|0
+1f4cd|Round pushpin|0
+1f4ce|Paperclip|0
+1f4cf|Straight ruler|0
+1f4d0|Triangular ruler|0
+1f4d1|Bookmark tabs|0
+1f4d2|Ledger|0
+1f4d3|Notebook|0
+1f4d4|Notebook with decorative cover|0
+1f4d5|Closed book|0
+1f4d6|Open book|0
+1f4d7|Green book|0
+1f4d8|Blue book|0
+1f4d9|Orange book|0
+1f4da|Books|0
+1f4db|Name badge|0
+1f4dc|Scroll|0
+1f4dd|Memo|0
+1f4de|Telephone receiver|0
+1f4df|Pager|0
+1f4e0|Fax machine|0
+1f4e1|Satellite antenna|0
+1f4e2|Loudspeaker|0
+1f4e3|Megaphone|0
+1f4e4|Outbox tray|0
+1f4e5|Inbox tray|0
+1f4e6|Package|0
+1f4e7|E-mail|0
+1f4e8|Incoming envelope|0
+1f4e9|Envelope with arrow|0
+1f4ea|Closed mailbox with lowered flag|0
+1f4eb|Closed mailbox with raised flag|0
+1f4ec|Open mailbox with raised flag|0
+1f4ed|Open mailbox with lowered flag|0
+1f4ee|Postbox|0
+1f4ef|Postal horn|0
+1f4f0|Newspaper|0
+1f4f1|Mobile phone|0
+1f4f2|Mobile phone with arrow|0
+1f4f3|Vibration mode|0
+1f4f4|Mobile phone off|0
+1f4f5|No mobile phones|0
+1f4f6|Antenna bars|0
+1f4f7|Camera|0
+1f4f8|Camera with flash|0
+1f4f9|Video camera|0
+1f4fa|Television|0
+1f4fb|Radio|0
+1f4fc|Videocassette|0
+1f4fd|Film projector|0
+1f4ff|Prayer beads|0
+1f500|Shuffle tracks button|0
+1f501|Repeat button|0
+1f502|Repeat single button|0
+1f503|Clockwise vertical arrows|0
+1f504|Counterclockwise arrows button|0
+1f505|Dim button|0
+1f506|Bright button|0
+1f507|Muted speaker|0
+1f508|Speaker low volume|0
+1f509|Speaker medium volume|0
+1f50a|Speaker high volume|0
+1f50b|Battery|0
+1f50c|Electric plug|0
+1f50d|Magnifying glass tilted left|0
+1f50e|Magnifying glass tilted right|0
+1f50f|Locked with pen|0
+1f510|Locked with key|0
+1f511|Key|0
+1f512|Locked|0
+1f513|Unlocked|0
+1f514|Bell|0
+1f515|Bell with slash|0
+1f516|Bookmark|0
+1f517|Link|0
+1f518|Radio button|0
+1f519|Back arrow|0
+1f51a|End arrow|0
+1f51b|On! arrow|0
+1f51c|Soon arrow|0
+1f51d|Top arrow|0
+1f51e|No one under eighteen|0
+1f51f|Keycap 10|0
+1f520|Input latin uppercase|0
+1f521|Input latin lowercase|0
+1f522|Input numbers|0
+1f523|Input symbols|0
+1f524|Input latin letters|0
+1f525|Fire|0
+1f526|Flashlight|0
+1f527|Wrench|0
+1f528|Hammer|0
+1f529|Nut and bolt|0
+1f52a|Kitchen knife|0
+1f52b|Water pistol|0
+1f52c|Microscope|0
+1f52d|Telescope|0
+1f52e|Crystal ball|0
+1f52f|Dotted six-pointed star|0
+1f530|Japanese symbol for beginner|0
+1f531|Trident emblem|0
+1f532|Black square button|0
+1f533|White square button|0
+1f534|Red circle|0
+1f535|Blue circle|0
+1f536|Large orange diamond|0
+1f537|Large blue diamond|0
+1f538|Small orange diamond|0
+1f539|Small blue diamond|0
+1f53a|Red triangle|0
+1f53b|Red triangle pointed down|0
+1f53c|Upwards button|0
+1f53d|Downwards button|0
+1f549|Om|0
+1f54a|Dove|0
+1f54b|Kaaba|0
+1f54c|Mosque|0
+1f54d|Synagogue|0
+1f54e|Menorah|0
+1f550|One oclock|0
+1f551|Two oclock|0
+1f552|Three oclock|0
+1f553|Four oclock|0
+1f554|Five oclock|0
+1f555|Six oclock|0
+1f556|Seven oclock|0
+1f557|Eight oclock|0
+1f558|Nine oclock|0
+1f559|Ten oclock|0
+1f55a|Eleven oclock|0
+1f55b|Twelve oclock|0
+1f55c|One-thirty|0
+1f55d|Two-thirty|0
+1f55e|Three-thirty|0
+1f55f|Four-thirty|0
+1f560|Five-thirty|0
+1f561|Six-thirty|0
+1f562|Seven-thirty|0
+1f563|Eight-thirty|0
+1f564|Nine-thirty|0
+1f565|Ten-thirty|0
+1f566|Eleven-thirty|0
+1f567|Twelve-thirty|0
+1f56f|Candle|0
+1f570|Mantelpiece clock|0
+1f573|Hole|0
+1f574|Person in suit levitating|1
+1f575|Detective|1
+1f575-200d-2640|Woman detective|1
+1f575-200d-2642|Man detective|1
+1f576|Sunglasses|0
+1f577|Spider|0
+1f578|Spider web|0
+1f579|Joystick|0
+1f57a|Man dancing|1
+1f587|Linked paperclips|0
+1f58a|Pen|0
+1f58b|Fountain pen|0
+1f58c|Paintbrush|0
+1f58d|Crayon|0
+1f590|Hand with fingers splayed|1
+1f595|Middle finger|1
+1f596|Vulcan salute|1
+1f5a4|Black heart|0
+1f5a5|Desktop computer|0
+1f5a8|Printer|0
+1f5b1|Computer mouse|0
+1f5b2|Trackball|0
+1f5bc|Framed picture|0
+1f5c2|Card index dividers|0
+1f5c3|Card file box|0
+1f5c4|File cabinet|0
+1f5d1|Wastebasket|0
+1f5d2|Spiral notepad|0
+1f5d3|Spiral calendar|0
+1f5dc|Clamp|0
+1f5dd|Old key|0
+1f5de|Rolled-up newspaper|0
+1f5e1|Dagger|0
+1f5e3|Speaking head|0
+1f5e8|Left speech bubble|0
+1f5ef|Right anger bubble|0
+1f5f3|Ballot box with ballot|0
+1f5fa|World map|0
+1f5fb|Mount fuji|0
+1f5fc|Tokyo tower|0
+1f5fd|Statue of liberty|0
+1f5fe|Map of japan|0
+1f5ff|Moai|0
+1f600|Grinning face|0
+1f601|Beaming face with smiling eyes|0
+1f602|Face with tears of joy|0
+1f603|Grinning face with big eyes|0
+1f604|Grinning face with smiling eyes|0
+1f605|Grinning face with sweat|0
+1f606|Grinning squinting face|0
+1f607|Smiling face with halo|0
+1f608|Smiling face with horns|0
+1f609|Winking face|0
+1f60a|Smiling face with smiling eyes|0
+1f60b|Face savoring food|0
+1f60c|Relieved face|0
+1f60d|Smiling face with heart-eyes|0
+1f60e|Smiling face with sunglasses|0
+1f60f|Smirking face|0
+1f610|Neutral face|0
+1f611|Expressionless face|0
+1f612|Unamused face|0
+1f613|Downcast face with sweat|0
+1f614|Pensive face|0
+1f615|Confused face|0
+1f616|Confounded face|0
+1f617|Kissing face|0
+1f618|Face blowing a kiss|0
+1f619|Kissing face with smiling eyes|0
+1f61a|Kissing face with closed eyes|0
+1f61b|Face with tongue|0
+1f61c|Winking face with tongue|0
+1f61d|Squinting face with tongue|0
+1f61e|Disappointed face|0
+1f61f|Worried face|0
+1f620|Angry face|0
+1f621|Pouting face|0
+1f622|Crying face|0
+1f623|Persevering face|0
+1f624|Face with steam from nose|0
+1f625|Sad but relieved face|0
+1f626|Frowning face with open mouth|0
+1f627|Anguished face|0
+1f628|Fearful face|0
+1f629|Weary face|0
+1f62a|Sleepy face|0
+1f62b|Tired face|0
+1f62c|Grimacing face|0
+1f62d|Loudly crying face|0
+1f62e|Face with open mouth|0
+1f62e-200d-1f4a8|Face exhaling|0
+1f62f|Hushed face|0
+1f630|Anxious face with sweat|0
+1f631|Face screaming in fear|0
+1f632|Astonished face|0
+1f633|Flushed face|0
+1f634|Sleeping face|0
+1f635|Knocked-out face|0
+1f635-200d-1f4ab|Face with spiral eyes|0
+1f636|Face without mouth|0
+1f636-200d-1f32b|Face in clouds|0
+1f637|Face with medical mask|0
+1f638|Grinning cat with smiling eyes|0
+1f639|Cat with tears of joy|0
+1f63a|Grinning cat|0
+1f63b|Smiling cat with heart-eyes|0
+1f63c|Cat with wry smile|0
+1f63d|Kissing cat|0
+1f63e|Pouting cat|0
+1f63f|Crying cat|0
+1f640|Weary cat|0
+1f641|Slightly frowning face|0
+1f642|Slightly smiling face|0
+1f642-200d-2194|Head shaking horizontally|0
+1f642-200d-2195|Head shaking vertically|0
+1f643|Upside-down face|0
+1f644|Face with rolling eyes|0
+1f645|Person gesturing no|1
+1f645-200d-2640|Woman gesturing no|1
+1f645-200d-2642|Man gesturing no|1
+1f646|Person gesturing ok|1
+1f646-200d-2640|Woman gesturing ok|1
+1f646-200d-2642|Man gesturing ok|1
+1f647|Person bowing|1
+1f647-200d-2640|Woman bowing|1
+1f647-200d-2642|Man bowing|1
+1f648|See-no-evil monkey|0
+1f649|Hear-no-evil monkey|0
+1f64a|Speak-no-evil monkey|0
+1f64b|Person raising hand|1
+1f64b-200d-2640|Woman raising hand|1
+1f64b-200d-2642|Man raising hand|1
+1f64c|Raising hands|1
+1f64d|Person frowning|1
+1f64d-200d-2640|Woman frowning|1
+1f64d-200d-2642|Man frowning|1
+1f64e|Person pouting|1
+1f64e-200d-2640|Woman pouting|1
+1f64e-200d-2642|Man pouting|1
+1f64f|Folded hands|1
+1f680|Rocket|0
+1f681|Helicopter|0
+1f682|Locomotive|0
+1f683|Railway car|0
+1f684|High-speed train|0
+1f685|Bullet train|0
+1f686|Train|0
+1f687|Metro|0
+1f688|Light rail|0
+1f689|Station|0
+1f68a|Tram|0
+1f68b|Tram car|0
+1f68c|Bus|0
+1f68d|Oncoming bus|0
+1f68e|Trolleybus|0
+1f68f|Bus stop|0
+1f690|Minibus|0
+1f691|Ambulance|0
+1f692|Fire engine|0
+1f693|Police car|0
+1f694|Oncoming police car|0
+1f695|Taxi|0
+1f696|Oncoming taxi|0
+1f697|Automobile|0
+1f698|Oncoming automobile|0
+1f699|Sport utility vehicle|0
+1f69a|Delivery truck|0
+1f69b|Articulated lorry|0
+1f69c|Tractor|0
+1f69d|Monorail|0
+1f69e|Mountain railway|0
+1f69f|Suspension railway|0
+1f6a0|Mountain cableway|0
+1f6a1|Aerial tramway|0
+1f6a2|Ship|0
+1f6a3|Person rowing boat|1
+1f6a3-200d-2640|Woman rowing boat|1
+1f6a3-200d-2642|Man rowing boat|1
+1f6a4|Speedboat|0
+1f6a5|Horizontal traffic light|0
+1f6a6|Vertical traffic light|0
+1f6a7|Construction|0
+1f6a8|Police car light|0
+1f6a9|Triangular flag|0
+1f6aa|Door|0
+1f6ab|Prohibited|0
+1f6ac|Cigarette|0
+1f6ad|No smoking|0
+1f6ae|Litter in bin sign|0
+1f6af|No littering|0
+1f6b0|Potable water|0
+1f6b1|Non-potable water|0
+1f6b2|Bicycle|0
+1f6b3|No bicycles|0
+1f6b4|Person biking|1
+1f6b4-200d-2640|Woman biking|1
+1f6b4-200d-2642|Man biking|1
+1f6b5|Person mountain biking|1
+1f6b5-200d-2640|Woman mountain biking|1
+1f6b5-200d-2642|Man mountain biking|1
+1f6b6|Person walking|1
+1f6b6-200d-2640|Woman walking|1
+1f6b6-200d-2640-200d-27a1|Woman walking facing right|1
+1f6b6-200d-2642|Man walking|1
+1f6b6-200d-2642-200d-27a1|Man walking facing right|1
+1f6b6-200d-27a1|Person walking facing right|1
+1f6b7|No pedestrians|0
+1f6b8|Children crossing|0
+1f6b9|Mens room|0
+1f6ba|Womens room|0
+1f6bb|Restroom|0
+1f6bc|Baby symbol|0
+1f6bd|Toilet|0
+1f6be|Water closet|0
+1f6bf|Shower|0
+1f6c0|Person taking bath|1
+1f6c1|Bathtub|0
+1f6c2|Passport control|0
+1f6c3|Customs|0
+1f6c4|Baggage claim|0
+1f6c5|Left luggage|0
+1f6cb|Couch and lamp|0
+1f6cc|Person in bed|1
+1f6cd|Shopping bags|0
+1f6ce|Bellhop bell|0
+1f6cf|Bed|0
+1f6d0|Place of worship|0
+1f6d1|Stop sign|0
+1f6d2|Shopping cart|0
+1f6d5|Hindu temple|0
+1f6d6|Hut|0
+1f6d7|Elevator|0
+1f6dc|Wireless|0
+1f6dd|Playground slide|0
+1f6de|Wheel|0
+1f6df|Ring buoy|0
+1f6e0|Hammer and wrench|0
+1f6e1|Shield|0
+1f6e2|Oil drum|0
+1f6e3|Motorway|0
+1f6e4|Railway track|0
+1f6e5|Motor boat|0
+1f6e9|Small airplane|0
+1f6eb|Airplane departure|0
+1f6ec|Airplane arrival|0
+1f6f0|Satellite|0
+1f6f3|Passenger ship|0
+1f6f4|Kick scooter|0
+1f6f5|Motor scooter|0
+1f6f6|Canoe|0
+1f6f7|Sled|0
+1f6f8|Flying saucer|0
+1f6f9|Skateboard|0
+1f6fa|Auto rickshaw|0
+1f6fb|Pickup truck|0
+1f6fc|Roller skate|0
+1f7e0|Orange circle|0
+1f7e1|Yellow circle|0
+1f7e2|Green circle|0
+1f7e3|Purple circle|0
+1f7e4|Brown circle|0
+1f7e5|Red square|0
+1f7e6|Blue square|0
+1f7e7|Orange square|0
+1f7e8|Yellow square|0
+1f7e9|Green square|0
+1f7ea|Purple square|0
+1f7eb|Brown square|0
+1f7f0|Heavy equals sign|0
+1f90c|Pinched fingers|1
+1f90d|White heart|0
+1f90e|Brown heart|0
+1f90f|Pinching hand|1
+1f910|Zipper-mouth face|0
+1f911|Money-mouth face|0
+1f912|Face with thermometer|0
+1f913|Nerd face|0
+1f914|Thinking face|0
+1f915|Face with head-bandage|0
+1f916|Robot|0
+1f917|Hugging face|0
+1f918|Sign of the horns|1
+1f919|Call me hand|1
+1f91a|Raised back of hand|1
+1f91b|Left-facing fist|1
+1f91c|Right-facing fist|1
+1f91d|Handshake|0
+1f91e|Crossed fingers|1
+1f91f|Love-you gesture|1
+1f920|Cowboy hat face|0
+1f921|Clown face|0
+1f922|Nauseated face|0
+1f923|Rolling on the floor laughing|0
+1f924|Drooling face|0
+1f925|Lying face|0
+1f926|Person facepalming|1
+1f926-200d-2640|Woman facepalming|1
+1f926-200d-2642|Man facepalming|1
+1f927|Sneezing face|0
+1f928|Face with raised eyebrow|0
+1f929|Star-struck|0
+1f92a|Zany face|0
+1f92b|Shushing face|0
+1f92c|Face with symbols on mouth|0
+1f92d|Face with hand over mouth|0
+1f92e|Face vomiting|0
+1f92f|Exploding head|0
+1f930|Pregnant woman|1
+1f931|Breast feeding|1
+1f932|Palms up together|1
+1f933|Selfie|1
+1f934|Prince|1
+1f935|Person in tuxedo|1
+1f935-200d-2640|Woman in tuxedo|1
+1f935-200d-2642|Man in tuxedo|1
+1f936|Mrs claus|1
+1f937|Person shrugging|1
+1f937-200d-2640|Woman shrugging|1
+1f937-200d-2642|Man shrugging|1
+1f938|Person cartwheeling|1
+1f938-200d-2640|Woman cartwheeling|1
+1f938-200d-2642|Man cartwheeling|1
+1f939|Person juggling|1
+1f939-200d-2640|Woman juggling|1
+1f939-200d-2642|Man juggling|1
+1f93a|Person fencing|0
+1f93c|Person wrestling|0
+1f93c-200d-2640|Woman wrestling|0
+1f93c-200d-2642|Man wrestling|0
+1f93d|Person playing water polo|1
+1f93d-200d-2640|Woman playing water polo|1
+1f93d-200d-2642|Man playing water polo|1
+1f93e|Person playing handball|1
+1f93e-200d-2640|Woman playing handball|1
+1f93e-200d-2642|Man playing handball|1
+1f93f|Diving mask|0
+1f940|Wilted flower|0
+1f941|Drum|0
+1f942|Clinking glasses|0
+1f943|Tumbler glass|0
+1f944|Spoon|0
+1f945|Goal net|0
+1f947|1st place medal|0
+1f948|2nd place medal|0
+1f949|3rd place medal|0
+1f94a|Boxing glove|0
+1f94b|Martial arts uniform|0
+1f94c|Curling stone|0
+1f94d|Lacrosse|0
+1f94e|Softball|0
+1f94f|Flying disc|0
+1f950|Croissant|0
+1f951|Avocado|0
+1f952|Cucumber|0
+1f953|Bacon|0
+1f954|Potato|0
+1f955|Carrot|0
+1f956|Baguette bread|0
+1f957|Green salad|0
+1f958|Shallow pan of food|0
+1f959|Stuffed flatbread|0
+1f95a|Egg|0
+1f95b|Glass of milk|0
+1f95c|Peanuts|0
+1f95d|Kiwi fruit|0
+1f95e|Pancakes|0
+1f95f|Dumpling|0
+1f960|Fortune cookie|0
+1f961|Takeout box|0
+1f962|Chopsticks|0
+1f963|Bowl with spoon|0
+1f964|Cup with straw|0
+1f965|Coconut|0
+1f966|Broccoli|0
+1f967|Pie|0
+1f968|Pretzel|0
+1f969|Cut of meat|0
+1f96a|Sandwich|0
+1f96b|Canned food|0
+1f96c|Leafy green|0
+1f96d|Mango|0
+1f96e|Moon cake|0
+1f96f|Bagel|0
+1f970|Smiling face with hearts|0
+1f971|Yawning face|0
+1f972|Smiling face with tear|0
+1f973|Partying face|0
+1f974|Woozy face|0
+1f975|Hot face|0
+1f976|Cold face|0
+1f977|Ninja|1
+1f978|Disguised face|0
+1f979|Face holding back tears|0
+1f97a|Pleading face|0
+1f97b|Sari|0
+1f97c|Lab coat|0
+1f97d|Goggles|0
+1f97e|Hiking boot|0
+1f97f|Flat shoe|0
+1f980|Crab|0
+1f981|Lion|0
+1f982|Scorpion|0
+1f983|Turkey|0
+1f984|Unicorn|0
+1f985|Eagle|0
+1f986|Duck|0
+1f987|Bat|0
+1f988|Shark|0
+1f989|Owl|0
+1f98a|Fox|0
+1f98b|Butterfly|0
+1f98c|Deer|0
+1f98d|Gorilla|0
+1f98e|Lizard|0
+1f98f|Rhinoceros|0
+1f990|Shrimp|0
+1f991|Squid|0
+1f992|Giraffe|0
+1f993|Zebra|0
+1f994|Hedgehog|0
+1f995|Sauropod|0
+1f996|T-rex|0
+1f997|Cricket|0
+1f998|Kangaroo|0
+1f999|Llama|0
+1f99a|Peacock|0
+1f99b|Hippopotamus|0
+1f99c|Parrot|0
+1f99d|Raccoon|0
+1f99e|Lobster|0
+1f99f|Mosquito|0
+1f9a0|Microbe|0
+1f9a1|Badger|0
+1f9a2|Swan|0
+1f9a3|Mammoth|0
+1f9a4|Dodo|0
+1f9a5|Sloth|0
+1f9a6|Otter|0
+1f9a7|Orangutan|0
+1f9a8|Skunk|0
+1f9a9|Flamingo|0
+1f9aa|Oyster|0
+1f9ab|Beaver|0
+1f9ac|Bison|0
+1f9ad|Seal|0
+1f9ae|Guide dog|0
+1f9af|White cane|0
+1f9b4|Bone|0
+1f9b5|Leg|1
+1f9b6|Foot|1
+1f9b7|Tooth|0
+1f9b8|Person superhero|1
+1f9b8-200d-2640|Woman superhero|1
+1f9b8-200d-2642|Man superhero|1
+1f9b9|Person supervillain|1
+1f9b9-200d-2640|Woman supervillain|1
+1f9b9-200d-2642|Man supervillain|1
+1f9ba|Safety vest|0
+1f9bb|Ear with hearing aid|1
+1f9bc|Motorized wheelchair|0
+1f9bd|Manual wheelchair|0
+1f9be|Mechanical arm|0
+1f9bf|Mechanical leg|0
+1f9c0|Cheese wedge|0
+1f9c1|Cupcake|0
+1f9c2|Salt|0
+1f9c3|Beverage box|0
+1f9c4|Garlic|0
+1f9c5|Onion|0
+1f9c6|Falafel|0
+1f9c7|Waffle|0
+1f9c8|Butter|0
+1f9c9|Mate|0
+1f9ca|Ice|0
+1f9cb|Bubble tea|0
+1f9cc|Troll|0
+1f9cd|Person standing|1
+1f9cd-200d-2640|Woman standing|1
+1f9cd-200d-2642|Man standing|1
+1f9ce|Person kneeling|1
+1f9ce-200d-2640|Woman kneeling|1
+1f9ce-200d-2640-200d-27a1|Woman kneeling facing right|1
+1f9ce-200d-2642|Man kneeling|1
+1f9ce-200d-2642-200d-27a1|Man kneeling facing right|1
+1f9ce-200d-27a1|Person kneeling facing right|1
+1f9cf|Person deaf|1
+1f9cf-200d-2640|Woman deaf|1
+1f9cf-200d-2642|Man deaf|1
+1f9d0|Face with monocle|0
+1f9d1|Person|1
+1f9d1-200d-1f33e|Farmer|1
+1f9d1-200d-1f373|Cook|1
+1f9d1-200d-1f37c|Person feeding baby|1
+1f9d1-200d-1f384|Mx claus|1
+1f9d1-200d-1f393|Student|1
+1f9d1-200d-1f3a4|Singer|1
+1f9d1-200d-1f3a8|Artist|1
+1f9d1-200d-1f3eb|Teacher|1
+1f9d1-200d-1f3ed|Factory worker|1
+1f9d1-200d-1f4bb|Technologist|1
+1f9d1-200d-1f4bc|Office worker|1
+1f9d1-200d-1f527|Mechanic|1
+1f9d1-200d-1f52c|Scientist|1
+1f9d1-200d-1f680|Astronaut|1
+1f9d1-200d-1f692|Firefighter|1
+1f9d1-200d-1f9af|Person with white cane|1
+1f9d1-200d-1f9af-200d-27a1|Person with white cane facing right|1
+1f9d1-200d-1f9b0|Person red hair|1
+1f9d1-200d-1f9b1|Person curly hair|1
+1f9d1-200d-1f9b2|Person bald|1
+1f9d1-200d-1f9b3|Person white hair|1
+1f9d1-200d-1f9bc|Person in motorized wheelchair|1
+1f9d1-200d-1f9bc-200d-27a1|Person in motorized wheelchair facing right|1
+1f9d1-200d-1f9bd|Person in manual wheelchair|1
+1f9d1-200d-1f9bd-200d-27a1|Person in manual wheelchair facing right|1
+1f9d1-200d-2695|Health worker|1
+1f9d1-200d-2696|Judge|1
+1f9d1-200d-2708|Pilot|1
+1f9d2|Child|1
+1f9d3|Older person|1
+1f9d4|Person beard|1
+1f9d4-200d-2640|Woman beard|1
+1f9d4-200d-2642|Man beard|1
+1f9d5|Woman with headscarf|1
+1f9d6|Person in steamy room|1
+1f9d6-200d-2640|Woman in steamy room|1
+1f9d6-200d-2642|Man in steamy room|1
+1f9d7|Person climbing|1
+1f9d7-200d-2640|Woman climbing|1
+1f9d7-200d-2642|Man climbing|1
+1f9d8|Person in lotus position|1
+1f9d8-200d-2640|Woman in lotus position|1
+1f9d8-200d-2642|Man in lotus position|1
+1f9d9|Person mage|1
+1f9d9-200d-2640|Woman mage|1
+1f9d9-200d-2642|Man mage|1
+1f9da|Person fairy|1
+1f9da-200d-2640|Woman fairy|1
+1f9da-200d-2642|Man fairy|1
+1f9db|Person vampire|1
+1f9db-200d-2640|Woman vampire|1
+1f9db-200d-2642|Man vampire|1
+1f9dc|Person merpeople|1
+1f9dc-200d-2640|Woman merpeople|1
+1f9dc-200d-2642|Man merpeople|1
+1f9dd|Person elf|1
+1f9dd-200d-2640|Woman elf|1
+1f9dd-200d-2642|Man elf|1
+1f9de|Person genie|0
+1f9de-200d-2640|Woman genie|0
+1f9de-200d-2642|Man genie|0
+1f9df|Person zombie|0
+1f9df-200d-2640|Woman zombie|0
+1f9df-200d-2642|Man zombie|0
+1f9e0|Brain|0
+1f9e1|Orange heart|0
+1f9e2|Billed cap|0
+1f9e3|Scarf|0
+1f9e4|Gloves|0
+1f9e5|Coat|0
+1f9e6|Socks|0
+1f9e7|Red envelope|0
+1f9e8|Firecracker|0
+1f9e9|Puzzle piece|0
+1f9ea|Test tube|0
+1f9eb|Petri dish|0
+1f9ec|Dna|0
+1f9ed|Compass|0
+1f9ee|Abacus|0
+1f9ef|Fire extinguisher|0
+1f9f0|Toolbox|0
+1f9f1|Brick|0
+1f9f2|Magnet|0
+1f9f3|Luggage|0
+1f9f4|Lotion bottle|0
+1f9f5|Thread|0
+1f9f6|Yarn|0
+1f9f7|Safety pin|0
+1f9f8|Teddy bear|0
+1f9f9|Broom|0
+1f9fa|Basket|0
+1f9fb|Roll of paper|0
+1f9fc|Soap|0
+1f9fd|Sponge|0
+1f9fe|Receipt|0
+1f9ff|Nazar amulet|0
+1fa70|Ballet shoes|0
+1fa71|One-piece swimsuit|0
+1fa72|Briefs|0
+1fa73|Shorts|0
+1fa74|Thong sandal|0
+1fa75|Light blue heart|0
+1fa76|Grey heart|0
+1fa77|Pink heart|0
+1fa78|Drop of blood|0
+1fa79|Adhesive bandage|0
+1fa7a|Stethoscope|0
+1fa7b|X-ray|0
+1fa7c|Crutch|0
+1fa80|Yo-yo|0
+1fa81|Kite|0
+1fa82|Parachute|0
+1fa83|Boomerang|0
+1fa84|Magic wand|0
+1fa85|Piñata|0
+1fa86|Nesting dolls|0
+1fa87|Maracas|0
+1fa88|Flute|0
+1fa90|Ringed planet|0
+1fa91|Chair|0
+1fa92|Razor|0
+1fa93|Axe|0
+1fa94|Diya lamp|0
+1fa95|Banjo|0
+1fa96|Military helmet|0
+1fa97|Accordion|0
+1fa98|Long drum|0
+1fa99|Coin|0
+1fa9a|Carpentry saw|0
+1fa9b|Screwdriver|0
+1fa9c|Ladder|0
+1fa9d|Hook|0
+1fa9e|Mirror|0
+1fa9f|Window|0
+1faa0|Plunger|0
+1faa1|Sewing needle|0
+1faa2|Knot|0
+1faa3|Bucket|0
+1faa4|Mouse trap|0
+1faa5|Toothbrush|0
+1faa6|Headstone|0
+1faa7|Placard|0
+1faa8|Rock|0
+1faa9|Mirror ball|0
+1faaa|Identification card|0
+1faab|Low battery|0
+1faac|Hamsa|0
+1faad|Folding hand fan|0
+1faae|Hair pick|0
+1faaf|Khanda|0
+1fab0|Fly|0
+1fab1|Worm|0
+1fab2|Beetle|0
+1fab3|Cockroach|0
+1fab4|Potted plant|0
+1fab5|Wood|0
+1fab6|Feather|0
+1fab7|Lotus|0
+1fab8|Coral|0
+1fab9|Empty nest|0
+1faba|Nest with eggs|0
+1fabb|Hyacinth|0
+1fabc|Jellyfish|0
+1fabd|Wing|0
+1fabf|Goose|0
+1fac0|Anatomical heart|0
+1fac1|Lungs|0
+1fac2|People hugging|0
+1fac3|Pregnant man|1
+1fac4|Pregnant person|1
+1fac5|Person with crown|1
+1face|Moose|0
+1facf|Donkey|0
+1fad0|Blueberries|0
+1fad1|Bell pepper|0
+1fad2|Olive|0
+1fad3|Flatbread|0
+1fad4|Tamale|0
+1fad5|Fondue|0
+1fad6|Teapot|0
+1fad7|Pouring liquid|0
+1fad8|Beans|0
+1fad9|Jar|0
+1fada|Ginger root|0
+1fadb|Pea pod|0
+1fae0|Melting face|0
+1fae1|Saluting face|0
+1fae2|Face with open eyes and hand over mouth|0
+1fae3|Face with peeking eye|0
+1fae4|Face with diagonal mouth|0
+1fae5|Dotted line face|0
+1fae6|Biting lip|0
+1fae7|Bubbles|0
+1fae8|Shaking face|0
+1faf0|Hand with index finger and thumb crossed|1
+1faf1|Rightwards hand|1
+1faf2|Leftwards hand|1
+1faf3|Palm down hand|1
+1faf4|Palm up hand|1
+1faf5|Index pointing at the viewer|1
+1faf6|Heart hands|1
+1faf7|Leftwards pushing hand|1
+1faf8|Rightwards pushing hand|1
+203c|Double exclamation mark|0
+2049|Exclamation question mark|0
+2122|Trade mark|0
+2139|Information|0
+2194|Left-right arrow|0
+2195|Up-down arrow|0
+2196|Up-left arrow|0
+2197|Up-right arrow|0
+2198|Down-right arrow|0
+2199|Down-left arrow|0
+21a9|Right arrow curving left|0
+21aa|Left arrow curving right|0
+231a|Watch|0
+231b|Hourglass done|0
+2328|Keyboard|0
+23cf|Eject button|0
+23e9|Fast-forward button|0
+23ea|Fast reverse button|0
+23eb|Fast up button|0
+23ec|Fast down button|0
+23ed|Next track button|0
+23ee|Last track button|0
+23ef|Play or pause button|0
+23f0|Alarm clock|0
+23f1|Stopwatch|0
+23f2|Timer clock|0
+23f3|Hourglass not done|0
+23f8|Pause button|0
+23f9|Stop button|0
+23fa|Record button|0
+24c2|Circled m|0
+25aa|Black small square|0
+25ab|White small square|0
+25b6|Play button|0
+25c0|Reverse button|0
+25fb|White medium square|0
+25fc|Black medium square|0
+25fd|White medium-small square|0
+25fe|Black medium-small square|0
+2600|Sun|0
+2601|Cloud|0
+2602|Umbrella|0
+2603|Snowman|0
+2604|Comet|0
+260e|Telephone|0
+2611|Check box with check|0
+2614|Umbrella with rain drops|0
+2615|Hot beverage|0
+2618|Shamrock|0
+261d|Index pointing up|1
+2620|Skull and crossbones|0
+2622|Radioactive|0
+2623|Biohazard|0
+2626|Orthodox cross|0
+262a|Star and crescent|0
+262e|Peace symbol|0
+262f|Yin yang|0
+2638|Wheel of dharma|0
+2639|Frowning face|0
+263a|Smiling face|0
+2640|Female sign|0
+2642|Male sign|0
+2648|Aries|0
+2649|Taurus|0
+264a|Gemini|0
+264b|Cancer|0
+264c|Leo|0
+264d|Virgo|0
+264e|Libra|0
+264f|Scorpio|0
+2650|Sagittarius|0
+2651|Capricorn|0
+2652|Aquarius|0
+2653|Pisces|0
+265f|Chess pawn|0
+2660|Spade suit|0
+2663|Club suit|0
+2665|Heart suit|0
+2666|Diamond suit|0
+2668|Hot springs|0
+267b|Recycling symbol|0
+267e|Infinity|0
+267f|Wheelchair symbol|0
+2692|Hammer and pick|0
+2693|Anchor|0
+2694|Crossed swords|0
+2695|Medical symbol|0
+2696|Balance scale|0
+2697|Alembic|0
+2699|Gear|0
+269b|Atom symbol|0
+269c|Fleur-de-lis|0
+26a0|Warning|0
+26a1|High voltage|0
+26a7|Transgender symbol|0
+26aa|White circle|0
+26ab|Black circle|0
+26b0|Coffin|0
+26b1|Funeral urn|0
+26bd|Soccer ball|0
+26be|Baseball|0
+26c4|Snowman without snow|0
+26c5|Sun behind cloud|0
+26c8|Cloud with lightning and rain|0
+26ce|Ophiuchus|0
+26cf|Pick|0
+26d1|Rescue workers helmet|0
+26d3|Chains|0
+26d3-200d-1f4a5|Broken chain|0
+26d4|No entry|0
+26e9|Shinto shrine|0
+26ea|Church|0
+26f0|Mountain|0
+26f1|Umbrella on ground|0
+26f2|Fountain|0
+26f3|Flag in hole|0
+26f4|Ferry|0
+26f5|Sailboat|0
+26f7|Skier|0
+26f8|Ice skate|0
+26f9|Person bouncing ball|1
+26f9-200d-2640|Woman bouncing ball|1
+26f9-200d-2642|Man bouncing ball|1
+26fa|Tent|0
+26fd|Fuel pump|0
+2702|Scissors|0
+2705|Check mark button|0
+2708|Airplane|0
+2709|Envelope|0
+270a|Raised fist|1
+270b|Raised hand|1
+270c|Victory hand|1
+270d|Writing hand|1
+270f|Pencil|0
+2712|Black nib|0
+2714|Check mark|0
+2716|Multiply|0
+271d|Latin cross|0
+2721|Star of david|0
+2728|Sparkles|0
+2733|Eight-spoked asterisk|0
+2734|Eight-pointed star|0
+2744|Snowflake|0
+2747|Sparkle|0
+274c|Cross mark|0
+274e|Cross mark button|0
+2753|Red question mark|0
+2754|White question mark|0
+2755|White exclamation mark|0
+2757|Red exclamation mark|0
+2763|Heart exclamation|0
+2764|Red heart|0
+2764-200d-1f525|Heart on fire|0
+2764-200d-1fa79|Mending heart|0
+2795|Plus|0
+2796|Minus|0
+2797|Divide|0
+27a1|Right arrow|0
+27b0|Curly loop|0
+27bf|Double curly loop|0
+2934|Right arrow curving up|0
+2935|Right arrow curving down|0
+2b05|Left arrow|0
+2b06|Up arrow|0
+2b07|Down arrow|0
+2b1b|Black large square|0
+2b1c|White large square|0
+2b50|Star|0
+2b55|Hollow red circle|0
+3030|Wavy dash|0
+303d|Part alternation mark|0
+3297|Japanese congratulations button|0
+3299|Japanese secret button|0

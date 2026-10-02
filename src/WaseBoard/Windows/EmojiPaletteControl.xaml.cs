@@ -29,6 +29,13 @@ namespace WaseBoard.Windows
 
         public event Action<string>? EmojiChosen;
 
+        private static Image CreateEmojiImage(string emoji)
+        {
+            var image = new Image { Source = EmojiImageResolver.Resolve(emoji), Width = 28, Height = 28 };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+            return image;
+        }
+
         public EmojiPaletteControl()
         {
             InitializeComponent();
@@ -39,9 +46,9 @@ namespace WaseBoard.Windows
                 // le format d'emoji récent de Windows 11).
                 var button = new Button
                 {
-                    Content = new Image { Source = EmojiImageResolver.Resolve(emoji), Width = 22, Height = 22 },
-                    Width = 36,
-                    Height = 36,
+                    Content = CreateEmojiImage(emoji),
+                    Width = 38,
+                    Height = 38,
                     Margin = new Thickness(2),
                     Background = Brushes.Transparent,
                     BorderThickness = new Thickness(0),

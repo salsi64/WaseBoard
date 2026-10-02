@@ -32,6 +32,8 @@
 
   <ItemGroup>
     <Resource Include="Assets\app.ico" />
+    <!-- Index des emojis Fluent 3D (voir EmojiImageResolver). LogicalName : nom stable pour GetManifestResourceStream. -->
+    <EmbeddedResource Include="Assets\fluent-emoji-index.txt" LogicalName="fluent-emoji-index.txt" />
   </ItemGroup>
 
   <ItemGroup>
