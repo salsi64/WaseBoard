@@ -292,9 +292,51 @@ namespace WaseBoard
             SettingsButton.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
             MainVolumePanel.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
 
+            // Thème moderne : « En ce moment » et le statut serveur vivent dans la barre latérale, la
+            // barre du haut (qui ne servait qu'à ça) disparaît et rend ses 40 px aux sons.
+            TopStrip.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
+            PlaceStatusPanel(isModern);
+            ApplyToolbarDensity();
+
             // Les boutons de son utilisent un ItemTemplateSelector qui lit ThemeState.IsModern :
             // il faut reconstruire les sections pour que le changement de gabarit soit pris en compte.
             RefreshSections();
+        }
+
+        /// <summary>Rattache le statut serveur (point + « Connecté — N sons ») à la barre latérale en
+        /// thème moderne, ou à la barre du haut en classique : un seul jeu d'éléments, déplacé, plutôt
+        /// que deux copies à tenir synchronisées.</summary>
+        private void PlaceStatusPanel(bool isModern)
+        {
+            Panel target = isModern ? SidebarStatusHost : StripStatusHost;
+            if (!ReferenceEquals(StatusPanel.Parent, target))
+            {
+                (StatusPanel.Parent as Panel)?.Children.Remove(StatusPanel);
+                target.Children.Add(StatusPanel);
+            }
+            StatusPanel.HorizontalAlignment = isModern ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        }
+
+        private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => ApplyToolbarDensity();
+
+        /// <summary>Quand la fenêtre est étroite, raccourcit les libellés de la barre d'outils (icônes seules) pour que
+        /// la recherche garde au moins 150 px et que rien ne se chevauche. Seuils = largeur nécessaire avec libellés
+        /// complets (le thème classique porte en plus le titre, le volume et Paramètres dans cette barre).</summary>
+        private void ApplyToolbarDensity()
+        {
+            if (JoinVoiceLabel is null) return; // encore en cours d'InitializeComponent
+
+            var sidebarWidth = ThemeState.IsModern ? SidebarColumn.Width.Value : 0;
+            var available = ActualWidth - sidebarWidth - 24;
+            var compact = available < (ThemeState.IsModern ? 700 : 1020);
+
+            var labels = compact ? Visibility.Collapsed : Visibility.Visible;
+            JoinVoiceLabel.Visibility = labels;
+            StopAllLabel.Visibility = labels;
+            AddCategoryLabel.Visibility = labels;
+            AddSoundLabel.Text = compact ? " Son" : " Ajouter un son";
+            // Le titre de l'application est déjà dans la barre de titre de la fenêtre : on le retire en premier.
+            TitleText.Visibility = !ThemeState.IsModern && !compact ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private bool _reloginPromptShowing;
@@ -567,8 +609,9 @@ namespace WaseBoard
             var visibility = _sidebarCollapsed ? Visibility.Collapsed : Visibility.Visible;
             SidebarHeaderText.Visibility = visibility;
             SidebarHomeButton.Visibility = visibility;
-            SidebarNavScroll.Visibility = visibility;
+            SidebarMiddle.Visibility = visibility;
             SidebarFooter.Visibility = visibility;
+            ApplyToolbarDensity();
         }
 
         private async Task RefreshCatalogAsync()

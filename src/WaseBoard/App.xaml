@@ -38,7 +38,8 @@
                                 CornerRadius="10"
                                 Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                                RecognizesAccessKey="True"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -55,6 +56,76 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Barres de défilement : fines, arrondies, discrètes (teinte du texte à faible opacité) au lieu du
+             gris système clair, très voyant sur une palette sombre. -->
+        <ControlTemplate x:Key="ScrollBarVerticalTemplate" TargetType="ScrollBar">
+            <Grid Background="Transparent" Width="12">
+                <Track x:Name="PART_Track" IsDirectionReversed="True">
+                    <Track.DecreaseRepeatButton>
+                        <RepeatButton Command="ScrollBar.PageUpCommand" Focusable="False" IsTabStop="False">
+                            <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                        </RepeatButton>
+                    </Track.DecreaseRepeatButton>
+                    <Track.IncreaseRepeatButton>
+                        <RepeatButton Command="ScrollBar.PageDownCommand" Focusable="False" IsTabStop="False">
+                            <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                        </RepeatButton>
+                    </Track.IncreaseRepeatButton>
+                    <Track.Thumb>
+                        <Thumb>
+                            <Thumb.Template>
+                                <ControlTemplate TargetType="Thumb">
+                                    <Border x:Name="ThumbBorder" Margin="3,2" CornerRadius="3" Background="{DynamicResource TextBrush}" Opacity="0.22"/>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbBorder" Property="Opacity" Value="0.45"/></Trigger>
+                                        <Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbBorder" Property="Opacity" Value="0.6"/></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Thumb.Template>
+                        </Thumb>
+                    </Track.Thumb>
+                </Track>
+            </Grid>
+        </ControlTemplate>
+        <ControlTemplate x:Key="ScrollBarHorizontalTemplate" TargetType="ScrollBar">
+            <Grid Background="Transparent" Height="12">
+                <Track x:Name="PART_Track">
+                    <Track.DecreaseRepeatButton>
+                        <RepeatButton Command="ScrollBar.PageLeftCommand" Focusable="False" IsTabStop="False">
+                            <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                        </RepeatButton>
+                    </Track.DecreaseRepeatButton>
+                    <Track.IncreaseRepeatButton>
+                        <RepeatButton Command="ScrollBar.PageRightCommand" Focusable="False" IsTabStop="False">
+                            <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                        </RepeatButton>
+                    </Track.IncreaseRepeatButton>
+                    <Track.Thumb>
+                        <Thumb>
+                            <Thumb.Template>
+                                <ControlTemplate TargetType="Thumb">
+                                    <Border x:Name="ThumbBorder" Margin="2,3" CornerRadius="3" Background="{DynamicResource TextBrush}" Opacity="0.22"/>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbBorder" Property="Opacity" Value="0.45"/></Trigger>
+                                        <Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbBorder" Property="Opacity" Value="0.6"/></Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Thumb.Template>
+                        </Thumb>
+                    </Track.Thumb>
+                </Track>
+            </Grid>
+        </ControlTemplate>
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template" Value="{StaticResource ScrollBarVerticalTemplate}"/>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Template" Value="{StaticResource ScrollBarHorizontalTemplate}"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- Sliders : piste fine arrondie, portion remplie en accent, curseur circulaire -->
