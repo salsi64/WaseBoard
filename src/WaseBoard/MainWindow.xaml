@@ -164,11 +164,14 @@
             </Button>
         </DataTemplate>
 
-        <!-- Gabarit moderne (pilule) : largeur adaptée au nom (96 → 210 px, nom tronqué au-delà). Pendant la
-             lecture, l'avatar de qui joue remplace la pastille d'icône (« +N » s'ils sont plusieurs) et un halo
-             de la couleur du son respire derrière — la pilule ne change jamais de taille. -->
+        <!-- Gabarit moderne (pilule à deux lignes) : largeur adaptée au nom (96 → 210 px, nom tronqué au-delà).
+             Ligne du haut : pastille d'icône (couleur du son + emoji) et nom. Ligne du bas : mini-waveform du son
+             (portion gardée en clair si le son est découpé) et, à droite, les avatars de ceux qui jouent ce son —
+             nettement séparés de l'emoji. La hauteur de la ligne du bas est réservée en permanence, et la waveform
+             s'adapte à la place restante : la pilule ne change jamais de taille pendant la lecture. Un halo de la
+             couleur du son respire derrière. -->
         <DataTemplate x:Key="ModernSoundButtonTemplate">
-            <Button Height="38" Margin="3" MinWidth="96" MaxWidth="210"
+            <Button Height="48" Margin="3" MinWidth="118" MaxWidth="210"
                     Click="SoundButton_Click"
                     MouseRightButtonUp="SoundButton_RightClick"
                     PreviewMouseLeftButtonDown="SoundButton_PreviewMouseLeftButtonDown"
@@ -181,15 +184,15 @@
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
                         <Grid>
-                            <Border x:Name="Halo" Visibility="Collapsed" Margin="-5" CornerRadius="24" IsHitTestVisible="False" Opacity="0.3"
+                            <Border x:Name="Halo" Visibility="Collapsed" Margin="-5" CornerRadius="22" IsHitTestVisible="False" Opacity="0.3"
                                     Background="{Binding Id, Converter={StaticResource IdToColorConverter}}">
                                 <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
                             </Border>
-                            <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="19"
-                                    BorderThickness="2" BorderBrush="Transparent" Padding="3,0,12,0">
+                            <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="18"
+                                    BorderThickness="2" BorderBrush="Transparent" Padding="4,3,10,3">
                                 <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                             </Border>
-                            <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="19" BorderThickness="2" IsHitTestVisible="False"
+                            <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="18" BorderThickness="2" IsHitTestVisible="False"
                                     BorderBrush="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -210,18 +213,23 @@
                     </ControlTemplate>
                 </Button.Template>
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="12"/>
+                    </Grid.RowDefinitions>
 
-                    <!-- Pastille d'icône (couleur du son + emoji) ; l'avatar de qui joue la recouvre pendant la lecture -->
-                    <Grid Grid.Column="0" Width="28" Height="28" Margin="0,0,8,0" Cursor="Hand" Background="Transparent"
-                          MouseLeftButtonDown="PreviewIcon_MouseLeftButtonDown"
-                          ToolTip="Aperçu (lecture locale uniquement, sans envoi à Discord)">
-                        <Border CornerRadius="14">
+                    <!-- Ligne du haut : pastille d'icône, nom, ★, raccourci (c'est elle qui fixe la largeur de la pilule) -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Width="26" Height="26" CornerRadius="13" Margin="0,0,8,0" Cursor="Hand"
+                                MouseLeftButtonDown="PreviewIcon_MouseLeftButtonDown"
+                                ToolTip="Aperçu (lecture locale uniquement, sans envoi à Discord)">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Background" Value="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
@@ -233,45 +241,69 @@
                                 </Style>
                             </Border.Style>
                             <Image Source="{Binding Emoji, Converter={StaticResource EmojiToImageSourceConverter}, ConverterParameter=🔊}"
-                                   Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                   Width="15" Height="15" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <Ellipse Visibility="{Binding HasActivePlayers, Converter={StaticResource BoolToVisibilityConverter}}"
-                                 ToolTip="{Binding ActiveUsersTooltip}"
-                                 Stroke="{Binding Id, Converter={StaticResource IdToColorConverter}}" StrokeThickness="2">
-                            <Ellipse.Fill>
-                                <ImageBrush ImageSource="{Binding PrimaryAvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
-                            </Ellipse.Fill>
-                        </Ellipse>
-                        <Border Visibility="{Binding HasExtraActivePlayers, Converter={StaticResource BoolToVisibilityConverter}}"
-                                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-5,-3" Height="14" MinWidth="14"
-                                CornerRadius="7" Padding="3,0" Background="{DynamicResource BgBrush}"
-                                BorderBrush="{Binding Id, Converter={StaticResource IdToColorConverter}}" BorderThickness="1">
-                            <TextBlock Text="{Binding ExtraActiveUsersText}" FontSize="9" FontWeight="Bold" VerticalAlignment="Center"
-                                       HorizontalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+
+                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+
+                        <TextBlock Grid.Column="2" Text="★" Foreground="Gold" FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"
+                                   Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                        <!-- Badge de raccourci clavier : affiché en permanence s'il existe (jamais seulement au survol,
+                             sinon la pilule s'élargirait au survol et décalerait ses voisines). -->
+                        <Border Grid.Column="3" Background="{DynamicResource BgBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
+                                CornerRadius="4" Padding="4,1" Margin="6,0,0,0" VerticalAlignment="Center">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Hotkey, Converter={StaticResource StringNotEmptyConverter}}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="{Binding Hotkey}" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
                         </Border>
                     </Grid>
 
-                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-
-                    <TextBlock Grid.Column="2" Text="★" Foreground="Gold" FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"
-                               Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVisibilityConverter}}"/>
-
-                    <!-- Badge de raccourci clavier : affiché en permanence s'il existe (jamais seulement au survol,
-                         sinon la pilule s'élargirait au survol et décalerait ses voisines). -->
-                    <Border Grid.Column="3" Background="{DynamicResource BgBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
-                            CornerRadius="4" Padding="4,1" Margin="6,0,0,0" VerticalAlignment="Center">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Hotkey, Converter={StaticResource StringNotEmptyConverter}}" Value="True">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <TextBlock Text="{Binding Hotkey}" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
-                    </Border>
+                    <!-- Ligne du bas : mini-waveform (largeur naturelle faible : c'est le nom qui fixe la largeur de la pilule)
+                         et avatars de ceux qui jouent ce son. Son découpé : portion gardée en clair, reste estompé. -->
+                    <Grid Grid.Row="1" Margin="2,2,2,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <local:FillWidthHost Grid.Column="0" Height="8" VerticalAlignment="Center">
+                            <Path Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Opacity="0.85"
+                                  Stretch="Fill"
+                                  Data="{Binding WaveformPeaks, Converter={StaticResource WaveformPeaksToPathConverter}, ConverterParameter='40,8'}">
+                                <Path.OpacityMask>
+                                    <MultiBinding Converter="{StaticResource TrimMaskConverter}">
+                                        <Binding Path="TrimStartMs"/>
+                                        <Binding Path="TrimEndMs"/>
+                                        <Binding Path="DurationMs"/>
+                                    </MultiBinding>
+                                </Path.OpacityMask>
+                            </Path>
+                        </local:FillWidthHost>
+                        <ItemsControl Grid.Column="1" ItemsSource="{Binding ActiveUsers}" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="18" Height="18" CornerRadius="9" Margin="3,0,0,0"
+                                            BorderBrush="{DynamicResource TextBrush}" BorderThickness="1.5"
+                                            ToolTip="{Binding Username}">
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{Binding AvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
+                                        </Border.Background>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
                 </Grid>
             </Button>
         </DataTemplate>

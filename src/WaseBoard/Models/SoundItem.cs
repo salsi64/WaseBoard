@@ -1,7 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
 using System.Text.Json.Serialization;
 
 namespace WaseBoard.Models
@@ -169,38 +168,6 @@ namespace WaseBoard.Models
         /// <summary>Utilisateurs actuellement en train de jouer ce son (avatars affichés sur le bouton), mis à jour par le sondage d'activité.</summary>
         [JsonIgnore]
         public ObservableCollection<UserActivity> ActiveUsers { get; } = new();
-
-        public SoundItem()
-        {
-            // Les propriétés dérivées ci-dessous se recalculent quand le sondage d'activité ajoute/retire un joueur.
-            ActiveUsers.CollectionChanged += (_, _) =>
-            {
-                OnChanged(nameof(HasActivePlayers));
-                OnChanged(nameof(HasExtraActivePlayers));
-                OnChanged(nameof(PrimaryAvatarUrl));
-                OnChanged(nameof(ExtraActiveUsersText));
-                OnChanged(nameof(ActiveUsersTooltip));
-            };
-        }
-
-        [JsonIgnore]
-        public bool HasActivePlayers => ActiveUsers.Count > 0;
-
-        [JsonIgnore]
-        public bool HasExtraActivePlayers => ActiveUsers.Count > 1;
-
-        /// <summary>Avatar de la personne qui joue ce son (la première, s'il y en a plusieurs) : il remplace
-        /// la pastille d'icône pendant la lecture. Chaîne vide si personne ne joue.</summary>
-        [JsonIgnore]
-        public string PrimaryAvatarUrl => ActiveUsers.Count > 0 ? ActiveUsers[0].AvatarUrl : "";
-
-        /// <summary>« +N » quand plusieurs personnes jouent ce son en même temps, sinon vide.</summary>
-        [JsonIgnore]
-        public string ExtraActiveUsersText => ActiveUsers.Count > 1 ? $"+{ActiveUsers.Count - 1}" : "";
-
-        /// <summary>Noms de ceux qui jouent ce son, pour l'infobulle de la pastille.</summary>
-        [JsonIgnore]
-        public string ActiveUsersTooltip => string.Join(", ", ActiveUsers.Select(u => u.Username));
 
         private float[]? _waveformPeaks;
 
