@@ -1,0 +1,19 @@
+# Rien de secret ni de vivant dans l'image : configuration et données restent hors de l'image (.env, volume /data).
+config.json
+.env
+.env.*
+sounds_data/
+*.jsonl
+*.tmp
+shared_categories.json
+oauth_sessions.json
+guild_settings.json
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.md
+setup.sh
+setup.ps1
+docker-compose.yml
+Caddyfile

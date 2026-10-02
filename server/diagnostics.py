@@ -258,14 +258,17 @@ async def check_public_url(session: aiohttp.ClientSession, public_url: str) -> l
 
 
 async def run_checks(config: dict, data_dir: Path, session: aiohttp.ClientSession,
-                     with_network: bool = True) -> tuple[list[Check], Optional[str]]:
-    """Tous les contrôles qui ne dépendent pas d'un serveur Discord précis. Renvoie (contrôles, id d'application)."""
+                     with_network: bool = True, with_public_check: bool = True) -> tuple[list[Check], Optional[str]]:
+    """Tous les contrôles qui ne dépendent pas d'un serveur Discord précis. Renvoie (contrôles, id d'application).
+    with_public_check=False : ne cherche pas à joindre public_url (avant que le serveur ne soit démarré, l'adresse
+    ne peut évidemment pas répondre encore)."""
     checks = check_config(config) + check_tools() + check_data_dir(data_dir)
     application_id: Optional[str] = None
     if with_network:
         discord_checks, application_id = await check_discord(session, config.get("bot_token", ""))
         checks += discord_checks
-        checks += await check_public_url(session, config.get("public_url", ""))
+        if with_public_check:
+            checks += await check_public_url(session, config.get("public_url", ""))
     return checks, application_id
 
 
@@ -313,7 +316,7 @@ def check_guild(guild, member=None) -> list[Check]:
     return checks
 
 
-# ---------- Ligne de commande : python server.py --check | --invite-url ----------
+# ---------- Ligne de commande : python server.py --check [--no-public-check] | --invite-url ----------
 
 async def _cli_async(argv: list[str], config: dict, data_dir: Path) -> int:
     async with aiohttp.ClientSession() as session:
@@ -329,7 +332,8 @@ async def _cli_async(argv: list[str], config: dict, data_dir: Path) -> int:
             print(build_invite_url(application_id))
             return 0
 
-        checks, application_id = await run_checks(config, data_dir, session)
+        checks, application_id = await run_checks(config, data_dir, session,
+                                                  with_public_check="--no-public-check" not in argv)
         print(render(checks, markdown=False))
         if application_id:
             print(f"\nURL d'invitation du bot : {build_invite_url(application_id)}")

@@ -14,6 +14,7 @@ import logging
 import os
 import secrets
 import shutil
+import signal
 import sys
 import threading
 import time
@@ -2135,8 +2136,14 @@ def main() -> int:
         print("Jeton du bot manquant : renseignez bot_token dans config.json (copiez config.example.json) ou la "
               "variable d'environnement WASEBOARD_BOT_TOKEN — voir README.md.", file=sys.stderr)
         return 1
+    # `docker stop` / `systemctl stop` envoient SIGTERM : sans gestionnaire, un processus PID 1 (conteneur) l'ignore et
+    # Docker finit par le tuer au bout de 10 s ; en le traitant comme Ctrl+C, discord.py ferme proprement ses connexions
+    # (salons vocaux quittés, sessions HTTP fermées) puis le processus se termine aussitôt, avec le code 0.
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     try:
-        bot.run(BOT_TOKEN)
+        # log_handler=None : le logging est déjà configuré en haut du fichier ; sans ça, discord.py ajoute son propre
+        # gestionnaire et chaque ligne apparaît en double dans le journal (systemd comme `docker compose logs`).
+        bot.run(BOT_TOKEN, log_handler=None)
     except discord.LoginFailure:
         print("❌ Discord a refusé le jeton du bot (invalide ou réinitialisé). Portail Discord > votre application > "
               "Bot > Reset Token, puis mettez-le à jour. `python server.py --check` détaille le problème.", file=sys.stderr)

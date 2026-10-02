@@ -1,8 +1,8 @@
 # Serveur WaseBoard
 
 Héberge le catalogue de sons partagé et le bot Discord qui les joue dans le salon vocal.
-Tourne en continu sur une machine Linux accessible en permanence (testé sur Linux Mint/Ubuntu).
-Chacun héberge sa propre instance — pas de serveur central fourni avec le projet.
+Tourne en continu sur une machine accessible en permanence (Linux recommandé ; Windows et macOS
+via Docker Desktop). Chacun héberge sa propre instance — pas de serveur central fourni avec le projet.
 
 ```
 [PC utilisateur A]  ──┐
@@ -16,6 +16,65 @@ Chacun héberge sa propre instance — pas de serveur central fourni avec le pro
 - Chaque clic identifie l'utilisateur Discord qui l'a déclenché ; le serveur retrouve seul
   son salon vocal — rien à choisir côté client.
 
+**Deux façons d'installer** : l'[installation rapide avec Docker](#installation-rapide-docker)
+(recommandée : HTTPS automatique, un assistant qui vérifie tout) ou l'[installation manuelle](#installation-manuelle-avancé)
+(Python + systemd + nginx, sans Docker).
+
+## Installation rapide (Docker)
+
+Il vous faut : une machine allumée en permanence avec [Docker](https://docs.docker.com/engine/install/)
+(Docker Desktop sous Windows/macOS), et pour un accès depuis Internet un nom de domaine (un sous-domaine
+gratuit [DuckDNS](https://www.duckdns.org/) convient) dont les ports **80 et 443** sont redirigés vers cette machine.
+
+1. **Créez l'application Discord** — [étape 1](#1-créer-lapplication-bot-discord) ci-dessous : jeton du bot,
+   « Server Members Intent » activé, puis (étape 4) secret OAuth2 et redirection
+   `http://127.0.0.1:48899/callback/`. Vous n'avez **pas** à fabriquer l'URL d'invitation ni à copier le Client ID :
+   l'assistant s'en charge.
+2. **Récupérez le serveur** : `git clone https://github.com/salsi64/WaseBoard.git` puis `cd WaseBoard/server`
+   (ou téléchargez le dossier `server`).
+3. **Lancez l'assistant** :
+   - Linux / macOS : `./setup.sh`
+   - Windows (PowerShell) : `.\setup.ps1` (si l'exécution est bloquée : `powershell -ExecutionPolicy Bypass -File .\setup.ps1`)
+
+   Il demande le jeton du bot, le secret OAuth2 et le nom de domaine, génère le secret partagé, écrit `.env`, puis
+   **vérifie la configuration** (jeton, intent, redirection OAuth2, ffmpeg...) et affiche l'**URL pour inviter le bot**
+   sur votre serveur Discord. Une fois tout au vert il démarre le serveur et attend qu'il soit prêt.
+4. **Dans Discord** : `/diagnostic` (contrôle des droits du bot sur vos salons vocaux), puis `/configurer-invitation`
+   dans le salon où vos membres récupèrent leur lien (voir [étape 7](#7-distribuer-le-lien-de-connexion)).
+
+Ce que l'assistant met en place : le serveur (image construite depuis ce dossier, utilisateur sans privilèges,
+redémarrage automatique), **Caddy** pour le HTTPS (certificat Let's Encrypt obtenu et renouvelé tout seul) et,
+si vous le souhaitez, un conteneur **DuckDNS** qui garde votre sous-domaine à jour. Trois modes : Internet avec
+HTTPS (défaut), réseau local sans HTTPS (test), ou votre propre reverse proxy (le serveur écoute alors sur
+`127.0.0.1:5005`). Tout tient dans `.env` (modèle commenté : `.env.example`) — vous pouvez aussi le remplir à
+la main et lancer `docker compose up -d`.
+
+**Au quotidien**
+
+| Besoin | Commande (dans `server/`) |
+|---|---|
+| Journal en direct | `docker compose logs -f waseboard` |
+| Arrêter / démarrer | `docker compose stop` / `docker compose up -d` |
+| Mettre à jour | `git pull` puis `docker compose up -d --build` |
+| Vérifier la configuration | `docker compose exec waseboard python server.py --check` (ou `/diagnostic` dans Discord) |
+| Modifier la configuration | éditer `.env` puis `docker compose up -d` (ou relancer l'assistant) |
+
+**Données et sauvegarde.** Tout ce qui est précieux (catalogue, sons, sessions, réglages, statistiques, corbeille)
+est dans le volume Docker `waseboard_waseboard-data` — il survit aux mises à jour et à `docker compose down`
+(**jamais** `docker compose down -v`, qui l'efface). Sauvegarde d'une archive :
+
+```bash
+docker run --rm -v waseboard_waseboard-data:/data -v "$PWD":/backup alpine \
+    tar czf /backup/waseboard-data-$(date +%F).tgz -C /data .
+```
+
+Pensez aussi à garder `.env` (jeton, secrets) en lieu sûr. Les certificats HTTPS sont dans le volume `caddy-data`
+(refaits automatiquement s'ils sont perdus).
+
+## Installation manuelle (avancé)
+
+Les étapes 1 à 8 ci-dessous décrivent une installation sans Docker (les étapes 1, 2, 4 et 7 valent aussi pour Docker).
+
 ## 1. Créer l'application bot Discord
 
 1. https://discord.com/developers/applications > **New Application**.
@@ -26,9 +85,12 @@ Chacun héberge sa propre instance — pas de serveur central fourni avec le pro
 
 ## 2. Inviter le bot sur votre serveur Discord
 
+Le plus simple : `python3 server.py --invite-url` (ou, avec Docker, l'URL affichée par l'assistant) donne l'URL
+d'invitation toute prête, avec les bons scopes et droits. À la main :
+
 1. Onglet **OAuth2 > URL Generator**.
 2. Scopes : **bot** + **applications.commands**.
-3. Bot Permissions : **Connect** + **Speak**.
+3. Bot Permissions : **View Channels** + **Connect** + **Speak**.
 4. Ouvrez l'URL générée, choisissez votre serveur, autorisez.
 
 ## 3. Installer sur la machine serveur

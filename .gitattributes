@@ -1,0 +1,7 @@
+# Fichiers lus par Linux/Docker : toujours des fins de ligne LF, même après un clone sous Windows.
+server/*.sh text eol=lf
+server/Dockerfile text eol=lf
+server/Caddyfile text eol=lf
+server/docker-compose.yml text eol=lf
+server/.env.example text eol=lf
+server/.dockerignore text eol=lf

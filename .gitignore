@@ -17,6 +17,9 @@ server/oauth_sessions.json
 server/stats.jsonl
 server/guild_settings.json
 server/audit.jsonl
+# Configuration Docker (jeton du bot, secrets) : jamais dans git
+server/.env
+server/.env.bak-*
 
 # Divers
 .vs/
