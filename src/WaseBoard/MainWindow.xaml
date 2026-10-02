@@ -168,7 +168,7 @@
              s'adapte à la place restante : la pilule ne change jamais de taille pendant la lecture. Un halo de la
              couleur du son respire derrière. -->
         <DataTemplate x:Key="ModernSoundButtonTemplate">
-            <Button Height="50" Margin="3" MinWidth="118" MaxWidth="210"
+            <Button Height="54" Margin="3" MinWidth="118" MaxWidth="210"
                     Click="SoundButton_Click"
                     MouseRightButtonUp="SoundButton_RightClick"
                     PreviewMouseLeftButtonDown="SoundButton_PreviewMouseLeftButtonDown"
@@ -186,7 +186,7 @@
                                 <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
                             </Border>
                             <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="18"
-                                    BorderThickness="2" BorderBrush="Transparent" Padding="4,3,15,3">
+                                    BorderThickness="2" BorderBrush="Transparent" Padding="4,3,15,4">
                                 <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                             </Border>
                             <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="18" BorderThickness="2" IsHitTestVisible="False"
@@ -212,7 +212,7 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="14"/>
+                        <RowDefinition Height="17"/>
                     </Grid.RowDefinitions>
 
                     <!-- Ligne du haut : pastille d'icône, nom, ★, raccourci (c'est elle qui fixe la largeur de la pilule) -->
@@ -266,7 +266,7 @@
 
                     <!-- Ligne du bas : mini-waveform (largeur naturelle faible : c'est le nom qui fixe la largeur de la pilule)
                          et avatars de ceux qui jouent ce son. Son découpé : portion gardée en clair, reste estompé. -->
-                    <Grid Grid.Row="1" Margin="2,2,2,0">
+                    <Grid Grid.Row="1" Margin="2,1,2,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
