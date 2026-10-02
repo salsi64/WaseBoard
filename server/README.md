@@ -46,8 +46,10 @@ pip install -r requirements.txt
 Copiez `config.example.json` vers `config.json` et renseignez :
 - `bot_token` : le token de l'étape 1.
 - `guild_id` *(recommandé)* : ID de votre serveur Discord (Discord > Paramètres avancés >
-  Mode développeur, puis clic droit sur le serveur > Copier l'ID) — sinon les commandes slash
-  mettent jusqu'à 1h à apparaître au lieu d'être instantanées.
+  Mode développeur, puis clic droit sur le serveur > Copier l'ID) — active la synchronisation
+  instantanée des commandes slash (`/join`, `/leave`...) sur **tous** les serveurs où le bot
+  est présent, y compris ceux qu'il rejoindra plus tard ; sans lui, la synchronisation est
+  globale et peut mettre jusqu'à 1h à apparaître.
 - `shared_secret` : un mot de passe long et aléatoire (32+ caractères) — c'est la seule
   protection de l'API, choisissez-le en conséquence.
 - `http_host` : laissez `0.0.0.0`.

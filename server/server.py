@@ -327,6 +327,7 @@ class WaseBoardServer(commands.Bot):
         self.oauth_sessions: dict[str, dict] = load_oauth_sessions()
         self._session_refresh_locks: dict[str, asyncio.Lock] = {}
         self.http_session: Optional[aiohttp.ClientSession] = None
+        self._commands_synced = False  # on_ready peut se rejouer à chaque reconnexion
 
     async def setup_hook(self) -> None:
         self.http_session = aiohttp.ClientSession()
@@ -336,16 +337,40 @@ class WaseBoardServer(commands.Bot):
         # retenir où il a été posté.
         self.add_view(InviteView())
 
-        if GUILD_ID:
-            guild = discord.Object(id=GUILD_ID)
-            self.tree.copy_global_to(guild=guild)
-            await self.tree.sync(guild=guild)
-            log.info("Commandes slash synchronisées sur le serveur %s (instantané).", GUILD_ID)
-        else:
+        if not GUILD_ID:
             await self.tree.sync()
             log.info("Commandes slash synchronisées globalement (peut prendre jusqu'à 1h à apparaître).")
+        # Avec guild_id configuré : synchronisation instantanée PAR serveur, faite dans on_ready /
+        # on_guild_join (self.guilds n'est pas encore rempli à ce stade).
 
         await self._start_http_server()
+
+    async def _sync_commands_to_guild(self, guild: discord.abc.Snowflake) -> None:
+        """Rend les commandes slash disponibles immédiatement sur ce serveur (la synchro globale
+        met jusqu'à 1h à se propager). Sans ça, seul le serveur de guild_id aurait /join & co —
+        le bot étant multi-serveurs, tous ceux où il est présent doivent les avoir."""
+        self.tree.copy_global_to(guild=guild)
+        await self.tree.sync(guild=guild)
+
+    async def on_ready(self) -> None:
+        if not GUILD_ID or self._commands_synced:
+            return
+        self._commands_synced = True
+        for guild in self.guilds:
+            try:
+                await self._sync_commands_to_guild(guild)
+                log.info("Commandes slash synchronisées sur le serveur %s (%s).", guild.id, guild.name)
+            except Exception:
+                log.exception("Échec de la synchronisation des commandes sur %s", guild.id)
+
+    async def on_guild_join(self, guild: discord.Guild) -> None:
+        if not GUILD_ID:
+            return  # synchro globale : déjà valable pour ce nouveau serveur
+        try:
+            await self._sync_commands_to_guild(guild)
+            log.info("Commandes slash synchronisées sur le nouveau serveur %s (%s).", guild.id, guild.name)
+        except Exception:
+            log.exception("Échec de la synchronisation des commandes sur %s", guild.id)
 
     async def close(self) -> None:
         if self.http_session is not None:
@@ -1062,6 +1087,16 @@ class WaseBoardServer(commands.Bot):
                          "vocal où le bot est présent (/join), puis réessayez."
             }, status=400)
 
+        # L'audio est envoyé dans le vocal de CETTE guilde : l'utilisateur doit en être membre.
+        # Sans ça, un guild_id forgé dans la requête (ou le filet "un seul vocal connecté" de
+        # resolve_guild_id) permettrait de faire jouer des sons dans le vocal d'une guilde étrangère.
+        visible = await self.resolve_visible_guild_ids(int(user_id))
+        if str(guild_id) not in visible:
+            return web.json_response(
+                {"error": "Vous n'êtes pas membre du serveur Discord ciblé."},
+                status=403,
+            )
+
         vc = self.voice_clients_map.get(guild_id)
         mixer = self.mixers.get(guild_id)
         if vc is None or not vc.is_connected() or mixer is None:
@@ -1074,11 +1109,9 @@ class WaseBoardServer(commands.Bot):
         if entry is None:
             return web.json_response({"error": f"son introuvable : {sound_id}"}, status=404)
 
-        # Visibilité sur TOUTES les guildes de l'utilisateur, pas seulement celle où il se trouve
-        # actuellement en vocal : un utilisateur membre de plusieurs guildes doit pouvoir jouer
-        # n'importe lequel de ses sons dans le salon où il est, sans avoir à le partager
-        # explicitement vers chaque guilde au préalable.
-        visible = await self.resolve_visible_guild_ids(int(user_id))
+        # Visibilité du son sur TOUTES les guildes de l'utilisateur (`visible`, calculé plus haut),
+        # pas seulement celle où il se trouve en vocal : un membre de plusieurs guildes peut jouer
+        # n'importe lequel de ses sons dans le salon où il est, sans partage explicite préalable.
         if not self.sound_visible_to(entry, visible):
             return web.json_response(
                 {"error": "Ce son n'appartient à aucune de vos guildes Discord connues."},
@@ -1136,6 +1169,11 @@ class WaseBoardServer(commands.Bot):
         guild_id = self.resolve_guild_id(data.get("guild_id"), session["user_id"])
         if guild_id is None:
             return web.json_response({"error": "Impossible de déterminer le salon Discord cible."}, status=400)
+
+        # Même règle que /play : seul un membre de la guilde ciblée peut couper son audio.
+        visible = await self.resolve_visible_guild_ids(int(session["user_id"]))
+        if str(guild_id) not in visible:
+            return web.json_response({"error": "Vous n'êtes pas membre du serveur Discord ciblé."}, status=403)
 
         mixer = self.mixers.get(guild_id)
         if mixer is None:
