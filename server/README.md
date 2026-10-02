@@ -204,6 +204,12 @@ d'un rôle Discord désigné (utile pour déléguer sans donner la permission Ad
 | Renommer, changer l'emoji, supprimer un son | son auteur, ou un admin de la guilde où le son a été uploadé |
 | Ajouter/retirer un son d'une catégorie partagée | son auteur, ou un admin de cette guilde |
 
+**Découpe non destructive.** Quand on découpe un son à l'ajout, le serveur garde le **fichier
+complet** et mémorise seulement le début et la fin retenus (`trim_start_ms` / `trim_end_ms`) ;
+`ffmpeg` ne joue que cette portion. L'auteur (ou un admin) peut donc recouper le son plus tard,
+même après des semaines, sans le renvoyer. L'emoji se choisit aussi dès l'ajout. Les sons
+ajoutés avant cette fonction restent tels quels (leur fichier était déjà découpé).
+
 Les sons uploadés avant l'arrivée des rôles n'ont pas d'auteur enregistré : seuls les admins
 peuvent les gérer. Un son supprimé va dans une **corbeille** (fichier conservé, partages
 mémorisés) : un admin peut le restaurer pendant `trash_retention_days` jours.

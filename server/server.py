@@ -382,6 +382,39 @@ async def probe_duration_seconds(path: Path) -> Optional[float]:
         return None
 
 
+MIN_TRIM_MS = 100
+MAX_TRIM_MS = 3_600_000  # 1 h : garde-fou contre des valeurs absurdes, pas une vraie limite de durée
+
+
+def parse_trim(raw_start, raw_end) -> Optional[tuple[int, int]]:
+    """Découpe non destructive d'un son : (début, fin) en millisecondes, ou None si aucune (les deux
+    absents/vides = son entier). Lève ValueError avec un message lisible si incohérent."""
+    def blank(value) -> bool:
+        return value is None or str(value).strip() == ""
+
+    if blank(raw_start) and blank(raw_end):
+        return None
+    if blank(raw_start) or blank(raw_end):
+        raise ValueError("La découpe demande un début ET une fin.")
+    try:
+        start, end = int(str(raw_start).strip()), int(str(raw_end).strip())
+    except ValueError:
+        raise ValueError("Le début et la fin de la découpe doivent être des nombres de millisecondes.")
+    if start < 0 or end > MAX_TRIM_MS or end - start < MIN_TRIM_MS:
+        raise ValueError("Découpe invalide : la portion gardée doit durer au moins 0,1 s.")
+    return start, end
+
+
+def trim_ffmpeg_options(entry: dict) -> tuple[Optional[str], Optional[str]]:
+    """(before_options, options) à passer à FFmpegPCMAudio pour ne jouer que la portion gardée.
+    Le fichier stocké reste l'original complet : -ss avant l'entrée (positionnement) et -t après
+    (durée) donnent un découpage précis, y compris sur du MP3 à débit variable."""
+    start, end = entry.get("trim_start_ms"), entry.get("trim_end_ms")
+    if not isinstance(start, int) or not isinstance(end, int) or end <= start:
+        return None, None
+    return f"-ss {start / 1000:.3f}", f"-t {(end - start) / 1000:.3f}"
+
+
 def load_trash() -> list[dict]:
     if not TRASH_PATH.exists():
         return []
@@ -1097,6 +1130,14 @@ class WaseBoardServer(commands.Bot):
             if not name or file_field is None or not raw_guild_id:
                 return web.json_response({"error": "champs 'name', 'file' et 'guild_id' requis"}, status=400)
 
+            # Découpe non destructive (facultative) : le fichier stocké est l'original complet, la portion
+            # gardée n'est qu'une paire de repères appliquée à la lecture. L'emoji se choisit dès l'ajout.
+            try:
+                trim = parse_trim(data.get("trim_start_ms"), data.get("trim_end_ms"))
+            except ValueError as ex:
+                return web.json_response({"error": str(ex)}, status=400)
+            emoji = str(data.get("emoji", "")).strip()[:32]
+
             user_id = session["user_id"]
             memberships = await self.find_memberships(int(user_id))
             if not any(str(g.id) == raw_guild_id for g, _ in memberships):
@@ -1119,8 +1160,8 @@ class WaseBoardServer(commands.Bot):
                 return web.json_response({"error": f"extension non supportée : {extension}"}, status=400)
 
             # Hash du contenu (calculé ici, jamais fourni par le client) : sert de base à la
-            # détection de doublons côté client, qui compare son fichier final (après découpe)
-            # au hash de chaque son déjà présent dans le catalogue avant d'uploader.
+            # détection de doublons côté client, qui compare son fichier source (l'original, avant
+            # toute découpe) au hash de chaque son déjà présent dans le catalogue avant d'uploader.
             file_bytes = file_field.file.read()
             content_hash = hashlib.sha256(file_bytes).hexdigest()
 
@@ -1133,9 +1174,11 @@ class WaseBoardServer(commands.Bot):
             with open(destination, "wb") as out_file:
                 out_file.write(file_bytes)
 
+            # La limite de durée porte sur ce qui sera réellement joué : la portion gardée si le son est
+            # découpé, sinon le fichier entier (mesuré avec ffprobe).
             max_duration = settings["max_duration_s"]
             if max_duration > 0:
-                duration = await probe_duration_seconds(destination)
+                duration = (trim[1] - trim[0]) / 1000 if trim else await probe_duration_seconds(destination)
                 if duration is not None and duration > max_duration:
                     destination.unlink(missing_ok=True)
                     return web.json_response(
@@ -1149,6 +1192,10 @@ class WaseBoardServer(commands.Bot):
                 "id": sound_id, "name": name, "extension": extension, "hash": content_hash,
                 "guild_id": raw_guild_id, "uploaded_by": str(user_id), "uploaded_at": int(time.time()),
             }
+            if trim:
+                entry["trim_start_ms"], entry["trim_end_ms"] = trim
+            if emoji:
+                entry["emoji"] = emoji
             catalog.append(entry)
             save_catalog(catalog)
             record_audit(raw_guild_id, user_id, session.get("username"), "upload", sound_id, name)
@@ -1160,8 +1207,8 @@ class WaseBoardServer(commands.Bot):
             return web.json_response({"error": str(ex)}, status=500)
 
     async def _handle_update_sound(self, request: web.Request) -> web.Response:
-        """PATCH /sounds/{id} : renomme et/ou change l'emoji d'un son (partages entre tous les
-        utilisateurs, contrairement aux favoris/categories/volume/raccourcis, locaux)."""
+        """PATCH /sounds/{id} : renomme, change l'emoji et/ou la découpe d'un son (partagés entre
+        tous les utilisateurs, contrairement aux favoris/categories/volume/raccourcis, locaux)."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
         session, err = await self._require_session(request)
@@ -1188,26 +1235,50 @@ class WaseBoardServer(commands.Bot):
             return web.json_response(
                 {"error": "Seuls l'auteur du son ou un administrateur du serveur peuvent le modifier."}, status=403)
 
-        if "name" not in data and "emoji" not in data:
-            return web.json_response({"error": "'name' ou 'emoji' requis"}, status=400)
+        has_trim = "trim_start_ms" in data or "trim_end_ms" in data
+        if "name" not in data and "emoji" not in data and not has_trim:
+            return web.json_response({"error": "'name', 'emoji' ou une découpe requis"}, status=400)
 
-        old_name = entry["name"]
+        # Tout est validé AVANT de modifier l'entrée : un refus ne doit pas laisser de changement partiel.
+        new_name = None
         if "name" in data:
             new_name = str(data.get("name", "")).strip()
             if not new_name:
                 return web.json_response({"error": "'name' ne peut pas etre vide"}, status=400)
-            entry["name"] = new_name
 
+        new_trim = None
+        if has_trim:
+            try:
+                new_trim = parse_trim(data.get("trim_start_ms"), data.get("trim_end_ms"))
+            except ValueError as ex:
+                return web.json_response({"error": str(ex)}, status=400)
+
+        old_name = entry["name"]
+        old_trim = [entry.get("trim_start_ms"), entry.get("trim_end_ms")]
+        if new_name is not None:
+            entry["name"] = new_name
         if "emoji" in data:
             entry["emoji"] = str(data.get("emoji") or "").strip()
+        if has_trim:
+            # Les deux nuls : on retire la découpe (le son entier est toujours là, rien n'est perdu).
+            if new_trim is None:
+                entry.pop("trim_start_ms", None)
+                entry.pop("trim_end_ms", None)
+            else:
+                entry["trim_start_ms"], entry["trim_end_ms"] = new_trim
 
         save_catalog(catalog)
-        if "name" in data:
+        if new_name is not None:
             record_audit(entry.get("guild_id"), user_id, session.get("username"), "rename",
                          sound_id, entry["name"], {"from": old_name, "to": entry["name"]})
         if "emoji" in data:
             record_audit(entry.get("guild_id"), user_id, session.get("username"), "emoji",
                          sound_id, entry["name"], {"emoji": entry["emoji"]})
+        if has_trim:
+            record_audit(entry.get("guild_id"), user_id, session.get("username"), "trim",
+                         sound_id, entry["name"],
+                         {"from": old_trim if old_trim[0] is not None else None,
+                          "to": list(new_trim) if new_trim else None})
         return web.json_response({**entry, "is_mine": is_sound_mine(entry, user_id), "can_edit": True})
 
     async def _handle_delete_sound(self, request: web.Request) -> web.Response:
@@ -1742,7 +1813,8 @@ class WaseBoardServer(commands.Bot):
         # On AJOUTE au mixeur plutôt que de remplacer la lecture en cours : plusieurs sons
         # (déclenchés par le même utilisateur ou des utilisateurs différents) se superposent
         # au lieu de s'annuler mutuellement.
-        source = discord.FFmpegPCMAudio(str(file_path))
+        before_options, options = trim_ffmpeg_options(entry)
+        source = discord.FFmpegPCMAudio(str(file_path), before_options=before_options, options=options)
         source = discord.PCMVolumeTransformer(source, volume=min(max(volume, 0.0), 2.0))
 
         # Le son part D'ABORD ; la résolution du membre Discord (highlight/avatar) — un appel
