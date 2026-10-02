@@ -744,7 +744,6 @@ namespace WaseBoard
         /// <summary>Reconstruit les sections affichées (★ Favoris, catégories personnelles, une par guilde Discord), en appliquant la recherche en cours.</summary>
         private void RefreshSections()
         {
-            UpdateAdminButtons(); // _sharedCategories vient de changer (ou le thème) : réévalue qui est admin
             IEnumerable<SoundItem> Filtered(IEnumerable<SoundItem> src) =>
                 string.IsNullOrWhiteSpace(_searchQuery)
                     ? src
@@ -1826,7 +1825,10 @@ namespace WaseBoard
 
         private async void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
-            var window = new SettingsWindow(_library.Settings, _library) { Owner = this };
+            // Le panel d'administration s'ouvre depuis les Paramètres, et n'y apparaît que si l'on
+            // administre au moins un serveur (le serveur re-vérifie de toute façon chaque requête).
+            var adminGuilds = _sharedCategories.Where(s => s.IsAdmin).ToList();
+            var window = new SettingsWindow(_library.Settings, _library, adminGuilds: adminGuilds, knownSounds: Sounds) { Owner = this };
             if (window.ShowDialog() == true)
             {
                 _library.SaveSettings();
@@ -1836,32 +1838,13 @@ namespace WaseBoard
                 await RefreshSharedCategoriesAsync();
                 await RefreshVoiceStatusAsync();
             }
-        }
-
-        /// <summary>Ouvre le panel d'administration pour les serveurs dont vous êtes admin (le bouton n'est
-        /// visible que dans ce cas, voir UpdateAdminButtons ; le serveur re-vérifie de toute façon).</summary>
-        private async void AdminButton_Click(object sender, RoutedEventArgs e)
-        {
-            var adminGuilds = _sharedCategories.Where(s => s.IsAdmin).ToList();
-            if (adminGuilds.Count == 0) return;
-
-            var window = new AdminPanelWindow(_library, adminGuilds, Sounds) { Owner = this };
-            window.ShowDialog();
-
-            if (window.CatalogChanged)
+            else if (window.AdminCatalogChanged)
             {
+                // Sons renommés/supprimés/restaurés depuis le panel d'administration, sans avoir
+                // enregistré les Paramètres : le catalogue affiché doit quand même être rechargé.
                 await RefreshCatalogAsync();
                 await RefreshSharedCategoriesAsync();
             }
-        }
-
-        /// <summary>Le bouton Administration n'apparaît que si vous administrez au moins un serveur.
-        /// Barre d'outils en thème classique, barre latérale en thème moderne (même partage que Paramètres).</summary>
-        private void UpdateAdminButtons()
-        {
-            var isAdmin = _sharedCategories.Any(s => s.IsAdmin);
-            AdminButton.Visibility = isAdmin && !ThemeState.IsModern ? Visibility.Visible : Visibility.Collapsed;
-            SidebarAdminButton.Visibility = isAdmin ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // ---------- Glisser-déposer de fichiers (ajout de sons) ----------

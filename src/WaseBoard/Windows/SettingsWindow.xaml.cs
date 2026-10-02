@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
 using System.Windows;
@@ -26,12 +27,32 @@ namespace WaseBoard.Windows
         // ("Owner sur une fenêtre fermée"). Ce drapeau permet d'abandonner proprement.
         private bool _isClosed;
 
-        public SettingsWindow(AppSettings settings, SoundLibraryService library, string initialPage = "Server")
+        // Serveurs dont l'utilisateur est admin (vide = pas d'entrée Administration) et sons connus,
+        // transmis au panel d'administration qui s'ouvre depuis cette fenêtre.
+        private readonly List<SoundLibraryService.SharedCategoryInfo> _adminGuilds;
+        private readonly List<SoundItem> _knownSounds;
+
+        /// <summary>Vrai si le panel d'administration a modifié le catalogue (renommage, suppression,
+        /// restauration) : l'appelant doit alors recharger les sons, même si les Paramètres n'ont pas été enregistrés.</summary>
+        public bool AdminCatalogChanged { get; private set; }
+
+        public SettingsWindow(AppSettings settings, SoundLibraryService library, string initialPage = "Server",
+            IEnumerable<SoundLibraryService.SharedCategoryInfo>? adminGuilds = null, IEnumerable<SoundItem>? knownSounds = null)
         {
             InitializeComponent();
             _settings = settings;
             _library = library;
+            _adminGuilds = adminGuilds?.ToList() ?? new();
+            _knownSounds = knownSounds?.ToList() ?? new();
             Closed += (_, _) => _isClosed = true;
+
+            if (_adminGuilds.Count > 0)
+            {
+                NavAdminButton.Visibility = Visibility.Visible;
+                AdminSummaryText.Text = _adminGuilds.Count == 1
+                    ? $"Vous administrez {_adminGuilds[0].GuildName}."
+                    : $"Vous administrez {_adminGuilds.Count} serveurs : " + string.Join(", ", _adminGuilds.Select(g => g.GuildName)) + ".";
+            }
 
             ServerUrlBox.Text = _settings.ServerUrl;
             ServerTokenBox.Text = _settings.ServerToken;
@@ -80,6 +101,7 @@ namespace WaseBoard.Windows
                 ("Appearance", PageAppearance, NavAppearanceButton),
                 ("Volume", PageVolume, NavVolumeButton),
                 ("Updates", PageUpdates, NavUpdatesButton),
+                ("Admin", PageAdmin, NavAdminButton),
             };
 
             var accent = (Brush)FindResource("AccentBrush");
@@ -90,6 +112,15 @@ namespace WaseBoard.Windows
                 nav.Background = isSelected ? accent : Brushes.Transparent;
                 nav.Foreground = isSelected ? Brushes.White : (Brush)FindResource("TextBrush");
             }
+        }
+
+        private void OpenAdminPanelButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_adminGuilds.Count == 0) return;
+
+            var panel = new AdminPanelWindow(_library, _adminGuilds, _knownSounds) { Owner = this };
+            panel.ShowDialog();
+            if (panel.CatalogChanged) AdminCatalogChanged = true;
         }
 
         private void FollowSystemTheme_Changed(object sender, RoutedEventArgs e) => UpdateManualColorSectionEnabled();

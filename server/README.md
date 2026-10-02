@@ -208,7 +208,7 @@ Les sons uploadés avant l'arrivée des rôles n'ont pas d'auteur enregistré : 
 peuvent les gérer. Un son supprimé va dans une **corbeille** (fichier conservé, partages
 mémorisés) : un admin peut le restaurer pendant `trash_retention_days` jours.
 
-**Panel d'administration** (bouton « Administration » dans WaseBoard, visible des seuls admins) :
+**Panel d'administration** (Paramètres > Administration dans WaseBoard, visible des seuls admins) :
 sons de la guilde (auteur, date, taille, nombre de lectures), corbeille, réglages (rôle admin,
 upload réservé aux admins, quotas de nombre/taille/durée, anti-spam à la lecture, membres
 bloqués), statistiques d'usage, journal d'actions, lien d'invitation. La limite de durée

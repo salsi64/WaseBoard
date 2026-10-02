@@ -496,9 +496,6 @@
                     </StackPanel>
                     <Button Content="⚙ Paramètres" Click="SettingsButton_Click" HorizontalContentAlignment="Left" Height="34" Margin="0,0,0,8" Padding="10,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                    <Button x:Name="SidebarAdminButton" Content="🛡 Administration" Click="AdminButton_Click" HorizontalContentAlignment="Left"
-                            Height="34" Margin="0,0,0,8" Padding="10,0" Visibility="Collapsed"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
                     <Border Background="{DynamicResource BgBrush}" CornerRadius="8" Padding="10">
                         <StackPanel>
                             <TextBlock x:Name="SidebarConnectionText" Text="🔴 Non connecté" FontSize="12" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"/>
@@ -538,10 +535,6 @@
                     <Button x:Name="SettingsButton" Content="⚙ Paramètres" Padding="10,6" Margin="0,0,6,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
                             BorderBrush="{DynamicResource TextBrush}" Click="SettingsButton_Click"/>
-                    <Button x:Name="AdminButton" Content="🛡 Administration" Padding="10,6" Margin="0,0,6,0" Visibility="Collapsed"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource TextBrush}" Click="AdminButton_Click"
-                            ToolTip="Gérer les sons, les réglages et les statistiques des serveurs que vous administrez"/>
                     <Button x:Name="AddCategoryButton" Content="+ Nouvelle catégorie ▾" Padding="10,6" Margin="0,0,6,0"
                             Click="AddCategoryButton_Click"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"
