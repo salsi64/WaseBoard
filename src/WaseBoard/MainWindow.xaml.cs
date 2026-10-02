@@ -744,6 +744,7 @@ namespace WaseBoard
         /// <summary>Reconstruit les sections affichées (★ Favoris, catégories personnelles, une par guilde Discord), en appliquant la recherche en cours.</summary>
         private void RefreshSections()
         {
+            UpdateAdminButtons(); // _sharedCategories vient de changer (ou le thème) : réévalue qui est admin
             IEnumerable<SoundItem> Filtered(IEnumerable<SoundItem> src) =>
                 string.IsNullOrWhiteSpace(_searchQuery)
                     ? src
@@ -1835,6 +1836,32 @@ namespace WaseBoard
                 await RefreshSharedCategoriesAsync();
                 await RefreshVoiceStatusAsync();
             }
+        }
+
+        /// <summary>Ouvre le panel d'administration pour les serveurs dont vous êtes admin (le bouton n'est
+        /// visible que dans ce cas, voir UpdateAdminButtons ; le serveur re-vérifie de toute façon).</summary>
+        private async void AdminButton_Click(object sender, RoutedEventArgs e)
+        {
+            var adminGuilds = _sharedCategories.Where(s => s.IsAdmin).ToList();
+            if (adminGuilds.Count == 0) return;
+
+            var window = new AdminPanelWindow(_library, adminGuilds, Sounds) { Owner = this };
+            window.ShowDialog();
+
+            if (window.CatalogChanged)
+            {
+                await RefreshCatalogAsync();
+                await RefreshSharedCategoriesAsync();
+            }
+        }
+
+        /// <summary>Le bouton Administration n'apparaît que si vous administrez au moins un serveur.
+        /// Barre d'outils en thème classique, barre latérale en thème moderne (même partage que Paramètres).</summary>
+        private void UpdateAdminButtons()
+        {
+            var isAdmin = _sharedCategories.Any(s => s.IsAdmin);
+            AdminButton.Visibility = isAdmin && !ThemeState.IsModern ? Visibility.Visible : Visibility.Collapsed;
+            SidebarAdminButton.Visibility = isAdmin ? Visibility.Visible : Visibility.Collapsed;
         }
 
         // ---------- Glisser-déposer de fichiers (ajout de sons) ----------
