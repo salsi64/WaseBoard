@@ -1,23 +1,26 @@
-﻿<Window x:Class="WaseBoard.Windows.TrimWindow"
+<Window x:Class="WaseBoard.Windows.TrimWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:chrome="clr-namespace:WaseBoard.Windows.Chrome"
+        xmlns:local="clr-namespace:WaseBoard.Windows"
         Title="Découper le son"
-        FontFamily="Segoe UI Emoji, Segoe UI" Height="360" Width="780"
+        FontFamily="Segoe UI Emoji, Segoe UI" Width="780" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource BgBrush}"
         chrome:WindowChromeBehavior.Enable="True"
         ResizeMode="NoResize"
+        TextOptions.TextFormattingMode="Display"
         Closing="Window_Closing">
     <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource BgBrush}">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="36"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <chrome:TitleBarControl Grid.Row="0" TitleText="Découper le son" ShowMinMax="False"/>
-        <Grid Grid.Row="1" Margin="20,4,20,20">
+        <chrome:TitleBarControl x:Name="ChromeTitleBar" Grid.Row="0" TitleText="Découper le son" ShowMinMax="False"/>
+        <Grid Grid.Row="1" Margin="20,4,20,18">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -25,10 +28,25 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock Text="Nom du son :" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <TextBox x:Name="NameBox" Width="300" Height="26"/>
-        </StackPanel>
+        <!-- Nom + emoji sur une seule ligne : le choix de l'emoji se fait ici, plus dans une 2ᵉ fenêtre après l'envoi -->
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Nom du son :" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBox x:Name="NameBox" Grid.Column="1" Height="30" Margin="0,0,20,0"/>
+            <TextBlock Grid.Column="2" Text="Emoji :" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <Border Grid.Column="3" Width="34" Height="34" CornerRadius="17" Margin="0,0,8,0" Background="{DynamicResource PanelBrush}">
+                <Image x:Name="EmojiPreview" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <TextBox x:Name="EmojiBox" Grid.Column="4" Width="64" Height="30" FontSize="16" HorizontalContentAlignment="Center"
+                     FontFamily="Segoe UI Emoji, Segoe UI" TextChanged="EmojiBox_TextChanged"
+                     ToolTip="Choisissez dans la grille ci-dessous, ou collez un emoji"/>
+        </Grid>
 
         <TextBlock x:Name="LoadingText" Grid.Row="1" Text="Analyse du fichier audio..."
                    Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
@@ -39,30 +57,36 @@
                 <Rectangle x:Name="LeftMaskRect" Fill="#99000000" Height="150" Canvas.Top="0"/>
                 <Rectangle x:Name="RightMaskRect" Fill="#99000000" Height="150" Canvas.Top="0"/>
 
-                <!-- Poignées de découpe -->
-                <Thumb x:Name="StartHandle" Width="10" Height="150" Canvas.Top="0" Background="#7C5CFF"
+                <!-- Poignées de découpe (couleur d'accent de la palette) -->
+                <Thumb x:Name="StartHandle" Width="10" Height="150" Canvas.Top="0"
                        DragDelta="StartHandle_DragDelta" Cursor="SizeWE">
                     <Thumb.Template>
                         <ControlTemplate TargetType="Thumb">
-                            <Rectangle Fill="#7C5CFF" Width="10" Height="150"/>
+                            <Rectangle Fill="{DynamicResource AccentBrush}" Width="10" Height="150"/>
                         </ControlTemplate>
                     </Thumb.Template>
                 </Thumb>
-                <Thumb x:Name="EndHandle" Width="10" Height="150" Canvas.Top="0" Background="#7C5CFF"
+                <Thumb x:Name="EndHandle" Width="10" Height="150" Canvas.Top="0"
                        DragDelta="EndHandle_DragDelta" Cursor="SizeWE">
                     <Thumb.Template>
                         <ControlTemplate TargetType="Thumb">
-                            <Rectangle Fill="#7C5CFF" Width="10" Height="150"/>
+                            <Rectangle Fill="{DynamicResource AccentBrush}" Width="10" Height="150"/>
                         </ControlTemplate>
                     </Thumb.Template>
                 </Thumb>
             </Canvas>
         </Border>
 
-        <TextBlock x:Name="TimeLabel" Grid.Row="3" Foreground="{DynamicResource TextBrush}" Opacity="0.8"
-                   FontSize="12" Margin="0,4,0,16" Text="Début : 0:00 — Fin : 0:00 — Durée sélectionnée : 0:00"/>
+        <StackPanel Grid.Row="3" Margin="0,4,0,12">
+            <TextBlock x:Name="TimeLabel" Foreground="{DynamicResource TextBrush}" Opacity="0.8" FontSize="12"
+                       Text="Début : 0:00 — Fin : 0:00 — Durée sélectionnée : 0:00"/>
+            <TextBlock x:Name="HintText" Foreground="{DynamicResource TextBrush}" Opacity="0.6" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"
+                       Text="Faites glisser les poignées pour ne garder qu'une partie. Le son complet est conservé : vous pourrez le recouper plus tard (clic droit › Redécouper)."/>
+        </StackPanel>
 
-        <Grid Grid.Row="4">
+        <local:EmojiPaletteControl x:Name="Palette" Grid.Row="4" Height="116" Margin="0,0,0,14"/>
+
+        <Grid Grid.Row="5">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>

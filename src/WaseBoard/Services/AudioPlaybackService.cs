@@ -80,8 +80,10 @@ namespace WaseBoard.Services
         public readonly record struct PlaybackTarget(MMDevice Device, float Volume);
 
         /// <summary>Joue un son vers plusieurs périphériques (chacun son volume). Un son déjà en
-        /// cours est stoppé puis relancé, plutôt que superposé ; les autres sons ne sont pas affectés.</summary>
-        public void PlaySound(string soundId, string filePath, IEnumerable<PlaybackTarget> targets)
+        /// cours est stoppé puis relancé, plutôt que superposé ; les autres sons ne sont pas affectés.
+        /// trimStart/trimEnd : portion gardée d'un son découpé (null = le fichier entier).</summary>
+        public void PlaySound(string soundId, string filePath, IEnumerable<PlaybackTarget> targets,
+            TimeSpan? trimStart = null, TimeSpan? trimEnd = null)
         {
             StopSound(soundId);
             SoundStarted?.Invoke(soundId);
@@ -99,8 +101,13 @@ namespace WaseBoard.Services
                     reader = AudioReaderFactory.OpenForPlayback(filePath, out var setVolume);
                     setVolume(target.Volume);
 
+                    // Son découpé : ne joue que la portion gardée (le fichier en cache est le son complet).
+                    WaveStream playable = trimStart is { } start && trimEnd is { } end && end > start
+                        ? new TrimmedWaveStream(reader, start, end)
+                        : reader;
+
                     output = new WasapiOut(target.Device, AudioClientShareMode.Shared, true, 100);
-                    output.Init(new SingleShotWaveStream(reader)); // garantit une lecture strictement unique
+                    output.Init(new SingleShotWaveStream(playable)); // garantit une lecture strictement unique
 
                     var entry = new ActivePlayback { SoundId = soundId, Output = output, Reader = reader };
 

@@ -653,9 +653,14 @@ namespace WaseBoard
                 {
                     var localPath = await _library.GetOrDownloadCachedFileAsync(item);
                     if (localPath is null) return;
-                    var peaks = await Task.Run(() =>
+                    var mini = await Task.Run(() =>
                         AudioTrimService.GetOrComputeMiniWaveform(item.Id, localPath, _library.CacheFolder));
-                    if (peaks is not null) item.WaveformPeaks = peaks;
+                    if (mini is not null)
+                    {
+                        // La durée du fichier COMPLET situe la portion gardée d'un son découpé sur sa waveform.
+                        item.DurationMs = mini.DurationMs;
+                        item.WaveformPeaks = mini.Peaks;
+                    }
                 }
                 finally { throttle.Release(); }
             });
@@ -987,20 +992,12 @@ namespace WaseBoard
                 var suggestedName = Path.GetFileNameWithoutExtension(file);
                 var trimWindow = new TrimWindow(file, suggestedName) { Owner = this };
 
-                if (trimWindow.ShowDialog() != true || trimWindow.ResultFilePath is null)
+                if (trimWindow.ShowDialog() != true)
                     continue;
 
-                void CleanupTempFile()
-                {
-                    if (trimWindow.ResultIsTemporaryFile && File.Exists(trimWindow.ResultFilePath))
-                    {
-                        try { File.Delete(trimWindow.ResultFilePath); } catch { /* fichier temporaire, non bloquant */ }
-                    }
-                }
-
-                // Détection de doublons : hash du fichier final contre le catalogue existant ; à
-                // défaut, un même nom reste un signal plus faible, remonté différemment.
-                var contentHash = SoundLibraryService.ComputeFileHash(trimWindow.ResultFilePath);
+                // Détection de doublons : hash du fichier SOURCE (le serveur garde le son complet, la découpe n'est
+                // qu'un repère) contre le catalogue existant ; à défaut, un même nom reste un signal plus faible.
+                var contentHash = SoundLibraryService.ComputeFileHash(file);
                 var hashMatch = soundsInTargetGuild.FirstOrDefault(s => s.ContentHash is not null && s.ContentHash == contentHash);
                 var nameMatch = hashMatch is null
                     ? soundsInTargetGuild.FirstOrDefault(s => string.Equals(s.Name, trimWindow.ResultName, StringComparison.OrdinalIgnoreCase))
@@ -1009,38 +1006,25 @@ namespace WaseBoard
                 if (hashMatch is not null)
                 {
                     var proceed = ConfirmDialog.Show(this,
-                        $"Ce fichier est identique à « {hashMatch.Name} », déjà présent dans le catalogue. L'ajouter quand même ?");
-                    if (!proceed) { CleanupTempFile(); continue; }
+                        $"Ce fichier est identique à « {hashMatch.Name} », déjà présent dans le catalogue.\n" +
+                        "Pour une autre portion du même son, vous pouvez aussi recouper l'existant (clic droit › Redécouper).\nL'ajouter quand même ?");
+                    if (!proceed) continue;
                 }
                 else if (nameMatch is not null)
                 {
                     var proceed = ConfirmDialog.Show(this,
                         $"Un son nommé « {nameMatch.Name} » existe déjà (contenu différent). L'ajouter quand même ?");
-                    if (!proceed) { CleanupTempFile(); continue; }
+                    if (!proceed) continue;
                 }
 
-                var uploaded = await _library.UploadSoundAsync(trimWindow.ResultFilePath, trimWindow.ResultName, guildId);
-                CleanupTempFile();
+                // Fichier original + portion gardée + emoji, en un seul appel (plus de 2ᵉ fenêtre d'emoji après l'envoi).
+                var uploaded = await _library.UploadSoundAsync(file, trimWindow.ResultName, guildId,
+                    trimWindow.ResultTrimStartMs, trimWindow.ResultTrimEndMs, trimWindow.ResultEmoji);
 
                 if (uploaded is not null)
                 {
                     Sounds.Add(uploaded);
                     RegisterHotkeyFor(uploaded);
-
-                    // Emoji obligatoire à l'ajout, partagé entre tous les utilisateurs : ne peut
-                    // s'appliquer qu'une fois le son réellement uploadé (id connu) — impossible de
-                    // le demander avant l'envoi au serveur.
-                    var picker = new EmojiPickerWindow(null, required: true) { Owner = this };
-                    if (picker.ShowDialog() == true && !string.IsNullOrEmpty(picker.Result))
-                    {
-                        var emojiOk = await _library.SetEmojiAsync(uploaded, picker.Result);
-                        if (!emojiOk)
-                        {
-                            ToastService.Show(
-                                "Échec de l'assignation de l'emoji." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                                ToastKind.Warning);
-                        }
-                    }
                 }
                 else
                 {
@@ -1163,6 +1147,9 @@ namespace WaseBoard
                 }
             };
 
+            var retrimItem = new MenuItem { Header = item.IsTrimmed ? "✂ Redécouper…" : "✂ Découper…" };
+            retrimItem.Click += async (_, _) => await EditSoundAsync(item);
+
             var hotkeyItem = new MenuItem { Header = string.IsNullOrEmpty(item.Hotkey) ? "Définir un raccourci..." : $"Modifier le raccourci ({item.Hotkey})" };
             hotkeyItem.Click += (_, _) => AssignHotkey(item);
 
@@ -1241,6 +1228,7 @@ namespace WaseBoard
                 menu.Items.Add(emojiItem);
                 menu.Items.Add(removeEmojiItem);
                 menu.Items.Add(renameItem);
+                menu.Items.Add(retrimItem);
             }
             menu.Items.Add(hotkeyItem);
             menu.Items.Add(removeHotkeyItem);
@@ -1250,6 +1238,43 @@ namespace WaseBoard
                 menu.Items.Add(deleteItem);
             }
             menu.IsOpen = true;
+        }
+
+        /// <summary>« Redécouper… » : rouvre la fenêtre de découpe sur le son COMPLET (gardé par le serveur) avec la portion
+        /// actuelle déjà placée ; nom et emoji sont modifiables au passage. Un seul appel au serveur pour tout enregistrer.</summary>
+        private async Task EditSoundAsync(SoundItem item)
+        {
+            var localPath = await _library.GetOrDownloadCachedFileAsync(item);
+            if (localPath is null)
+            {
+                ToastService.Show(
+                    "Impossible de charger le son complet." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    ToastKind.Warning);
+                return;
+            }
+
+            TimeSpan? start = item.TrimStartMs is { } s ? TimeSpan.FromMilliseconds(s) : null;
+            TimeSpan? end = item.TrimEndMs is { } e ? TimeSpan.FromMilliseconds(e) : null;
+            var window = new TrimWindow(localPath, item.Name, TrimWindowMode.Edit, start, end, item.Emoji) { Owner = this };
+            if (window.ShowDialog() != true) return;
+
+            var newName = window.ResultName != item.Name ? window.ResultName : null;
+            var newEmoji = window.ResultEmoji != (item.Emoji ?? "") ? window.ResultEmoji : null;
+            var trimChanged = window.ResultTrimStartMs != item.TrimStartMs || window.ResultTrimEndMs != item.TrimEndMs;
+            (int?, int?)? newTrim = trimChanged ? (window.ResultTrimStartMs, window.ResultTrimEndMs) : null;
+            if (newName is null && newEmoji is null && newTrim is null) return;
+
+            if (await _library.UpdateSoundDetailsAsync(item, newName, newEmoji, newTrim))
+            {
+                RefreshSections();
+                ToastService.Show($"« {item.Name} » mis à jour.", ToastKind.Success);
+            }
+            else
+            {
+                ToastService.Show(
+                    "Modification échouée." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    ToastKind.Warning);
+            }
         }
 
         /// <summary>Peut-on ajouter/retirer ce son à la catégorie partagée de ce serveur ? Oui pour son
@@ -1841,7 +1866,10 @@ namespace WaseBoard
             if (defaultDevice is null) return;
 
             var volume = item.Volume * _library.Settings.LocalPlaybackVolume;
-            _audio.PlaySound(item.Id, localPath, new[] { new AudioPlaybackService.PlaybackTarget(defaultDevice, volume) });
+            // Le fichier en cache est le son COMPLET : un son découpé ne joue que sa portion gardée, comme sur le serveur.
+            TimeSpan? trimStart = item.TrimStartMs is { } startMs ? TimeSpan.FromMilliseconds(startMs) : null;
+            TimeSpan? trimEnd = item.TrimEndMs is { } endMs ? TimeSpan.FromMilliseconds(endMs) : null;
+            _audio.PlaySound(item.Id, localPath, new[] { new AudioPlaybackService.PlaybackTarget(defaultDevice, volume) }, trimStart, trimEnd);
         }
 
         /// <summary>Coupe la lecture locale ET tous les sons actuellement mixés côté serveur (dans le salon où vous êtes).</summary>

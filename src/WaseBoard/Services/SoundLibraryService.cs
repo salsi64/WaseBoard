@@ -52,6 +52,11 @@ namespace WaseBoard.Services
             /// <summary>Calculés par le serveur pour la session qui demande le catalogue.</summary>
             public bool is_mine { get; set; }
             public bool can_edit { get; set; }
+
+            /// <summary>Portion gardée d'un son découpé (ms) : le fichier stocké est le son complet.
+            /// Absents = son entier (et tous les sons ajoutés avant les découpes non destructives).</summary>
+            public int? trim_start_ms { get; set; }
+            public int? trim_end_ms { get; set; }
         }
 
         private static SoundItem ToSoundItem(CatalogEntry entry) => new()
@@ -64,7 +69,9 @@ namespace WaseBoard.Services
             GuildId = entry.guild_id,
             UploadedBy = entry.uploaded_by,
             IsMine = entry.is_mine,
-            CanEdit = entry.can_edit
+            CanEdit = entry.can_edit,
+            TrimStartMs = entry.trim_start_ms,
+            TrimEndMs = entry.trim_end_ms
         };
 
         /// <summary>Message d'erreur lisible d'une réponse serveur : le champ "error" du corps JSON s'il
@@ -405,6 +412,43 @@ namespace WaseBoard.Services
             }
         }
 
+        /// <summary>Modifie en un seul appel le nom, l'emoji et/ou la portion gardée d'un son (fenêtre « Redécouper »).
+        /// `trim` : null = ne pas toucher à la découpe ; (null, null) = retirer la découpe (le son entier est toujours
+        /// là côté serveur) ; (début, fin) = nouvelle portion. Met à jour le SoundItem en cas de succès.</summary>
+        public async Task<bool> UpdateSoundDetailsAsync(SoundItem item, string? name, string? emoji,
+            (int? StartMs, int? EndMs)? trim)
+        {
+            LastErrorDetail = null;
+            var payload = new Dictionary<string, object?>();
+            if (name is not null) payload["name"] = name;
+            if (emoji is not null) payload["emoji"] = emoji;
+            if (trim is { } t) { payload["trim_start_ms"] = t.StartMs; payload["trim_end_ms"] = t.EndMs; }
+            if (payload.Count == 0) return true;
+
+            try
+            {
+                using var request = CreateRequest(HttpMethod.Patch, $"/sounds/{item.Id}");
+                request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+                using var response = await SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Modification échouée ({(int)response.StatusCode}).");
+                    return false;
+                }
+
+                if (name is not null) item.Name = name;
+                if (emoji is not null) item.Emoji = string.IsNullOrWhiteSpace(emoji) ? null : emoji.Trim();
+                if (trim is { } applied) { item.TrimStartMs = applied.StartMs; item.TrimEndMs = applied.EndMs; }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastErrorDetail = ex.Message;
+                return false;
+            }
+        }
+
         // ---------- Communication serveur ----------
 
         private string BaseUrl => Settings.ServerUrl.TrimEnd('/');
@@ -548,7 +592,10 @@ namespace WaseBoard.Services
             return Convert.ToHexString(sha256.ComputeHash(stream)).ToLowerInvariant();
         }
 
-        public async Task<SoundItem?> UploadSoundAsync(string localFilePath, string name, string guildId)
+        /// <summary>Envoie le fichier ORIGINAL (le serveur le garde complet) avec, si besoin, la portion gardée
+        /// (trimStartMs/trimEndMs : les deux ou aucun) et l'emoji choisi — un seul appel.</summary>
+        public async Task<SoundItem?> UploadSoundAsync(string localFilePath, string name, string guildId,
+            int? trimStartMs = null, int? trimEndMs = null, string? emoji = null)
         {
             LastErrorDetail = null;
             try
@@ -561,6 +608,13 @@ namespace WaseBoard.Services
                 form.Add(new StringContent(name, Encoding.UTF8), "name");
                 form.Add(fileContent, "file", Path.GetFileName(localFilePath));
                 form.Add(new StringContent(guildId, Encoding.UTF8), "guild_id");
+                if (trimStartMs is { } trimStart && trimEndMs is { } trimEnd)
+                {
+                    form.Add(new StringContent(trimStart.ToString(), Encoding.UTF8), "trim_start_ms");
+                    form.Add(new StringContent(trimEnd.ToString(), Encoding.UTF8), "trim_end_ms");
+                }
+                if (!string.IsNullOrWhiteSpace(emoji))
+                    form.Add(new StringContent(emoji.Trim(), Encoding.UTF8), "emoji");
                 request.Content = form;
 
                 using var response = await SendAsync(request);

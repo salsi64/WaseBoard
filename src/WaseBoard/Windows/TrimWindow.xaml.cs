@@ -1,17 +1,23 @@
 using System;
-using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Shapes;
-using System.Windows.Threading;
 using NAudio.Wave;
 using WaseBoard.Services;
 
 namespace WaseBoard.Windows
 {
+    /// <summary>Ajout d'un nouveau son, ou modification d'un son existant (« Redécouper »).</summary>
+    public enum TrimWindowMode { Add, Edit }
+
+    /// <summary>
+    /// Fenêtre « Modifier le son » : nom, emoji et portion gardée, sur la waveform du son COMPLET. La découpe est
+    /// non destructive : le fichier n'est jamais modifié (le serveur garde le son entier et ne mémorise que le
+    /// début et la fin), donc on peut recouper plus tard en rouvrant cette fenêtre avec la sélection actuelle.
+    /// </summary>
     public partial class TrimWindow : Window
     {
         private const double CanvasWidth = 736;
@@ -19,26 +25,47 @@ namespace WaseBoard.Windows
         private const double HandleWidth = 10;
 
         private readonly string _sourceFilePath;
+        private readonly TrimWindowMode _mode;
+        private readonly TimeSpan? _initialStart;
+        private readonly TimeSpan? _initialEnd;
         private TimeSpan _duration = TimeSpan.FromSeconds(1);
         private TimeSpan _trimStart = TimeSpan.Zero;
         private TimeSpan _trimEnd = TimeSpan.FromSeconds(1);
 
         private WaveOutEvent? _previewOutput;
-        private AudioFileReader? _previewReader;
-        private string? _previewTempFile;
+        private WaveStream? _previewStream;
 
-        /// <summary>Chemin du fichier à enregistrer (original si non découpé, ou WAV temporaire découpé). Null si annulé.</summary>
-        public string? ResultFilePath { get; private set; }
         public string ResultName { get; private set; } = string.Empty;
 
-        /// <summary>True si un fichier temporaire a été créé et doit être supprimé par l'appelant après usage.</summary>
-        public bool ResultIsTemporaryFile { get; private set; }
+        /// <summary>Emoji choisi (chaîne vide = aucun, possible seulement en mode Edit).</summary>
+        public string ResultEmoji { get; private set; } = string.Empty;
 
-        public TrimWindow(string sourceFilePath, string suggestedName)
+        /// <summary>Portion gardée en millisecondes ; null/null = le son entier (aucune découpe).</summary>
+        public int? ResultTrimStartMs { get; private set; }
+        public int? ResultTrimEndMs { get; private set; }
+
+        public TrimWindow(string sourceFilePath, string suggestedName, TrimWindowMode mode = TrimWindowMode.Add,
+            TimeSpan? initialStart = null, TimeSpan? initialEnd = null, string? initialEmoji = null)
         {
             InitializeComponent();
             _sourceFilePath = sourceFilePath;
+            _mode = mode;
+            _initialStart = initialStart;
+            _initialEnd = initialEnd;
             NameBox.Text = suggestedName;
+
+            Palette.EmojiChosen += emoji => EmojiBox.Text = emoji;
+            EmojiBox.Text = initialEmoji ?? "";
+
+            if (mode == TrimWindowMode.Edit)
+            {
+                Title = "Redécouper le son";
+                ChromeTitleBar.TitleText = "Redécouper le son";
+                ConfirmButton.Content = "Enregistrer";
+                HintText.Text = "Le son complet est conservé : déplacez les poignées pour changer la partie jouée, ou « Tout garder » pour retrouver le son entier.";
+            }
+            UpdateConfirmEnabled();
+
             Loaded += TrimWindow_Loaded;
         }
 
@@ -48,8 +75,11 @@ namespace WaseBoard.Windows
             {
                 var data = await Task.Run(() => AudioTrimService.ComputeWaveform(_sourceFilePath));
                 _duration = data.Duration.TotalMilliseconds > 0 ? data.Duration : TimeSpan.FromSeconds(1);
-                _trimStart = TimeSpan.Zero;
-                _trimEnd = _duration;
+
+                // Mode Edit : on repart de la portion actuellement gardée (bornée à la durée du fichier).
+                _trimStart = _initialStart is { } s ? Clamp(s, TimeSpan.Zero, _duration) : TimeSpan.Zero;
+                _trimEnd = _initialEnd is { } en ? Clamp(en, TimeSpan.Zero, _duration) : _duration;
+                if (_trimEnd <= _trimStart) { _trimStart = TimeSpan.Zero; _trimEnd = _duration; }
 
                 DrawWaveform(data.Peaks);
                 PositionHandles();
@@ -69,12 +99,16 @@ namespace WaseBoard.Windows
             }
         }
 
+        private static TimeSpan Clamp(TimeSpan value, TimeSpan min, TimeSpan max) =>
+            value < min ? min : value > max ? max : value;
+
         private void DrawWaveform(float[] peaks)
         {
             if (peaks.Length == 0) return;
 
             double barWidth = CanvasWidth / peaks.Length;
             double centerY = CanvasHeight / 2;
+            var fill = (Brush)FindResource("AccentBrush");
 
             for (int i = 0; i < peaks.Length; i++)
             {
@@ -83,7 +117,8 @@ namespace WaseBoard.Windows
                 {
                     Width = Math.Max(1, barWidth - 1),
                     Height = barHeight,
-                    Fill = new SolidColorBrush(Color.FromRgb(0x9C, 0x8C, 0xFF))
+                    Fill = fill,
+                    Opacity = 0.85
                 };
                 Canvas.SetLeft(bar, i * barWidth);
                 Canvas.SetTop(bar, centerY - barHeight / 2);
@@ -91,6 +126,26 @@ namespace WaseBoard.Windows
                 // Inséré en dessous des masques/poignées (déjà présents dans le XAML) pour rester en arrière-plan.
                 WaveformCanvas.Children.Insert(0, bar);
             }
+        }
+
+        // ---------- Emoji ----------
+
+        private void EmojiBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var emoji = EmojiBox.Text.Trim();
+            // Image plutôt que texte (voir EmojiImageResolver) ; vide = pas d'aperçu.
+            EmojiPreview.Source = string.IsNullOrEmpty(emoji) ? null : EmojiImageResolver.Resolve(emoji);
+            UpdateConfirmEnabled();
+        }
+
+        /// <summary>À l'ajout, l'emoji est obligatoire (comportement historique : chaque son en a un) ;
+        /// en modification on peut aussi le retirer.</summary>
+        private void UpdateConfirmEnabled()
+        {
+            if (ConfirmButton is null || EmojiBox is null) return; // encore en cours d'InitializeComponent
+            var needsEmoji = _mode == TrimWindowMode.Add;
+            ConfirmButton.IsEnabled = !needsEmoji || !string.IsNullOrWhiteSpace(EmojiBox.Text);
+            ConfirmButton.ToolTip = ConfirmButton.IsEnabled ? null : "Choisissez un emoji pour ce son";
         }
 
         // ---------- Poignées de découpe ----------
@@ -141,7 +196,7 @@ namespace WaseBoard.Windows
             Canvas.SetLeft(RightMaskRect, endX);
 
             var selected = _trimEnd - _trimStart;
-            TimeLabel.Text = $"Début : {Format(_trimStart)} — Fin : {Format(_trimEnd)} — Durée sélectionnée : {Format(selected)}";
+            TimeLabel.Text = $"Début : {Format(_trimStart)} — Fin : {Format(_trimEnd)} — Durée sélectionnée : {Format(selected)} (son complet : {Format(_duration)})";
         }
 
         private static string Format(TimeSpan t) => $"{(int)t.TotalMinutes}:{t.Seconds:D2}";
@@ -162,19 +217,18 @@ namespace WaseBoard.Windows
 
             try
             {
-                // On exporte réellement la sélection avant de la jouer : c'est exactement le même
-                // chemin de code que la validation finale (lecture séquentielle stricte, jamais de
-                // seek), donc l'aperçu correspond toujours pile à ce que produira "Ajouter le son".
-                _previewTempFile = AudioTrimService.ExportTrimmedWav(_sourceFilePath, _trimStart, _trimEnd);
-
-                _previewReader = new AudioFileReader(_previewTempFile);
+                // Même flux que la lecture locale réelle (TrimmedWaveStream) : l'aperçu correspond pile à ce
+                // que fera le son une fois enregistré, sans fichier temporaire.
+                var reader = AudioReaderFactory.OpenForPlayback(_sourceFilePath, out _);
+                _previewStream = new TrimmedWaveStream(reader, _trimStart, _trimEnd);
                 _previewOutput = new WaveOutEvent();
-                _previewOutput.Init(_previewReader);
-                _previewOutput.PlaybackStopped += (_, _) => Dispatcher.BeginInvoke(CleanupPreviewTempFile);
+                _previewOutput.Init(_previewStream);
+                _previewOutput.PlaybackStopped += (_, _) => Dispatcher.BeginInvoke(ReleasePreview);
                 _previewOutput.Play();
             }
             catch (Exception ex)
             {
+                ReleasePreview();
                 AlertDialog.Show(this, "Impossible de lire l'aperçu :\n" + ex.Message,
                     "Erreur", AlertKind.Warning);
             }
@@ -182,23 +236,17 @@ namespace WaseBoard.Windows
 
         private void StopPreview()
         {
-            _previewOutput?.Stop();
-            _previewOutput?.Dispose();
-            _previewOutput = null;
-
-            _previewReader?.Dispose();
-            _previewReader = null;
-
-            CleanupPreviewTempFile();
+            try { _previewOutput?.Stop(); } catch { /* déjà arrêté */ }
+            ReleasePreview();
         }
 
-        private void CleanupPreviewTempFile()
+        /// <summary>Libère la sortie et le flux de l'aperçu (idempotent : appelé à la fois à l'arrêt et à la fin naturelle).</summary>
+        private void ReleasePreview()
         {
-            if (_previewTempFile is not null && File.Exists(_previewTempFile))
-            {
-                try { File.Delete(_previewTempFile); } catch { /* fichier temporaire, non bloquant */ }
-            }
-            _previewTempFile = null;
+            _previewOutput?.Dispose();
+            _previewOutput = null;
+            _previewStream?.Dispose();
+            _previewStream = null;
         }
 
         // ---------- Validation ----------
@@ -214,21 +262,14 @@ namespace WaseBoard.Windows
             StopPreview();
 
             bool isFullRange = _trimStart <= TimeSpan.FromMilliseconds(20) &&
-                                _trimEnd >= _duration - TimeSpan.FromMilliseconds(20);
+                               _trimEnd >= _duration - TimeSpan.FromMilliseconds(20);
 
-            if (isFullRange)
-            {
-                // Pas de découpe nécessaire : on garde le fichier original tel quel (pas de conversion).
-                ResultFilePath = _sourceFilePath;
-                ResultIsTemporaryFile = false;
-            }
-            else
-            {
-                ResultFilePath = AudioTrimService.ExportTrimmedWav(_sourceFilePath, _trimStart, _trimEnd);
-                ResultIsTemporaryFile = true;
-            }
+            // Son entier : aucune découpe à enregistrer (le serveur garde le fichier complet de toute façon).
+            ResultTrimStartMs = isFullRange ? null : (int)Math.Round(_trimStart.TotalMilliseconds);
+            ResultTrimEndMs = isFullRange ? null : (int)Math.Round(_trimEnd.TotalMilliseconds);
 
             ResultName = string.IsNullOrWhiteSpace(NameBox.Text) ? "Son" : NameBox.Text.Trim();
+            ResultEmoji = EmojiBox.Text.Trim();
             DialogResult = true;
             Close();
         }

@@ -41,7 +41,7 @@
                     Foreground="{DynamicResource TextBrush}"
                     FontSize="12"
                     FontWeight="SemiBold"
-                    ToolTip="Clic gauche : jouer dans le vocal • Clic droit : options • Glisser : déplacer/classer • 📣 : aperçu local">
+                    ToolTip="{Binding ButtonTooltip}">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
                         <Grid>
@@ -147,9 +147,18 @@
                         </StackPanel>
 
                         <!-- Mini-waveform : calculée en arrière-plan, voir SoundItem.WaveformPeaks -->
-                        <Path Grid.Row="2" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Opacity="0.55"
+                        <!-- Son découpé : la portion gardée est en clair, le reste du son complet estompé (TrimMaskConverter). -->
+                        <Path Grid.Row="2" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Opacity="0.85"
                               Stretch="Fill" VerticalAlignment="Center" HorizontalAlignment="Stretch" Margin="0,0,2,0"
-                              Data="{Binding WaveformPeaks, Converter={StaticResource WaveformPeaksToPathConverter}, ConverterParameter='96,10'}"/>
+                              Data="{Binding WaveformPeaks, Converter={StaticResource WaveformPeaksToPathConverter}, ConverterParameter='96,10'}">
+                            <Path.OpacityMask>
+                                <MultiBinding Converter="{StaticResource TrimMaskConverter}">
+                                    <Binding Path="TrimStartMs"/>
+                                    <Binding Path="TrimEndMs"/>
+                                    <Binding Path="DurationMs"/>
+                                </MultiBinding>
+                            </Path.OpacityMask>
+                        </Path>
                     </Grid>
                 </Grid>
             </Button>
@@ -168,7 +177,7 @@
                     Tag="{Binding}"
                     Foreground="{DynamicResource TextBrush}"
                     FontSize="12" FontWeight="SemiBold"
-                    ToolTip="Clic gauche : jouer dans le vocal • Clic droit : options • Glisser : déplacer/classer">
+                    ToolTip="{Binding ButtonTooltip}">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
                         <Grid>

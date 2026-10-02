@@ -57,6 +57,65 @@ namespace WaseBoard.Models
         [JsonIgnore]
         public bool CanEdit { get; set; }
 
+        private int? _trimStartMs;
+        private int? _trimEndMs;
+        private double _durationMs;
+
+        /// <summary>Début de la portion gardée (ms), null = depuis le début. Donnée serveur : le fichier
+        /// stocké est le son COMPLET, la découpe n'est qu'un repère (voir TrimmedWaveStream).</summary>
+        [JsonIgnore]
+        public int? TrimStartMs
+        {
+            get => _trimStartMs;
+            set { if (_trimStartMs != value) { _trimStartMs = value; OnTrimChanged(); } }
+        }
+
+        /// <summary>Fin de la portion gardée (ms), null = jusqu'à la fin.</summary>
+        [JsonIgnore]
+        public int? TrimEndMs
+        {
+            get => _trimEndMs;
+            set { if (_trimEndMs != value) { _trimEndMs = value; OnTrimChanged(); } }
+        }
+
+        /// <summary>Durée du fichier complet (ms), connue une fois la mini-waveform calculée ; 0 sinon.</summary>
+        [JsonIgnore]
+        public double DurationMs
+        {
+            get => _durationMs;
+            set { if (_durationMs != value) { _durationMs = value; OnTrimChanged(); } }
+        }
+
+        /// <summary>Vrai si ce son est découpé (une portion seulement est jouée).</summary>
+        [JsonIgnore]
+        public bool IsTrimmed => _trimStartMs is not null && _trimEndMs is not null;
+
+        private void OnTrimChanged()
+        {
+            OnChanged(nameof(TrimStartMs));
+            OnChanged(nameof(TrimEndMs));
+            OnChanged(nameof(DurationMs));
+            OnChanged(nameof(IsTrimmed));
+            OnChanged(nameof(ButtonTooltip));
+        }
+
+        /// <summary>Infobulle du bouton : les gestes, et la portion jouée si le son est découpé.</summary>
+        [JsonIgnore]
+        public string ButtonTooltip
+        {
+            get
+            {
+                const string gestures = "Clic gauche : jouer dans le vocal • Clic droit : options • Glisser : déplacer/classer";
+                if (!IsTrimmed) return gestures;
+
+                static string Fmt(double ms) => $"{(int)(ms / 60000)}:{(int)(ms / 1000) % 60:D2}";
+                var kept = Fmt(_trimEndMs!.Value - _trimStartMs!.Value);
+                var range = $"{Fmt(_trimStartMs.Value)} → {Fmt(_trimEndMs.Value)}";
+                var total = _durationMs > 0 ? $" sur {Fmt(_durationMs)}" : "";
+                return gestures + $"\n✂ Découpé : {range}{total} (durée jouée {kept}) — clic droit › Redécouper";
+            }
+        }
+
         /// <summary>Raccourci clavier optionnel, ex: "Ctrl+Alt+1" (préférence locale).</summary>
         public string? Hotkey { get; set; }
 

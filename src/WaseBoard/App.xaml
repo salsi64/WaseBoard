@@ -12,6 +12,7 @@
         <local:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
         <local:WaveformPeaksToPathConverter x:Key="WaveformPeaksToPathConverter"/>
         <local:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
+        <local:TrimMaskConverter x:Key="TrimMaskConverter"/>
 
         <!-- Valeurs de départ (palette « Bleu nuit ») : MainWindow.ApplyColorScheme les remplace à chaud
              selon la palette choisie, le thème Windows et l'accent. OnAccentBrush = texte posé sur un

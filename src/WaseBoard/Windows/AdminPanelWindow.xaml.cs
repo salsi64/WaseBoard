@@ -493,6 +493,7 @@ namespace WaseBoard.Windows
                 "upload" => $"{actor} a ajouté {sound}.",
                 "rename" => $"{actor} a renommé « {Detail(en, "from")} » en « {Detail(en, "to")} ».",
                 "emoji" => $"{actor} a changé l'emoji de {sound} ({Detail(en, "emoji")}).",
+                "trim" => $"{actor} a modifié la découpe de {sound}.",
                 "delete" => $"{actor} a supprimé {sound} (envoyé à la corbeille).",
                 "restore" => $"{actor} a restauré {sound}.",
                 "share_add" => $"{actor} a ajouté {sound} à la catégorie partagée.",

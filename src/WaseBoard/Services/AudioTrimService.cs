@@ -17,12 +17,15 @@ namespace WaseBoard.Services
     internal class MiniWaveformCache
     {
         public float[] Peaks { get; set; } = Array.Empty<float>();
+        public double DurationMs { get; set; }
         public DateTime SourceLastWriteUtc { get; set; }
     }
 
+    /// <summary>Mini-waveform d'un son entier et durée du fichier complet (pour situer la portion gardée d'un son découpé).</summary>
+    public sealed record MiniWaveform(float[] Peaks, double DurationMs);
+
     /// <summary>
-    /// Calcule une waveform simplifiée pour l'affichage, et permet d'exporter
-    /// un segment précis d'un fichier audio vers un nouveau fichier WAV.
+    /// Calcule une waveform simplifiée pour l'affichage (fenêtre de découpe et boutons de sons).
     /// </summary>
     public static class AudioTrimService
     {
@@ -96,9 +99,9 @@ namespace WaseBoard.Services
         /// <summary>
         /// Mini-waveform pour affichage sur un bouton-son, avec cache disque invalidé par date de
         /// modification du fichier. Ne lève jamais (retourne null en cas d'échec) ; synchrone, à
-        /// appeler en arrière-plan par l'appelant.
+        /// appeler en arrière-plan par l'appelant. Renvoie aussi la durée du fichier complet.
         /// </summary>
-        public static float[]? GetOrComputeMiniWaveform(string soundId, string audioFilePath, string cacheDirectory, int bucketCount = 28)
+        public static MiniWaveform? GetOrComputeMiniWaveform(string soundId, string audioFilePath, string cacheDirectory, int bucketCount = 28)
         {
             Directory.CreateDirectory(cacheDirectory);
             var cachePath = Path.Combine(cacheDirectory, $"{soundId}.waveform.json");
@@ -109,8 +112,9 @@ namespace WaseBoard.Services
                 try
                 {
                     var cached = JsonSerializer.Deserialize<MiniWaveformCache>(File.ReadAllText(cachePath));
-                    if (cached is not null && cached.SourceLastWriteUtc == sourceWriteTimeUtc)
-                        return cached.Peaks;
+                    // Un cache sans durée (écrit avant les découpes non destructives) est recalculé.
+                    if (cached is not null && cached.SourceLastWriteUtc == sourceWriteTimeUtc && cached.DurationMs > 0)
+                        return new MiniWaveform(cached.Peaks, cached.DurationMs);
                 }
                 catch { /* cache corrompu/format invalide : on recalcule ci-dessous */ }
             }
@@ -118,60 +122,15 @@ namespace WaseBoard.Services
             try
             {
                 var waveform = ComputeWaveform(audioFilePath, bucketCount);
-                var cache = new MiniWaveformCache { Peaks = waveform.Peaks, SourceLastWriteUtc = sourceWriteTimeUtc };
+                var durationMs = waveform.Duration.TotalMilliseconds;
+                var cache = new MiniWaveformCache { Peaks = waveform.Peaks, DurationMs = durationMs, SourceLastWriteUtc = sourceWriteTimeUtc };
                 File.WriteAllText(cachePath, JsonSerializer.Serialize(cache));
-                return waveform.Peaks;
+                return new MiniWaveform(waveform.Peaks, durationMs);
             }
             catch
             {
                 return null;
             }
-        }
-
-        /// <summary>
-        /// Exporte le segment [start, end] du fichier source vers un nouveau fichier WAV temporaire.
-        /// Retourne le chemin du fichier créé (à supprimer par l'appelant une fois copié dans la bibliothèque).
-        /// </summary>
-        public static string ExportTrimmedWav(string sourceFilePath, TimeSpan start, TimeSpan end)
-        {
-            using var reader = AudioReaderFactory.OpenForDecode(sourceFilePath);
-
-            start = TimeSpan.FromSeconds(Math.Clamp(start.TotalSeconds, 0, reader.TotalTime.TotalSeconds));
-            end = TimeSpan.FromSeconds(Math.Clamp(end.TotalSeconds, 0, reader.TotalTime.TotalSeconds));
-            if (end <= start) end = reader.TotalTime;
-
-            var outputPath = Path.Combine(Path.GetTempPath(), $"waseboard_trim_{Guid.NewGuid()}.wav");
-            using var writer = new WaveFileWriter(outputPath, reader.WaveFormat);
-
-            long bytesToSkip = (long)(start.TotalSeconds * reader.WaveFormat.AverageBytesPerSecond);
-            long bytesToKeep = (long)((end - start).TotalSeconds * reader.WaveFormat.AverageBytesPerSecond);
-
-            // Alignement sur une frame audio complète (BlockAlign) : sinon l'écriture peut démarrer
-            // au milieu d'une frame stéréo et corrompre les canaux.
-            int blockAlign = Math.Max(1, reader.WaveFormat.BlockAlign);
-            bytesToSkip -= bytesToSkip % blockAlign;
-            bytesToKeep -= bytesToKeep % blockAlign;
-
-            // Lecture séquentielle depuis le début, jamais de seek : pour les formats à débit
-            // variable (MP3 VBR, Ogg), le seek de NAudio est approximatif.
-            var buffer = new byte[8192];
-            long bytesReadTotal = 0;
-            int bytesRead;
-
-            while (bytesReadTotal < bytesToSkip + bytesToKeep &&
-                   (bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                long chunkStart = bytesReadTotal;
-                long writeFrom = Math.Max(0, bytesToSkip - chunkStart);
-                long writeTo = Math.Min(bytesRead, bytesToSkip + bytesToKeep - chunkStart);
-
-                if (writeTo > writeFrom)
-                    writer.Write(buffer, (int)writeFrom, (int)(writeTo - writeFrom));
-
-                bytesReadTotal += bytesRead;
-            }
-
-            return outputPath;
         }
     }
 }
