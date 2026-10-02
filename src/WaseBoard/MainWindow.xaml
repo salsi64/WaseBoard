@@ -304,6 +304,56 @@
             </Button>
         </DataTemplate>
 
+        <!-- En-tête d'un groupe repliable de la barre latérale (« Catégories », « Serveurs ») : flèche ▾/▸ + libellé. -->
+        <Style x:Key="SidebarGroupHeaderStyle" TargetType="ToggleButton">
+            <Setter Property="IsChecked" Value="True"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="6" Padding="4,4">
+                            <DockPanel>
+                                <TextBlock x:Name="Arrow" DockPanel.Dock="Left" Text="▾" FontSize="10" Opacity="0.7" Width="14"
+                                           VerticalAlignment="Center" Foreground="{TemplateBinding Foreground}"/>
+                                <ContentPresenter VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="False">
+                                <Setter TargetName="Arrow" Property="Text" Value="▸"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BgBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Entrée de navigation (une catégorie ou un serveur) : compacte, alignée à gauche. -->
+        <DataTemplate x:Key="SidebarNavItemTemplate">
+            <Button Tag="{Binding}" Click="NavItem_Click"
+                    AllowDrop="True" Drop="NavItem_Drop"
+                    PreviewMouseLeftButtonDown="NavItem_PreviewMouseLeftButtonDown"
+                    PreviewMouseMove="NavItem_PreviewMouseMove"
+                    HorizontalContentAlignment="Left" Height="28" Margin="14,0,0,2" Padding="8,0"
+                    FontSize="12" Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0">
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="16" Height="16" CornerRadius="8" Margin="0,0,7,0"
+                            Visibility="{Binding HasIcon, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <Border.Background>
+                            <ImageBrush ImageSource="{Binding IconUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
+                        </Border.Background>
+                    </Border>
+                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="140"/>
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+
         <!-- Gabarit d'une section (★ Favoris, une catégorie personnelle, ou une guilde Discord) : un accordéon repliable. -->
         <DataTemplate x:Key="SectionTemplate">
             <Expander IsExpanded="{Binding IsExpanded, Mode=OneTime}" Tag="{Binding CategoryKey}"
@@ -483,112 +533,128 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Barre latérale (thème moderne uniquement) -->
+        <!-- Barre latérale (thème moderne uniquement), épurée : titre, [Accueil | Favoris] sur une ligne, groupes
+             repliables « Serveurs » (peu nombreux, donc en premier) et « Catégories » (zone qui défile s'il y en a beaucoup), « En ce moment » toujours
+             visible sous la navigation (sa hauteur n'est jamais cédée à la liste), pied compact sur 3 lignes. -->
         <Border x:Name="Sidebar" Grid.Column="0" Background="{DynamicResource PanelBrush}" Visibility="Collapsed">
-            <Grid Margin="12">
+            <Grid Margin="10,8,10,10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <DockPanel Grid.Row="0" Margin="0,4,0,16">
-                    <Button x:Name="SidebarToggleButton" DockPanel.Dock="Right" Content="◀" Width="32" Height="32" FontSize="14" FontWeight="Bold"
+                <DockPanel Grid.Row="0" Margin="0,0,0,8">
+                    <Button x:Name="SidebarToggleButton" DockPanel.Dock="Right" Content="◀" Width="28" Height="28" FontSize="12" FontWeight="Bold"
                             Click="SidebarToggle_Click" ToolTip="Réduire/agrandir la barre latérale" Cursor="Hand"
                             Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                    <StackPanel x:Name="SidebarHeaderText">
-                        <TextBlock x:Name="SidebarHeaderTitle" Text="🎛️ WaseBoard" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
-                        <TextBlock Text="Ta base de sons, toujours avec toi." FontSize="10" Opacity="0.6" Foreground="{DynamicResource TextBrush}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                    <StackPanel x:Name="SidebarHeaderText" VerticalAlignment="Center">
+                        <TextBlock x:Name="SidebarHeaderTitle" Text="🎛️ WaseBoard" FontSize="16" FontWeight="Bold" TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource TextBrush}"/>
                     </StackPanel>
                 </DockPanel>
 
-                <!-- Membres actuellement en vocal avec vous : toujours visible, même barre réduite.
+                <!-- Membres en vocal avec vous : visible seulement s'il y en a (toujours visible, même barre réduite).
                      L'avatar de celui/celle qui joue un son s'illumine en même temps que le bouton. -->
-                <StackPanel Grid.Row="1" Margin="0,0,0,14">
-                    <TextBlock x:Name="VoiceMembersLabel" Text="🔊 En vocal avec vous" FontSize="10" Opacity="0.5"
-                               Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
-                    <ItemsControl ItemsSource="{Binding VoiceChannelMembers, RelativeSource={RelativeSource AncestorType=Window}}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Width="30" Height="30" CornerRadius="15" Margin="0,0,6,6"
-                                        BorderThickness="2" ToolTip="{Binding Username}">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="BorderBrush" Value="Transparent"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                                                    <Setter Property="Effect">
-                                                        <Setter.Value>
-                                                            <DropShadowEffect Color="#7C5CFF" BlurRadius="12" ShadowDepth="0" Opacity="0.95"/>
-                                                        </Setter.Value>
-                                                    </Setter>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <Border.Background>
-                                        <ImageBrush ImageSource="{Binding AvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
-                                    </Border.Background>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
+                <ItemsControl Grid.Row="1" Margin="0,0,0,8" ToolTip="En vocal avec vous"
+                              ItemsSource="{Binding VoiceChannelMembers, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="26" Height="26" CornerRadius="13" Margin="0,0,5,5"
+                                    BorderThickness="2" ToolTip="{Binding Username}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                <Setter Property="Effect">
+                                                    <Setter.Value>
+                                                        <DropShadowEffect Color="White" BlurRadius="10" ShadowDepth="0" Opacity="0.55"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{Binding AvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
+                                </Border.Background>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
-                <Button x:Name="SidebarHomeButton" Grid.Row="2" Content="🏠 Accueil" Click="NavHome_Click"
-                        HorizontalContentAlignment="Left" Height="36" Margin="0,0,0,8" Padding="10,0"
-                        Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                <Grid x:Name="SidebarBody" Grid.Row="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*" MinHeight="48"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                <!-- Zone centrale : la liste des sections (une entrée par section actuellement affichée :
-                     Favoris, chaque catégorie perso, chaque guilde Discord) puis « En ce moment » dans l'espace
-                     qui restait vide — la liste des sections est plafonnée et défile si elle est très longue. -->
-                <DockPanel x:Name="SidebarMiddle" Grid.Row="3" LastChildFill="True">
-                    <ScrollViewer x:Name="SidebarNavScroll" DockPanel.Dock="Top" MaxHeight="260" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl x:Name="SidebarNavItemsControl">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Button Tag="{Binding}" Click="NavItem_Click"
-                                            AllowDrop="True" Drop="NavItem_Drop"
-                                            PreviewMouseLeftButtonDown="NavItem_PreviewMouseLeftButtonDown"
-                                            PreviewMouseMove="NavItem_PreviewMouseMove"
-                                            HorizontalContentAlignment="Left" Height="32" Margin="0,0,0,4" Padding="8,0"
-                                            FontSize="12" Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Width="18" Height="18" CornerRadius="9" Margin="0,0,8,0"
-                                                    Visibility="{Binding HasIcon, Converter={StaticResource BoolToVisibilityConverter}}">
-                                                <Border.Background>
-                                                    <ImageBrush ImageSource="{Binding IconUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
-                                                </Border.Background>
-                                            </Border>
-                                            <TextBlock Text="{Binding Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="150"/>
-                                        </StackPanel>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                    <!-- Accueil et Favoris côte à côte -->
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="6"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Content="🏠 Accueil" Click="NavHome_Click" Height="28" FontSize="12"
+                                ToolTip="Revenir en haut de la liste"
+                                Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                        <Button Grid.Column="2" Content="★ Favoris" Click="NavFavorites_Click" Height="28" FontSize="12"
+                                ToolTip="Aller aux favoris"
+                                Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
+                    </Grid>
+
+                    <!-- Groupes repliables : la zone défile quand il y a beaucoup de catégories/serveurs -->
+                    <ScrollViewer x:Name="SidebarNavScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <StackPanel x:Name="NavServersGroup">
+                                <ToggleButton x:Name="NavServersToggle" Style="{StaticResource SidebarGroupHeaderStyle}"
+                                              Checked="NavGroupToggle_Changed" Unchecked="NavGroupToggle_Changed">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Serveurs" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="NavServersCount" Margin="6,0,0,0" Opacity="0.5"/>
+                                    </StackPanel>
+                                </ToggleButton>
+                                <ItemsControl x:Name="SidebarServersList" ItemTemplate="{StaticResource SidebarNavItemTemplate}"
+                                              Visibility="{Binding IsChecked, ElementName=NavServersToggle, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
+                            <StackPanel x:Name="NavCategoriesGroup">
+                                <ToggleButton x:Name="NavCategoriesToggle" Style="{StaticResource SidebarGroupHeaderStyle}"
+                                              Checked="NavGroupToggle_Changed" Unchecked="NavGroupToggle_Changed">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Catégories" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="NavCategoriesCount" Margin="6,0,0,0" Opacity="0.5"/>
+                                    </StackPanel>
+                                </ToggleButton>
+                                <ItemsControl x:Name="SidebarCategoriesList" ItemTemplate="{StaticResource SidebarNavItemTemplate}"
+                                              Visibility="{Binding IsChecked, ElementName=NavCategoriesToggle, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            </StackPanel>
+                        </StackPanel>
                     </ScrollViewer>
 
-                    <Grid Margin="0,12,0,0">
+                    <!-- « En ce moment » : ligne à hauteur propre (jamais rognée par la liste de navigation) -->
+                    <Grid Grid.Row="2" Margin="0,8,0,0" MaxHeight="150">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Text="🎧 En ce moment" FontSize="10" Opacity="0.5"
-                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                   Foreground="{DynamicResource TextBrush}" Margin="2,0,0,4"/>
                         <TextBlock Grid.Row="1" Text="Rien ne joue actuellement" FontSize="11" Opacity="0.45"
-                                   Foreground="{DynamicResource TextBrush}" VerticalAlignment="Top" Margin="2,2,0,0"
+                                   Foreground="{DynamicResource TextBrush}" VerticalAlignment="Top" Margin="2,0,0,0"
                                    Visibility="{Binding NowPlayingEntries.Count, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource CountToVisibilityConverter}, ConverterParameter=Invert}"/>
                         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding NowPlayingEntries, RelativeSource={RelativeSource AncestorType=Window}}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border CornerRadius="10" Background="{DynamicResource BgBrush}" Padding="6,5" Margin="0,0,0,4">
+                                        <Border CornerRadius="10" Background="{DynamicResource BgBrush}" Padding="6,4" Margin="0,0,0,4">
                                             <DockPanel>
                                                 <Border DockPanel.Dock="Left" Width="20" Height="20" CornerRadius="10" Margin="0,0,7,0" VerticalAlignment="Top"
                                                         BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1">
@@ -613,28 +679,34 @@
                             </ItemsControl>
                         </ScrollViewer>
                     </Grid>
-                </DockPanel>
 
-                <StackPanel x:Name="SidebarFooter" Grid.Row="4" Margin="0,12,0,0">
-                    <!-- Équivalent du slider de la barre d'outils classique (MainVolumePanel), qui
-                         reste masqué en thème moderne pour ne pas le dupliquer — voir ApplyTheme(). -->
-                    <StackPanel Orientation="Horizontal" Margin="2,0,2,10">
-                        <TextBlock Text="🔊" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{DynamicResource TextBrush}"/>
-                        <Slider x:Name="SidebarVolumeSlider" Width="110" Minimum="0" Maximum="1.5" Value="1.0"
-                                ValueChanged="VolumeSlider_ValueChanged" ToolTip="Volume d'écoute local (aperçu uniquement, jamais envoyé à Discord)"/>
-                        <TextBlock x:Name="SidebarVolumeLabel" Text="100%" FontSize="11" Opacity="0.7" Width="34"
-                                   VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{DynamicResource TextBrush}"/>
-                    </StackPanel>
-                    <Button Content="⚙ Paramètres" Click="SettingsButton_Click" HorizontalContentAlignment="Left" Height="34" Margin="0,0,0,8" Padding="10,0"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                    <Border Background="{DynamicResource BgBrush}" CornerRadius="8" Padding="10">
+                    <!-- Pied compact : statut serveur, statut vocal (une ligne, détail en infobulle), volume + paramètres -->
+                    <Border x:Name="SidebarFooter" Grid.Row="3" Margin="0,8,0,0" Padding="2,8,2,0"
+                            BorderBrush="{DynamicResource TrackBrush}" BorderThickness="0,1,0,0">
                         <StackPanel>
-                            <Grid x:Name="SidebarStatusHost" Margin="0,0,0,6"/>
-                            <TextBlock x:Name="SidebarConnectionText" Text="🔴 Non connecté" FontSize="12" Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap"/>
-                            <TextBlock Text="WaseBoard v2.4" FontSize="10" Opacity="0.5" Foreground="{DynamicResource TextBrush}" Margin="0,4,0,0"/>
+                            <Grid x:Name="SidebarStatusHost" Margin="0,0,0,2"/>
+                            <TextBlock x:Name="SidebarConnectionText" Text="🔴 Non connecté" FontSize="11" Opacity="0.75"
+                                       Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis" Margin="0,0,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Équivalent du slider de la barre d'outils classique (MainVolumePanel), qui
+                                     reste masqué en thème moderne pour ne pas le dupliquer — voir ApplyTheme(). -->
+                                <TextBlock Grid.Column="0" Text="🔊" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource TextBrush}"/>
+                                <Slider x:Name="SidebarVolumeSlider" Grid.Column="1" Minimum="0" Maximum="1.5" Value="1.0"
+                                        ValueChanged="VolumeSlider_ValueChanged" ToolTip="Volume d'écoute local (aperçu uniquement, jamais envoyé à Discord)"/>
+                                <TextBlock x:Name="SidebarVolumeLabel" Grid.Column="2" Text="100%" FontSize="10" Opacity="0.7" Width="30"
+                                           TextAlignment="Right" VerticalAlignment="Center" Margin="4,0,6,0" Foreground="{DynamicResource TextBrush}"/>
+                                <Button Grid.Column="3" Content="⚙" Click="SettingsButton_Click" Width="28" Height="28" ToolTip="Paramètres"
+                                        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
-                </StackPanel>
+                </Grid>
             </Grid>
         </Border>
 

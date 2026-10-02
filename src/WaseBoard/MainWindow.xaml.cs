@@ -481,6 +481,7 @@ namespace WaseBoard
             if (string.IsNullOrEmpty(_library.Settings.DiscordSessionToken))
             {
                 SidebarConnectionText.Text = "🔴 Non connecté à Discord";
+                SidebarConnectionText.ToolTip = null;
                 VoiceChannelMembers.Clear();
                 return;
             }
@@ -488,15 +489,18 @@ namespace WaseBoard
             var (connected, channel, _, guildName, channelMembers, error) = await _library.GetLiveVoiceStatusAsync();
             var who = _library.Settings.DiscordUsername ?? "vous";
 
+            // Une seule ligne dans la barre latérale (le détail complet est dans l'infobulle).
             if (error is not null)
             {
-                SidebarConnectionText.Text = $"⚠️ Statut indisponible : {error}";
+                SidebarConnectionText.Text = "⚠️ Statut indisponible";
+                SidebarConnectionText.ToolTip = error;
             }
             else
             {
-                SidebarConnectionText.Text = connected
-                    ? $"🟢 {who} — en vocal sur {guildName}\n({channel})"
-                    : $"⚪ {who} — le bot n'est pas dans votre salon vocal";
+                SidebarConnectionText.Text = connected ? $"🟢 {guildName} · {channel}" : "⚪ Bot absent de votre vocal";
+                SidebarConnectionText.ToolTip = connected
+                    ? $"{who} — en vocal sur {guildName} ({channel})"
+                    : $"{who} — le bot n'est pas dans votre salon vocal : cliquez sur « Vocal » pour qu'il vous rejoigne.";
             }
 
             var currentIds = VoiceChannelMembers.Select(m => m.UserId).ToHashSet();
@@ -538,6 +542,9 @@ namespace WaseBoard
         }
 
         private void NavHome_Click(object sender, RoutedEventArgs e) => SectionsScrollViewer.ScrollToTop();
+
+        /// <summary>« ★ Favoris » : la section Favoris est toujours la première affichée.</summary>
+        private void NavFavorites_Click(object sender, RoutedEventArgs e) => ScrollToSectionIndex(0);
 
         private void NavItem_Click(object sender, RoutedEventArgs e)
         {
@@ -608,9 +615,7 @@ namespace WaseBoard
 
             var visibility = _sidebarCollapsed ? Visibility.Collapsed : Visibility.Visible;
             SidebarHeaderText.Visibility = visibility;
-            SidebarHomeButton.Visibility = visibility;
-            SidebarMiddle.Visibility = visibility;
-            SidebarFooter.Visibility = visibility;
+            SidebarBody.Visibility = visibility;
             ApplyToolbarDensity();
         }
 
@@ -710,7 +715,6 @@ namespace WaseBoard
         private async Task PollActivityAsync()
         {
             var (activity, online) = await _library.GetActivityAsync();
-
             foreach (var item in Sounds)
             {
                 if (activity.TryGetValue(item.Id, out var users))
@@ -848,20 +852,53 @@ namespace WaseBoard
 
             // Navigation de la barre latérale : une entrée par section réellement affichée. Pour
             // les catégories partagées, l'icône du serveur Discord remplace l'emoji 🌐 générique.
-            SidebarNavItemsControl.ItemsSource = sections
+            // Favoris a son propre bouton (à côté d'Accueil) : seules les catégories et les serveurs ont des groupes.
+            var navItems = sections
                 .Select((s, i) =>
                 {
                     var iconUrl = s.IsShared ? _sharedCategories.FirstOrDefault(sc => sc.GuildId == s.CategoryKey)?.IconUrl : null;
-                    return new NavItem
+                    return (Section: s, Item: new NavItem
                     {
                         Label = iconUrl is not null ? StripSharedPrefix(s.Name) : s.Name,
                         IconUrl = iconUrl,
                         Index = i,
                         CategoryKey = s.CategoryKey,
                         IsReorderable = s.IsReorderable
-                    };
+                    });
                 })
+                .Where(t => t.Section.CategoryKey != FavoritesKey)
                 .ToList();
+
+            var categories = navItems.Where(t => !t.Section.IsShared).Select(t => t.Item).ToList();
+            var servers = navItems.Where(t => t.Section.IsShared).Select(t => t.Item).ToList();
+            SidebarCategoriesList.ItemsSource = categories;
+            SidebarServersList.ItemsSource = servers;
+
+            // Un groupe vide n'apparaît pas ; l'état replié/déplié est mémorisé (CollapsedSections, comme les sections).
+            _updatingNavGroups = true;
+            NavCategoriesCount.Text = categories.Count.ToString();
+            NavServersCount.Text = servers.Count.ToString();
+            NavCategoriesGroup.Visibility = categories.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            NavServersGroup.Visibility = servers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            NavCategoriesToggle.IsChecked = !_library.Settings.CollapsedSections.Contains(NavCategoriesGroupKey);
+            NavServersToggle.IsChecked = !_library.Settings.CollapsedSections.Contains(NavServersGroupKey);
+            _updatingNavGroups = false;
+        }
+
+        private const string NavCategoriesGroupKey = "__nav_categories__";
+        private const string NavServersGroupKey = "__nav_servers__";
+        private bool _updatingNavGroups;
+
+        private void NavGroupToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            // _settingsReady : ce gestionnaire se déclenche aussi pendant InitializeComponent(), avant le chargement des réglages.
+            if (!_settingsReady || _updatingNavGroups || sender is not ToggleButton toggle) return;
+
+            var key = ReferenceEquals(toggle, NavCategoriesToggle) ? NavCategoriesGroupKey : NavServersGroupKey;
+            var collapsed = _library.Settings.CollapsedSections;
+            if (toggle.IsChecked == true) collapsed.Remove(key);
+            else if (!collapsed.Contains(key)) collapsed.Add(key);
+            _library.SaveSettings();
         }
 
         /// <summary>Tri appliqué à chaque section de guilde (les seules vouées à devenir vraiment

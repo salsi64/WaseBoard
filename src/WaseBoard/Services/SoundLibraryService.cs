@@ -113,9 +113,16 @@ namespace WaseBoard.Services
 
         // ---------- Réglages locaux ----------
 
+        // Faux tant que Load() n'a pas lu settings.json : SaveSettings() refuse alors d'écrire. Sans ce garde-fou,
+        // n'importe quel gestionnaire d'évènement déclenché pendant InitializeComponent() (case cochée par défaut,
+        // curseur...) qui sauvegarderait ÉCRASERAIT les vrais réglages par des valeurs par défaut — adresse du
+        // serveur, jetons, catégories, favoris perdus.
+        private bool _settingsLoaded;
+
         public void Load()
         {
             LoadFromDisk();
+            _settingsLoaded = true;
             MigrateAppearance();
         }
 
@@ -204,6 +211,8 @@ namespace WaseBoard.Services
 
         public void SaveSettings()
         {
+            if (!_settingsLoaded) return; // réglages pas encore lus : écrire maintenant détruirait ceux du disque (voir _settingsLoaded)
+
             // Sauvegarde de secours (un seul niveau) avant d'écraser : en cas de perte de données
             // (ex: deux instances de l'app ouvertes en même temps, la dernière à sauvegarder
             // écrasant l'autre), settings.json.bak garde toujours l'état juste avant la dernière
