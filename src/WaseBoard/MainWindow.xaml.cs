@@ -905,16 +905,26 @@ namespace WaseBoard
                     ToastKind.Error);
                 return;
             }
-            else if (_sharedCategories.Count == 1)
+
+            // Seuls les serveurs où l'upload est permis (pas réservé aux admins, pas bloqué) sont proposés.
+            var uploadableGuilds = _sharedCategories.Where(s => s.CanUpload).ToList();
+            if (uploadableGuilds.Count == 0)
             {
-                guildId = _sharedCategories[0].GuildId;
+                ToastService.Show(
+                    "Vous ne pouvez ajouter de sons sur aucun de vos serveurs : l'ajout y est réservé aux administrateurs, ou votre accès a été retiré.",
+                    ToastKind.Warning);
+                return;
+            }
+            else if (uploadableGuilds.Count == 1)
+            {
+                guildId = uploadableGuilds[0].GuildId;
             }
             else
             {
                 // Présélectionne le serveur où l'utilisateur est actuellement connecté en vocal
                 // (le cas le plus probable), les autres restant choisissables dans la liste.
                 var (_, _, currentGuildId, _, _, _) = await _library.GetLiveVoiceStatusAsync();
-                var guildPicker = new GuildPickerWindow(_sharedCategories, currentGuildId) { Owner = this };
+                var guildPicker = new GuildPickerWindow(uploadableGuilds, currentGuildId) { Owner = this };
                 if (guildPicker.ShowDialog() != true || guildPicker.ResultGuildId is null) return;
                 guildId = guildPicker.ResultGuildId;
             }
@@ -1046,12 +1056,15 @@ namespace WaseBoard
                 catItem.Click += (_, _) => { _library.AddSoundToCategory(categoryName, item); RefreshSections(); };
                 categoryMenu.Items.Add(catItem);
             }
-            foreach (var shared in _sharedCategories)
+            // Une catégorie partagée n'accepte que les sons de leur auteur, ou n'importe lesquels si
+            // vous êtes admin de ce serveur : les autres entrées ne sont simplement pas proposées.
+            foreach (var shared in _sharedCategories.Where(s => CanShareTo(s, item)))
             {
                 var catItem = new MenuItem { Header = "🌐 " + shared.GuildName };
                 catItem.Click += async (_, _) =>
                 {
-                    await _library.SetSharedCategorySoundAsync(shared.GuildId, item, true);
+                    if (!await _library.SetSharedCategorySoundAsync(shared.GuildId, item, true))
+                        ToastService.Show("Ajout à la catégorie impossible. " + _library.LastErrorDetail, ToastKind.Warning);
                     await RefreshSharedCategoriesAsync();
                 };
                 categoryMenu.Items.Add(catItem);
@@ -1126,7 +1139,8 @@ namespace WaseBoard
             var deleteItem = new MenuItem { Header = "Supprimer" };
             deleteItem.Click += async (_, _) =>
             {
-                var confirm = ConfirmDialog.Show(this, $"Supprimer « {item.Name} » du catalogue partagé ?");
+                var confirm = ConfirmDialog.Show(this,
+                    $"Supprimer « {item.Name} » du catalogue partagé ?\nUn administrateur du serveur pourra le restaurer depuis la corbeille.");
                 if (!confirm) return;
 
                 var ok = await _library.DeleteSoundAsync(item);
@@ -1138,7 +1152,12 @@ namespace WaseBoard
                     ResyncHotkeys();
                     RefreshSections();
                 }
-                else ToastService.Show("Suppression échouée.", ToastKind.Warning);
+                else
+                {
+                    ToastService.Show(
+                        "Suppression échouée." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                        ToastKind.Warning);
+                }
             };
 
             menu.Items.Add(favoriteItem);
@@ -1149,9 +1168,12 @@ namespace WaseBoard
             // son étant potentiellement affiché dans plusieurs sections à la fois.
             var section = FindEnclosingSection(button);
             // Pas de "Retirer" pour un son dans sa guilde d'origine : ce n'est pas un ajout
-            // manuel à retirer (voir Supprimer, plus bas, pour l'effacer réellement).
+            // manuel à retirer (voir Supprimer, plus bas, pour l'effacer réellement). Dans une
+            // catégorie partagée, seuls l'auteur du son ou un admin du serveur peuvent le retirer.
             var isNativeToGuildSection = section is not null && section.IsShared && item.GuildId == section.CategoryKey;
-            if (section is not null && !isNativeToGuildSection && section.CategoryKey != FavoritesKey)
+            var canRemoveFromSection = section is not null
+                && (!section.IsShared || CanShareTo(_sharedCategories.FirstOrDefault(s => s.GuildId == section.CategoryKey), item));
+            if (section is not null && !isNativeToGuildSection && canRemoveFromSection && section.CategoryKey != FavoritesKey)
             {
                 var label = section.IsShared
                     ? $"Retirer de « {StripSharedPrefix(section.Name)} » (partagée)"
@@ -1162,7 +1184,8 @@ namespace WaseBoard
                 {
                     if (section.IsShared)
                     {
-                        await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, false);
+                        if (!await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, false))
+                            ToastService.Show("Retrait de la catégorie impossible. " + _library.LastErrorDetail, ToastKind.Warning);
                         await RefreshSharedCategoriesAsync();
                     }
                     else
@@ -1174,15 +1197,28 @@ namespace WaseBoard
                 menu.Items.Add(removeFromSectionItem);
             }
 
-            menu.Items.Add(emojiItem);
-            menu.Items.Add(removeEmojiItem);
-            menu.Items.Add(renameItem);
+            // Emoji, nom et suppression sont des données PARTAGÉES du catalogue : réservés à
+            // l'auteur du son et aux admins de sa guilde (le serveur le re-vérifie de toute façon).
+            if (item.CanEdit)
+            {
+                menu.Items.Add(emojiItem);
+                menu.Items.Add(removeEmojiItem);
+                menu.Items.Add(renameItem);
+            }
             menu.Items.Add(hotkeyItem);
             menu.Items.Add(removeHotkeyItem);
-            menu.Items.Add(new Separator());
-            menu.Items.Add(deleteItem);
+            if (item.CanEdit)
+            {
+                menu.Items.Add(new Separator());
+                menu.Items.Add(deleteItem);
+            }
             menu.IsOpen = true;
         }
+
+        /// <summary>Peut-on ajouter/retirer ce son à la catégorie partagée de ce serveur ? Oui pour son
+        /// auteur, ou pour un admin de ce serveur (même règle que le serveur, qui fait foi).</summary>
+        private static bool CanShareTo(SoundLibraryService.SharedCategoryInfo? shared, SoundItem item) =>
+            shared is not null && (shared.IsAdmin || item.IsMine);
 
         /// <summary>Retire le préfixe "🌐 " des noms de catégories partagées (ex: quand une icône Discord réelle le remplace visuellement).
         /// En chaîne plutôt qu'en char : l'emoji 🌐 occupe deux unités UTF-16 (paire de substituts) et ne tient pas dans un seul char.</summary>
@@ -1362,7 +1398,9 @@ namespace WaseBoard
             // casserait l'animation. Seul un nouveau classement nécessite RefreshSections().
             var wasAlreadyMember = section.Sounds.Contains(draggedItem);
 
-            await ApplySectionMembership(section, draggedItem);
+            // Déjà membre : aucun classement à refaire (et pas de vérification de droits à déclencher
+            // juste pour avoir réordonné un son dans sa propre catégorie).
+            if (!wasAlreadyMember) await ApplySectionMembership(section, draggedItem);
             _library.SaveSoundOrder(Sounds);
             ClearDragOverHighlight();
             e.Handled = true;
@@ -1378,7 +1416,16 @@ namespace WaseBoard
             }
             else if (section.IsShared)
             {
-                await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, true);
+                if (!CanShareTo(_sharedCategories.FirstOrDefault(s => s.GuildId == section.CategoryKey), item))
+                {
+                    ToastService.Show(
+                        "Seuls l'auteur du son ou un administrateur du serveur peuvent l'ajouter à cette catégorie.",
+                        ToastKind.Warning);
+                    return;
+                }
+
+                if (!await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, true))
+                    ToastService.Show("Ajout à la catégorie impossible. " + _library.LastErrorDetail, ToastKind.Warning);
                 _sharedCategories = await _library.FetchSharedCategoriesAsync();
             }
             else

@@ -43,6 +43,19 @@ namespace WaseBoard.Models
         /// <summary>Guilde Discord d'origine (celle où ce son a été uploadé) — donnée serveur, pas une préférence locale.</summary>
         public string? GuildId { get; set; }
 
+        /// <summary>Id Discord de l'auteur de l'upload (donnée serveur) ; null pour un ancien son sans auteur enregistré.</summary>
+        [JsonIgnore]
+        public string? UploadedBy { get; set; }
+
+        /// <summary>Vous êtes l'auteur de ce son. Calculé par le serveur pour VOTRE session (non persisté).</summary>
+        [JsonIgnore]
+        public bool IsMine { get; set; }
+
+        /// <summary>Vous pouvez renommer/changer l'emoji/supprimer ce son (auteur ou admin de sa guilde).
+        /// Sert uniquement à masquer les actions interdites : le serveur re-vérifie chaque modification.</summary>
+        [JsonIgnore]
+        public bool CanEdit { get; set; }
+
         /// <summary>Raccourci clavier optionnel, ex: "Ctrl+Alt+1" (préférence locale).</summary>
         public string? Hotkey { get; set; }
 

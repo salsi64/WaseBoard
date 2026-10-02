@@ -14,7 +14,7 @@ namespace WaseBoard.Services
 {
     /// <summary>Client HTTP du serveur WaseBoard (catalogue, upload, lecture, activité partagée)
     /// et gestion des préférences locales (favoris, catégories, ordre, raccourcis, volumes).</summary>
-    public class SoundLibraryService
+    public partial class SoundLibraryService
     {
         private readonly string _appDataFolder;
         private readonly string _cacheFolder;
@@ -45,6 +45,47 @@ namespace WaseBoard.Services
 
             /// <summary>Guilde Discord d'origine (celle où ce son a été uploadé).</summary>
             public string? guild_id { get; set; }
+
+            /// <summary>Id Discord de l'auteur ; absent sur les sons uploadés avant les rôles.</summary>
+            public string? uploaded_by { get; set; }
+
+            /// <summary>Calculés par le serveur pour la session qui demande le catalogue.</summary>
+            public bool is_mine { get; set; }
+            public bool can_edit { get; set; }
+        }
+
+        private static SoundItem ToSoundItem(CatalogEntry entry) => new()
+        {
+            Id = entry.id,
+            Name = entry.name,
+            Extension = entry.extension,
+            ContentHash = entry.hash,
+            Emoji = string.IsNullOrEmpty(entry.emoji) ? null : entry.emoji,
+            GuildId = entry.guild_id,
+            UploadedBy = entry.uploaded_by,
+            IsMine = entry.is_mine,
+            CanEdit = entry.can_edit
+        };
+
+        /// <summary>Message d'erreur lisible d'une réponse serveur : le champ "error" du corps JSON s'il
+        /// existe (les refus de droits y expliquent le motif), sinon le texte de repli.</summary>
+        private static async Task<string> ReadServerErrorAsync(HttpResponseMessage response, string fallback)
+        {
+            try
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("error", out var error)
+                    && error.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(error.GetString()))
+                    return error.GetString()!;
+            }
+            catch
+            {
+                // Corps absent ou non JSON : on garde le texte de repli.
+            }
+            return fallback;
         }
 
         private class CatalogResponse
@@ -299,7 +340,7 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Renommage échoué ({(int)response.StatusCode}).";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Renommage échoué ({(int)response.StatusCode}).");
                     return false;
                 }
 
@@ -329,7 +370,7 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Changement d'emoji échoué ({(int)response.StatusCode}).";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Changement d'emoji échoué ({(int)response.StatusCode}).");
                     return false;
                 }
 
@@ -420,17 +461,13 @@ namespace WaseBoard.Services
                 var json = await response.Content.ReadAsStringAsync();
                 var catalog = JsonSerializer.Deserialize<CatalogResponse>(json) ?? new CatalogResponse();
 
-                var items = catalog.sounds.Select(entry => new SoundItem
+                var items = catalog.sounds.Select(entry =>
                 {
-                    Id = entry.id,
-                    Name = entry.name,
-                    Extension = entry.extension,
-                    ContentHash = entry.hash,
-                    IsFavorite = Settings.FavoriteSoundIds.Contains(entry.id),
-                    Hotkey = Settings.SoundHotkeys.TryGetValue(entry.id, out var hk) ? hk : null,
-                    Volume = Settings.SoundVolumes.TryGetValue(entry.id, out var vol) ? vol : 1.0f,
-                    Emoji = string.IsNullOrEmpty(entry.emoji) ? null : entry.emoji,
-                    GuildId = entry.guild_id
+                    var item = ToSoundItem(entry);
+                    item.IsFavorite = Settings.FavoriteSoundIds.Contains(entry.id);
+                    item.Hotkey = Settings.SoundHotkeys.TryGetValue(entry.id, out var hk) ? hk : null;
+                    item.Volume = Settings.SoundVolumes.TryGetValue(entry.id, out var vol) ? vol : 1.0f;
+                    return item;
                 }).ToList();
 
                 return ApplyCustomOrder(items);
@@ -508,15 +545,13 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Envoi échoué ({(int)response.StatusCode}) : {await response.Content.ReadAsStringAsync()}";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Envoi échoué ({(int)response.StatusCode}).");
                     return null;
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
                 var entry = JsonSerializer.Deserialize<CatalogEntry>(json);
-                if (entry is null) return null;
-
-                return new SoundItem { Id = entry.id, Name = entry.name, Extension = entry.extension, ContentHash = entry.hash, Emoji = entry.emoji, GuildId = entry.guild_id };
+                return entry is null ? null : ToSoundItem(entry);
             }
             catch (Exception ex)
             {
@@ -535,7 +570,7 @@ namespace WaseBoard.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Suppression échouée ({(int)response.StatusCode}).";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Suppression échouée ({(int)response.StatusCode}).");
                     return false;
                 }
 
@@ -571,7 +606,7 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Le serveur a répondu {(int)response.StatusCode} : {await response.Content.ReadAsStringAsync()}";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
                     return false;
                 }
                 return true;
@@ -594,7 +629,7 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Le serveur a répondu {(int)response.StatusCode} : {await response.Content.ReadAsStringAsync()}";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
                     return false;
                 }
                 return true;
@@ -862,6 +897,13 @@ namespace WaseBoard.Services
             public string GuildName { get; set; } = "";
             public string? IconUrl { get; set; }
             public List<string> SoundIds { get; set; } = new();
+
+            /// <summary>Vous administrez ce serveur (propriétaire, permission Administrateur ou rôle désigné) —
+            /// calculé par le serveur ; sert à afficher les actions d'admin, le serveur re-vérifie chaque requête.</summary>
+            public bool IsAdmin { get; set; }
+
+            /// <summary>Vous pouvez y uploader des sons (pas restreint aux admins, pas bloqué).</summary>
+            public bool CanUpload { get; set; } = true;
         }
 
         /// <summary>
@@ -886,15 +928,22 @@ namespace WaseBoard.Services
                     .Select(g => (
                         Id: g.GetProperty("id").GetString() ?? "",
                         Name: g.GetProperty("name").GetString() ?? "",
-                        IconUrl: g.TryGetProperty("icon_url", out var icon) && icon.ValueKind == JsonValueKind.String ? icon.GetString() : null
+                        IconUrl: g.TryGetProperty("icon_url", out var icon) && icon.ValueKind == JsonValueKind.String ? icon.GetString() : null,
+                        IsAdmin: g.TryGetProperty("is_admin", out var admin) && admin.ValueKind == JsonValueKind.True,
+                        // Un serveur plus ancien (sans les rôles) n'envoie pas "can_upload" : permissif par défaut.
+                        CanUpload: !g.TryGetProperty("can_upload", out var canUpload) || canUpload.ValueKind != JsonValueKind.False
                     ))
                     .ToList();
 
                 var result = new List<SharedCategoryInfo>();
-                foreach (var (guildId, guildName, iconUrl) in guilds)
+                foreach (var (guildId, guildName, iconUrl, isAdmin, canUploadHere) in guilds)
                 {
                     var soundIds = await FetchSharedCategorySoundIdsAsync(guildId);
-                    result.Add(new SharedCategoryInfo { GuildId = guildId, GuildName = guildName, IconUrl = iconUrl, SoundIds = soundIds });
+                    result.Add(new SharedCategoryInfo
+                    {
+                        GuildId = guildId, GuildName = guildName, IconUrl = iconUrl, SoundIds = soundIds,
+                        IsAdmin = isAdmin, CanUpload = canUploadHere
+                    });
                 }
                 return result;
             }
@@ -919,13 +968,15 @@ namespace WaseBoard.Services
         /// <summary>Ajoute ou retire un son de la catégorie partagée automatique d'un serveur Discord.</summary>
         public async Task<bool> SetSharedCategorySoundAsync(string guildId, SoundItem item, bool add)
         {
+            LastErrorDetail = null;
             try
             {
                 using var request = CreateRequest(HttpMethod.Post, "/shared-categories/sounds");
                 var payload = JsonSerializer.Serialize(new { guild_id = guildId, sound_id = item.Id, action = add ? "add" : "remove" });
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
                 using var response = await SendAsync(request);
-                if (!response.IsSuccessStatusCode) LastErrorDetail = $"Le serveur a répondu {(int)response.StatusCode}.";
+                if (!response.IsSuccessStatusCode)
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex) { LastErrorDetail = ex.Message; return false; }
