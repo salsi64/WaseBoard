@@ -69,12 +69,34 @@ Nécessaire pour que les utilisateurs se connectent d'un clic dans WaseBoard plu
 coller leur ID Discord à la main.
 
 1. Sur la même application Discord (étape 1), onglet **OAuth2**.
-2. Copiez le **Client ID** et le **Client Secret** (bouton "Reset Secret" si besoin) dans
-   `config.json` (`oauth2_client_id`/`oauth2_client_secret`).
+2. Copiez le **Client Secret** (bouton "Reset Secret" si besoin) dans `config.json`
+   (`oauth2_client_secret`). Le **Client ID** est déduit tout seul de votre bot ; ne renseignez
+   `oauth2_client_id` que si vous voulez le forcer.
 3. Section **Redirects**, ajoutez exactement (barre oblique finale incluse) :
    `http://127.0.0.1:48899/callback/`
    (le client WaseBoard héberge lui-même un petit serveur local le temps de la connexion —
    rien à exposer publiquement, ça fonctionne même sans nom de domaine).
+
+## 4 bis. Vérifier la configuration
+
+Avant (ou après) le premier lancement, une commande contrôle tout sans connecter le bot à Discord
+(donc sans risque de doublon avec une instance déjà en marche) :
+
+```bash
+python3 server.py --check        # secret, adresse publique, ffmpeg/opus, dossier de données,
+                                 # jeton, intent « Server Members », redirection OAuth2, joignabilité
+python3 server.py --invite-url   # affiche l'URL pour inviter le bot (droits Voir/Se connecter/Parler)
+```
+
+Chaque ligne est un ✅, ⚠️ ou ❌ avec, si besoin, la correction à faire ; le code de sortie est ≠ 0
+s'il y a au moins un ❌. Une fois le bot lancé, la commande **`/diagnostic`** (réservée aux
+administrateurs du serveur Discord, réponse visible d'eux seuls) refait les mêmes contrôles et vérifie en
+plus les droits du bot sur **chaque salon vocal** du serveur et sur le vôtre.
+
+Toute la configuration peut aussi venir de variables d'environnement `WASEBOARD_*` (`BOT_TOKEN`,
+`SHARED_SECRET`, `PUBLIC_URL`, `OAUTH2_CLIENT_SECRET`, `GUILD_ID`, `HTTP_PORT`...), qui l'emportent sur
+`config.json` ; `WASEBOARD_DATA_DIR` déplace toutes les données (catalogue, sons, sessions...) hors du
+dossier du script. Rien à changer pour une installation existante.
 
 ## 5. Lancer le serveur
 
@@ -252,6 +274,8 @@ nécessite `ffprobe` (fourni avec ffmpeg) ; s'il manque, elle est simplement ign
 
 ## Dépannage
 
+- **Première chose à essayer** : `python3 server.py --check`, puis `/diagnostic` dans Discord — ils repèrent la plupart des erreurs de configuration.
+- **Le bot ne démarre pas (jeton refusé, « Server Members » désactivé)** : le message affiché dit où corriger dans le portail Discord.
 - **Le bot ne rejoint pas / erreur PyNaCl** : `pip install -r requirements.txt --force-reinstall`.
 - **Le son ne se joue pas** : vérifiez `ffmpeg -version` fonctionne sur le serveur.
 - **Un client ne peut pas se connecter** : depuis une autre machine,

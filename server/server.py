@@ -14,6 +14,7 @@ import logging
 import os
 import secrets
 import shutil
+import sys
 import threading
 import time
 import uuid
@@ -30,18 +31,21 @@ from discord import app_commands
 from discord.ext import commands
 from aiohttp import web
 
+import diagnostics
+from wb_config import DATA_DIR, ConfigError, load_config
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("waseboard-server")
 
-BASE_DIR = Path(__file__).parent
-CONFIG_PATH = BASE_DIR / "config.json"
-SOUNDS_DIR = BASE_DIR / "sounds_data"
+# Configuration : config.json + variables d'environnement WASEBOARD_* (voir wb_config.py) ; toutes les données vivent
+# dans DATA_DIR (à côté de ce script par défaut, ou WASEBOARD_DATA_DIR — le volume /data en Docker).
+SOUNDS_DIR = DATA_DIR / "sounds_data"
 CATALOG_PATH = SOUNDS_DIR / "catalog.json"
-SHARED_CATEGORIES_PATH = BASE_DIR / "shared_categories.json"
-OAUTH_SESSIONS_PATH = BASE_DIR / "oauth_sessions.json"
-STATS_PATH = BASE_DIR / "stats.jsonl"
-GUILD_SETTINGS_PATH = BASE_DIR / "guild_settings.json"
-AUDIT_PATH = BASE_DIR / "audit.jsonl"
+SHARED_CATEGORIES_PATH = DATA_DIR / "shared_categories.json"
+OAUTH_SESSIONS_PATH = DATA_DIR / "oauth_sessions.json"
+STATS_PATH = DATA_DIR / "stats.jsonl"
+GUILD_SETTINGS_PATH = DATA_DIR / "guild_settings.json"
+AUDIT_PATH = DATA_DIR / "audit.jsonl"
 TRASH_DIR = SOUNDS_DIR / "trash"
 TRASH_PATH = SOUNDS_DIR / "trash.json"
 
@@ -52,21 +56,19 @@ DISCORD_API_BASE = "https://discord.com/api/v10"
 # fournie par Discord — aucun risque de désynchronisation d'horloge possible).
 DISCORD_TOKEN_EXPIRY_SKEW_SECONDS = 60
 
-if not CONFIG_PATH.exists():
-    raise SystemExit(
-        "config.json introuvable. Copiez config.example.json vers config.json "
-        "et renseignez au minimum votre bot_token (voir README.md)."
-    )
+try:
+    CONFIG = load_config()
+except ConfigError as ex:
+    raise SystemExit(str(ex))
 
-with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-    CONFIG = json.load(f)
-
-BOT_TOKEN: str = CONFIG["bot_token"]
+# Le jeton n'est exigé qu'au démarrage du bot (voir __main__) : `--check` doit pouvoir tourner sans lui
+# pour dire précisément ce qui manque.
+BOT_TOKEN: str = CONFIG.get("bot_token", "")
 GUILD_ID: Optional[int] = CONFIG.get("guild_id")
 HTTP_HOST: str = CONFIG.get("http_host", "0.0.0.0")
 HTTP_PORT: int = CONFIG.get("http_port", 5005)
 SHARED_SECRET: str = CONFIG.get("shared_secret", "")
-OAUTH2_CLIENT_ID: str = CONFIG.get("oauth2_client_id", "")
+OAUTH2_CLIENT_ID: str = CONFIG.get("oauth2_client_id", "")  # facultatif : déduit du bot sinon (voir oauth_client_id())
 OAUTH2_CLIENT_SECRET: str = CONFIG.get("oauth2_client_secret", "")
 PUBLIC_URL: str = CONFIG.get("public_url", "")
 # Où télécharger WaseBoard (proposé sur la page d'invitation à qui ne l'a pas encore installé).
@@ -74,7 +76,7 @@ DOWNLOAD_URL: str = CONFIG.get("download_url") or "https://github.com/salsi64/Wa
 # Durée de conservation d'un son supprimé avant purge définitive (0 = jamais purgé).
 TRASH_RETENTION_DAYS: int = CONFIG.get("trash_retention_days", 30)
 
-SOUNDS_DIR.mkdir(exist_ok=True)
+SOUNDS_DIR.mkdir(parents=True, exist_ok=True)
 TRASH_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma"}
@@ -775,6 +777,14 @@ class WaseBoardServer(commands.Bot):
 
         await self._start_http_server()
 
+    def oauth_client_id(self) -> str:
+        """Identifiant client OAuth2 : celui de config.json s'il est renseigné, sinon celui de l'application
+        Discord du bot (c'est le même nombre) — l'admin n'a plus que le secret client à copier."""
+        if OAUTH2_CLIENT_ID:
+            return OAUTH2_CLIENT_ID
+        application_id = self.application_id or (self.user.id if self.user else None)
+        return str(application_id) if application_id else ""
+
     async def _sync_commands_to_guild(self, guild: discord.abc.Snowflake) -> None:
         """Rend les commandes slash disponibles immédiatement sur ce serveur (la synchro globale
         met jusqu'à 1h à se propager). Sans ça, seul le serveur de guild_id aurait /join & co —
@@ -1017,7 +1027,7 @@ class WaseBoardServer(commands.Bot):
                 data = await self._discord_token_request({
                     "grant_type": "refresh_token",
                     "refresh_token": session["discord_refresh_token"],
-                    "client_id": OAUTH2_CLIENT_ID,
+                    "client_id": self.oauth_client_id(),
                     "client_secret": OAUTH2_CLIENT_SECRET,
                 })
             except DiscordAuthRevoked:
@@ -1130,6 +1140,7 @@ class WaseBoardServer(commands.Bot):
         app.router.add_post("/stop", self._handle_stop_all)
         app.router.add_post("/join-my-channel", self._handle_join_my_channel)
         app.router.add_get("/status", self._handle_status)
+        app.router.add_get("/health", self._handle_health)  # publique et minimale : sonde Docker/Caddy/supervision
         app.router.add_get("/connect/{code}", self._handle_connect_page)  # publique : voir _handle_connect_page
         app.router.add_get("/activity", self._handle_activity)
         app.router.add_get("/my-guilds", self._handle_my_guilds)
@@ -1151,6 +1162,14 @@ class WaseBoardServer(commands.Bot):
         site = web.TCPSite(self._web_runner, HTTP_HOST, HTTP_PORT)
         await site.start()
         log.info("Serveur HTTP prêt sur %s:%s (catalogue + ordres de lecture WaseBoard).", HTTP_HOST, HTTP_PORT)
+
+    async def _handle_health(self, request: web.Request) -> web.Response:
+        """GET /health : 200 quand le bot est connecté à Discord, 503 tant qu'il démarre (ou s'il est déconnecté).
+        Volontairement sans authentification et sans aucun détail (ni nom de serveur ni compteur) : elle sert à
+        un HEALTHCHECK Docker, à Caddy ou à une sonde externe."""
+        ready = self.is_ready()
+        return web.json_response({"status": "ok" if ready else "starting"}, status=200 if ready else 503,
+                                 headers={"Cache-Control": "no-store"})
 
     def _check_auth(self, request: web.Request) -> bool:
         if not SHARED_SECRET:
@@ -1435,16 +1454,17 @@ class WaseBoardServer(commands.Bot):
         connaître à l'avance."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
-        if not OAUTH2_CLIENT_ID:
-            return web.json_response({"error": "oauth2_client_id non configuré côté serveur"}, status=500)
-        return web.json_response({"client_id": OAUTH2_CLIENT_ID})
+        client_id = self.oauth_client_id()
+        if not client_id:
+            return web.json_response({"error": "identifiant client OAuth2 indisponible côté serveur"}, status=500)
+        return web.json_response({"client_id": client_id})
 
     async def _handle_oauth_exchange(self, request: web.Request) -> web.Response:
         """Échange un code d'autorisation Discord contre une session WaseBoard. Le
         client_secret Discord reste ici, jamais transmis au client."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
-        if not OAUTH2_CLIENT_ID or not OAUTH2_CLIENT_SECRET:
+        if not self.oauth_client_id() or not OAUTH2_CLIENT_SECRET:
             return web.json_response({"error": "OAuth2 non configuré côté serveur"}, status=500)
 
         try:
@@ -1467,7 +1487,7 @@ class WaseBoardServer(commands.Bot):
                 "grant_type": "authorization_code",
                 "code": code,
                 "redirect_uri": redirect_uri,
-                "client_id": OAUTH2_CLIENT_ID,
+                "client_id": self.oauth_client_id(),
                 "client_secret": OAUTH2_CLIENT_SECRET,
             })
         except Exception as ex:
@@ -2061,6 +2081,27 @@ async def configurer_invitation(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("Bouton posté.", ephemeral=True)
 
 
+@bot.tree.command(name="diagnostic",
+                   description="Vérifie la configuration de WaseBoard sur ce serveur (réservé aux administrateurs)")
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
+async def diagnostic(interaction: discord.Interaction) -> None:
+    member = interaction.user
+    if not isinstance(member, discord.Member) or not member.guild_permissions.administrator:
+        await interaction.response.send_message("Cette commande est réservée aux administrateurs du serveur.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        checks, _ = await diagnostics.run_checks(CONFIG, DATA_DIR, bot.http_session)
+        checks += diagnostics.check_guild(interaction.guild, member)
+        checks.append(diagnostics.Check("info", "Serveurs connectés", f"{len(bot.guilds)} serveur(s) Discord sur cette instance"))
+        text = diagnostics.render(checks)
+    except Exception:
+        log.exception("Échec de /diagnostic")
+        text = "❌ Le diagnostic a échoué (voir les journaux du serveur)."
+    await interaction.followup.send(text, ephemeral=True)
+
+
 @bot.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
     """Quitte automatiquement un salon vocal dès qu'il ne reste plus que des bots (ou personne) dedans."""
@@ -2084,5 +2125,28 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
         log.exception("Erreur dans on_voice_state_update")
 
 
+def main() -> int:
+    # Modes « ligne de commande » : n'ouvrent AUCUNE connexion à la passerelle Discord (REST seulement), donc sans
+    # risque de doublon avec une instance déjà lancée avec le même jeton.
+    if "--check" in sys.argv or "--invite-url" in sys.argv:
+        return diagnostics.cli(sys.argv[1:], CONFIG, DATA_DIR)
+
+    if not BOT_TOKEN:
+        print("Jeton du bot manquant : renseignez bot_token dans config.json (copiez config.example.json) ou la "
+              "variable d'environnement WASEBOARD_BOT_TOKEN — voir README.md.", file=sys.stderr)
+        return 1
+    try:
+        bot.run(BOT_TOKEN)
+    except discord.LoginFailure:
+        print("❌ Discord a refusé le jeton du bot (invalide ou réinitialisé). Portail Discord > votre application > "
+              "Bot > Reset Token, puis mettez-le à jour. `python server.py --check` détaille le problème.", file=sys.stderr)
+        return 1
+    except discord.PrivilegedIntentsRequired:
+        print("❌ L'intent « Server Members » n'est pas activé pour ce bot. Portail Discord > votre application > Bot > "
+              "Privileged Gateway Intents > activez « Server Members Intent », puis relancez.", file=sys.stderr)
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
-    bot.run(BOT_TOKEN)
+    sys.exit(main())
