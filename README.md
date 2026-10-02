@@ -34,7 +34,8 @@ Discord) :
 - **Découpe waveform** non destructive : le son complet est conservé, on peut recouper plus tard
   (clic droit › Redécouper), et choisir l'emoji dans la même fenêtre.
 - **Raccourcis clavier globaux**, thème clair/sombre et interface classique ou moderne
-  (barre latérale), au choix.
+  (barre latérale), au choix. La forme d'onde des boutons est optionnelle : masquée, les boutons
+  tiennent sur une seule ligne et l'avatar de la personne qui joue reste affiché à droite du nom.
 - **Identification automatique** : votre compte Discord suffit, WaseBoard retrouve tout seul
   votre salon vocal — rien à choisir manuellement.
 - Formats supportés : mp3, wav, ogg (Vorbis et Opus), flac, m4a, wma.

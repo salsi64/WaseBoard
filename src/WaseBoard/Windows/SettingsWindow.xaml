@@ -113,6 +113,11 @@
                                     Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
                         </StackPanel>
 
+                        <TextBlock Text="Boutons de son" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                        <CheckBox x:Name="ShowWaveformsCheckBox" Content="Afficher la forme d'onde (waveform) sur les boutons"
+                                  Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="Décochée, les boutons tiennent sur une seule ligne (plus de sons visibles à la fois). L'avatar de la personne qui joue reste affiché, à droite du nom." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16" TextWrapping="Wrap"/>
+
                         <StackPanel x:Name="ManualColorSection">
                             <TextBlock Text="Fond personnalisé (avancé)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                             <TextBlock Text="Remplace le fond de la palette quand « suivre le thème Windows » est désactivé. Laissez vide pour garder celui de la palette." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>

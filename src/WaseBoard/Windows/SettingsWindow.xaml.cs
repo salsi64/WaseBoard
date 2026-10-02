@@ -79,6 +79,7 @@ namespace WaseBoard.Windows
 
             FollowSystemThemeCheckBox.IsChecked = _settings.FollowSystemTheme;
             FollowSystemAccentCheckBox.IsChecked = _settings.FollowSystemAccent;
+            ShowWaveformsCheckBox.IsChecked = _settings.ShowWaveforms;
             UpdateManualColorSectionEnabled();
 
             var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
@@ -435,6 +436,7 @@ namespace WaseBoard.Windows
             _settings.UiTheme = _selectedTheme;
             _settings.FollowSystemTheme = FollowSystemThemeCheckBox.IsChecked == true;
             _settings.FollowSystemAccent = FollowSystemAccentCheckBox.IsChecked == true;
+            _settings.ShowWaveforms = ShowWaveformsCheckBox.IsChecked == true;
 
             DialogResult = true;
             Close();

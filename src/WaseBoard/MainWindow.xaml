@@ -31,7 +31,7 @@
         <!-- Gabarit classique (carte) : colonne d'aperçu à gauche ; nom (2 lignes max), puis UNE ligne
              « ★ raccourci avatars » (hauteur réservée, rien ne se superpose), puis la mini-waveform. -->
         <DataTemplate x:Key="SoundButtonTemplate">
-            <Button Width="136" Height="68" Margin="5"
+            <Button Width="136" Margin="5"
                     Click="SoundButton_Click"
                     MouseRightButtonUp="SoundButton_RightClick"
                     PreviewMouseLeftButtonDown="SoundButton_PreviewMouseLeftButtonDown"
@@ -49,7 +49,7 @@
                                     Background="{Binding Id, Converter={StaticResource IdToColorConverter}}">
                                 <Border.Effect><BlurEffect Radius="16"/></Border.Effect>
                             </Border>
-                            <Border x:Name="CardBorder" Background="{DynamicResource PanelBrush}" CornerRadius="10" BorderThickness="2" BorderBrush="Transparent">
+                            <Border x:Name="CardBorder" Background="{DynamicResource PanelBrush}" CornerRadius="10" BorderThickness="2" BorderBrush="Transparent" Height="68">
                                 <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="4,3,4,2"/>
                             </Border>
                             <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="10" BorderThickness="2" IsHitTestVisible="False"
@@ -59,6 +59,10 @@
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="CardBorder" Property="Opacity" Value="0.85"/>
                             </Trigger>
+                            <!-- Waveform masquée (Paramètres > Apparence) : la carte perd la hauteur de la ligne de waveform. -->
+                            <DataTrigger Binding="{Binding Source={x:Static local:ThemeState.Options}, Path=ShowWaveforms}" Value="False">
+                                <Setter TargetName="CardBorder" Property="Height" Value="58"/>
+                            </DataTrigger>
                             <DataTrigger Binding="{Binding IsPlaying}" Value="True">
                                 <Setter TargetName="Halo" Property="Visibility" Value="Visible"/>
                                 <Setter TargetName="Ring" Property="Visibility" Value="Visible"/>
@@ -99,7 +103,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="16"/>
-                            <RowDefinition Height="12"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <!-- Emoji + nom (2 lignes max, tronqué) -->
@@ -145,20 +149,27 @@
 
                         <!-- Mini-waveform : calculée en arrière-plan, voir SoundItem.WaveformPeaks -->
                         <!-- Son découpé : la portion gardée est en clair, le reste du son complet estompé (TrimMaskConverter). -->
-                        <Path Grid.Row="2" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Opacity="0.85"
-                              Stretch="Fill" VerticalAlignment="Center" HorizontalAlignment="Stretch" Margin="0,0,2,0"
-                              Data="{Binding WaveformPeaks, Converter={StaticResource WaveformPeaksToPathConverter}, ConverterParameter='96,10'}">
-                            <Path.OpacityMask>
-                                <MultiBinding Converter="{StaticResource TrimMaskConverter}">
-                                    <Binding Path="TrimStartMs"/>
-                                    <Binding Path="TrimEndMs"/>
-                                    <Binding Path="DurationMs"/>
-                                </MultiBinding>
-                            </Path.OpacityMask>
-                        </Path>
+                        <Grid x:Name="CardWaveHost" Grid.Row="2" Height="12">
+                            <Path Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Opacity="0.85"
+                                  Stretch="Fill" VerticalAlignment="Center" HorizontalAlignment="Stretch" Margin="0,0,2,0"
+                                  Data="{Binding WaveformPeaks, Converter={StaticResource WaveformPeaksToPathConverter}, ConverterParameter='96,10'}">
+                                <Path.OpacityMask>
+                                    <MultiBinding Converter="{StaticResource TrimMaskConverter}">
+                                        <Binding Path="TrimStartMs"/>
+                                        <Binding Path="TrimEndMs"/>
+                                        <Binding Path="DurationMs"/>
+                                    </MultiBinding>
+                                </Path.OpacityMask>
+                            </Path>
+                        </Grid>
                     </Grid>
                 </Grid>
             </Button>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Source={x:Static local:ThemeState.Options}, Path=ShowWaveforms}" Value="False">
+                    <Setter TargetName="CardWaveHost" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
         <!-- Gabarit moderne (pilule à deux lignes) : largeur adaptée au nom (96 → 210 px, nom tronqué au-delà).
@@ -168,7 +179,7 @@
              s'adapte à la place restante : la pilule ne change jamais de taille pendant la lecture. Un halo de la
              couleur du son respire derrière. -->
         <DataTemplate x:Key="ModernSoundButtonTemplate">
-            <Button Height="54" Margin="3" MinWidth="118" MaxWidth="210"
+            <Button Margin="3" MinWidth="118" MaxWidth="210"
                     Click="SoundButton_Click"
                     MouseRightButtonUp="SoundButton_RightClick"
                     PreviewMouseLeftButtonDown="SoundButton_PreviewMouseLeftButtonDown"
@@ -185,7 +196,7 @@
                                     Background="{Binding Id, Converter={StaticResource IdToColorConverter}}">
                                 <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
                             </Border>
-                            <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="18"
+                            <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="18" Height="54"
                                     BorderThickness="2" BorderBrush="Transparent" Padding="4,3,15,4">
                                 <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                             </Border>
@@ -196,6 +207,16 @@
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="PillBorder" Property="Opacity" Value="0.85"/>
                             </Trigger>
+                            <!-- Waveform masquée (Paramètres > Apparence) : pilule d'une seule ligne, en gélule complète
+                                 (rayon = demi-hauteur) ; les marges internes laissent 6 px autour de la pastille à gauche
+                                 et de l'avatar à droite, concentriques avec les extrémités arrondies. -->
+                            <DataTrigger Binding="{Binding Source={x:Static local:ThemeState.Options}, Path=ShowWaveforms}" Value="False">
+                                <Setter TargetName="PillBorder" Property="Height" Value="40"/>
+                                <Setter TargetName="PillBorder" Property="CornerRadius" Value="20"/>
+                                <Setter TargetName="PillBorder" Property="Padding" Value="4,0,4,0"/>
+                                <Setter TargetName="Ring" Property="CornerRadius" Value="20"/>
+                                <Setter TargetName="Halo" Property="CornerRadius" Value="24"/>
+                            </DataTrigger>
                             <DataTrigger Binding="{Binding IsPlaying}" Value="True">
                                 <Setter TargetName="Halo" Property="Visibility" Value="Visible"/>
                                 <Setter TargetName="Ring" Property="Visibility" Value="Visible"/>
@@ -212,7 +233,7 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="17"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <!-- Ligne du haut : pastille d'icône, nom, ★, raccourci (c'est elle qui fixe la largeur de la pilule) -->
@@ -220,6 +241,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
@@ -262,11 +284,38 @@
                             </Border.Style>
                             <TextBlock Text="{Binding Hotkey}" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
                         </Border>
+
+                        <!-- Mode compact (waveform masquée) : l'avatar de qui joue vit ici, à l'extrémité droite de la pilule.
+                             L'emplacement (26 px) est réservé en permanence — masqué mais pas replié — donc la pilule garde
+                             exactement la même taille avec ou sans joueur. « +N » n'occupe de la place que s'ils sont plusieurs. -->
+                        <StackPanel x:Name="CompactAvatarSlot" Grid.Column="4" Orientation="Horizontal" Margin="6,0,0,0"
+                                    VerticalAlignment="Center" Visibility="Collapsed">
+                            <Border Width="26" Height="26" CornerRadius="13" BorderBrush="{DynamicResource TextBrush}" BorderThickness="1.5"
+                                    ToolTip="{Binding ActiveUsersTooltip}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Hidden"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasActivePlayers}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{Binding PrimaryAvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Text="{Binding ExtraActiveUsersText}" FontSize="11" FontWeight="Bold" Margin="4,0,0,0"
+                                       VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"
+                                       Visibility="{Binding HasExtraActivePlayers, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        </StackPanel>
                     </Grid>
 
                     <!-- Ligne du bas : mini-waveform (largeur naturelle faible : c'est le nom qui fixe la largeur de la pilule)
-                         et avatars de ceux qui jouent ce son. Son découpé : portion gardée en clair, reste estompé. -->
-                    <Grid Grid.Row="1" Margin="2,1,2,0">
+                         et avatars de ceux qui jouent ce son. Son découpé : portion gardée en clair, reste estompé.
+                         Repliée en mode compact (Paramètres > Apparence). -->
+                    <Grid x:Name="BottomRow" Grid.Row="1" Height="16" Margin="2,1,2,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
@@ -302,6 +351,12 @@
                     </Grid>
                 </Grid>
             </Button>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Source={x:Static local:ThemeState.Options}, Path=ShowWaveforms}" Value="False">
+                    <Setter TargetName="BottomRow" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="CompactAvatarSlot" Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
 
         <!-- En-tête d'un groupe repliable de la barre latérale (« Catégories », « Serveurs ») : flèche ▾/▸ + libellé. -->

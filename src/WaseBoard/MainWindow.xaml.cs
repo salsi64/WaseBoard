@@ -285,6 +285,7 @@ namespace WaseBoard
         {
             var isModern = _library.Settings.UiTheme == "Modern";
             ThemeState.IsModern = isModern;
+            ThemeState.Options.ShowWaveforms = _library.Settings.ShowWaveforms;
 
             Sidebar.Visibility = isModern ? Visibility.Visible : Visibility.Collapsed;
             SidebarColumn.Width = new GridLength(isModern ? (_sidebarCollapsed ? 60 : 230) : 0);

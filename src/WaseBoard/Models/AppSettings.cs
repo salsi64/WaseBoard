@@ -85,6 +85,10 @@ namespace WaseBoard.Models
         /// migrés une fois au chargement (SoundLibraryService.MigrateAppearance).</summary>
         public string? PaletteId { get; set; }
 
+        /// <summary>Affiche la mini-waveform sur les boutons de son. Désactivée : boutons plus compacts
+        /// (une seule ligne), l'avatar de qui joue passe alors à droite de la ligne du nom.</summary>
+        public bool ShowWaveforms { get; set; } = true;
+
         /// <summary>Vrai dès que l'assistant de premier lancement a été fermé une fois (Terminer ou Passer) —
         /// évite de le rouvrir à chaque démarrage tant que le jeton/la connexion Discord ne sont pas remplis.</summary>
         public bool HasSeenOnboarding { get; set; }
