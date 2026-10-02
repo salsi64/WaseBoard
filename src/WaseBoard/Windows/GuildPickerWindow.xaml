@@ -41,7 +41,7 @@
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
                     <Button x:Name="OkButton" Content="Valider" Padding="16,6" Click="Ok_Click" IsDefault="True"
                             IsEnabled="False"
-                            Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
                 </StackPanel>
             </StackPanel>
         </Grid>

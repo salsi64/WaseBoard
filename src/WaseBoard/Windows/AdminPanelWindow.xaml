@@ -223,7 +223,7 @@
                                    FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16"/>
 
                         <Button Content="Enregistrer les réglages" Height="34" HorizontalAlignment="Left" Padding="16,0" Margin="0,0,0,22"
-                                Click="SaveSettings_Click" Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                                Click="SaveSettings_Click" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
 
                         <TextBlock Text="Membres bloqués" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
                         <TextBlock Text="Ces membres ne peuvent plus ajouter de sons ici (ils gardent tout le reste). Pour bloquer quelqu'un, utilisez le bouton 🚫 dans la liste des sons."
@@ -365,7 +365,7 @@
                     <TextBlock Text="Le lien de connexion remplit automatiquement l'adresse du serveur et le jeton d'accès dans WaseBoard : il suffit de le cliquer, puis de se connecter avec Discord."
                                FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14"/>
                     <Button x:Name="CopyInviteButton" Content="Copier le lien d'invitation" Height="34" HorizontalAlignment="Left" Padding="16,0" Margin="0,0,0,18"
-                            Click="CopyInvite_Click" Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                            Click="CopyInvite_Click" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
                     <TextBlock Text="Dans Discord" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                     <TextBlock Text="Tapez /configurer-invitation dans le salon de votre choix : un bouton « Recevoir mon lien WaseBoard » y est posté, et chaque membre qui voit ce salon peut y cliquer pour obtenir son lien. Qui le voit se règle avec les permissions habituelles du salon."
                                FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>

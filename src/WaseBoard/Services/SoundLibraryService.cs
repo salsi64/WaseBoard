@@ -108,6 +108,27 @@ namespace WaseBoard.Services
 
         public void Load()
         {
+            LoadFromDisk();
+            MigrateAppearance();
+        }
+
+        /// <summary>Première ouverture depuis l'arrivée des palettes (PaletteId absent) : adopte la palette
+        /// par défaut et désactive « suivre l'accent Windows » — par défaut à vrai jusque-là, il aurait
+        /// masqué l'accent de la nouvelle palette. Reste modifiable ensuite dans Paramètres > Apparence.</summary>
+        private void MigrateAppearance()
+        {
+            if (Settings.PaletteId is not null) return;
+            Settings.PaletteId = PalettePresets.DefaultId;
+            Settings.FollowSystemAccent = false;
+            // L'ancien écran d'Apparence enregistrait toujours le fond violet par défaut, même sans
+            // personnalisation : ce n'est pas un vrai choix, et il masquerait la nouvelle palette.
+            if (string.Equals(Settings.BackgroundColorHex, "#1E1E2E", StringComparison.OrdinalIgnoreCase))
+                Settings.BackgroundColorHex = null;
+            SaveSettings();
+        }
+
+        private void LoadFromDisk()
+        {
             if (File.Exists(_settingsFilePath))
             {
                 try

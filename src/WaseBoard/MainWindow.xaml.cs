@@ -226,7 +226,12 @@ namespace WaseBoard
             try
             {
                 var color = (Color)ColorConverter.ConvertFromString(_library.Settings.BackgroundColorHex);
-                Application.Current.Resources["BgBrush"] = new SolidColorBrush(color);
+                var res = Application.Current.Resources;
+                res["BgBrush"] = new SolidColorBrush(color);
+                // Panneaux et pistes dérivés du fond choisi, pour rester cohérents avec lui
+                // (sinon ils garderaient les couleurs de la palette, d'une autre teinte).
+                res["PanelBrush"] = new SolidColorBrush(PalettePresets.Lighten(color, 0.06));
+                res["TrackBrush"] = new SolidColorBrush(PalettePresets.Lighten(color, 0.14));
             }
             catch { /* couleur invalide enregistrée : on garde le thème par défaut */ }
         }
@@ -243,46 +248,35 @@ namespace WaseBoard
         }
 
         /// <summary>
-        /// Applique la palette clair/sombre + accent, à chaud (brushes DynamicResource) : suit le
-        /// thème/accent Windows si activé dans les Paramètres, sinon conserve le comportement
-        /// historique (palette sombre fixe + couleur de fond personnalisée éventuelle).
+        /// Applique la palette choisie (Paramètres > Apparence), à chaud (brushes DynamicResource) :
+        /// clair/sombre suit Windows si « suivre le thème » est coché, l'accent suit Windows si
+        /// « suivre l'accent » est coché, et une couleur de fond personnalisée remplace le fond de la
+        /// palette quand le thème système n'est pas suivi.
         /// </summary>
         private void ApplyColorScheme()
         {
             var settings = _library.Settings;
-            var accentFallback = Color.FromRgb(0x7C, 0x5C, 0xFF);
+            var preset = PalettePresets.Get(settings.PaletteId);
 
-            if (settings.FollowSystemTheme)
-            {
-                var snapshot = RegistryThemeWatcher.ReadCurrent();
-                _lastSystemTheme = snapshot;
-                ApplyPalette(snapshot.IsLightTheme, settings.FollowSystemAccent ? snapshot.AccentColor : accentFallback);
-            }
-            else
-            {
-                ApplyPalette(isLight: false, accentFallback);
-                ApplyBackgroundColor();
-            }
+            var snapshot = settings.FollowSystemTheme || settings.FollowSystemAccent ? RegistryThemeWatcher.ReadCurrent() : null;
+            _lastSystemTheme = snapshot;
+
+            var isLight = settings.FollowSystemTheme && snapshot is { IsLightTheme: true };
+            var accent = settings.FollowSystemAccent && snapshot is not null ? snapshot.AccentColor : preset.Accent;
+            ApplyPalette(preset, isLight, accent);
+
+            if (!settings.FollowSystemTheme) ApplyBackgroundColor();
         }
 
-        private static void ApplyPalette(bool isLight, Color accent)
+        private static void ApplyPalette(PalettePreset preset, bool isLight, Color accent)
         {
             var res = Application.Current.Resources;
-            if (isLight)
-            {
-                res["BgBrush"] = new SolidColorBrush(Color.FromRgb(0xF5, 0xF5, 0xFA));
-                res["PanelBrush"] = new SolidColorBrush(Colors.White);
-                res["TextBrush"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x2E));
-                res["TrackBrush"] = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xEA));
-            }
-            else
-            {
-                res["BgBrush"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x2E));
-                res["PanelBrush"] = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x3C));
-                res["TextBrush"] = new SolidColorBrush(Color.FromRgb(0xF2, 0xF2, 0xF7));
-                res["TrackBrush"] = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x50));
-            }
+            res["BgBrush"] = new SolidColorBrush(isLight ? PalettePresets.LightBg : preset.Bg);
+            res["PanelBrush"] = new SolidColorBrush(isLight ? PalettePresets.LightPanel : preset.Panel);
+            res["TextBrush"] = new SolidColorBrush(isLight ? PalettePresets.LightText : preset.Text);
+            res["TrackBrush"] = new SolidColorBrush(isLight ? PalettePresets.LightTrack : preset.Track);
             res["AccentBrush"] = new SolidColorBrush(accent);
+            res["OnAccentBrush"] = new SolidColorBrush(PalettePresets.OnAccent(accent));
         }
 
         /// <summary>Bascule thème classique/moderne. Paramètres/volume de la barre d'outils sont

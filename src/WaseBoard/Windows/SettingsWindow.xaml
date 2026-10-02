@@ -76,7 +76,7 @@
 
                         <Button x:Name="ConnectDiscordButton" Content="Se connecter avec Discord" Height="34" Click="ConnectDiscordButton_Click"
                                 HorizontalAlignment="Left" Padding="14,0"
-                                Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                                Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
 
                         <Border x:Name="VerifyResultBorder" CornerRadius="6" Padding="8" Visibility="Collapsed" Margin="0,10,0,4">
                             <StackPanel Orientation="Horizontal">
@@ -94,13 +94,16 @@
                     <StackPanel x:Name="PageAppearance" Visibility="Collapsed">
                         <TextBlock Text="Apparence" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12"/>
 
+                        <TextBlock Text="Palette" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
+                        <WrapPanel x:Name="PaletteList" Margin="0,0,0,16"/>
+
                         <CheckBox x:Name="FollowSystemThemeCheckBox" Content="Suivre le thème clair/sombre de Windows"
                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"
                                   Checked="FollowSystemTheme_Changed" Unchecked="FollowSystemTheme_Changed"/>
-                        <CheckBox x:Name="FollowSystemAccentCheckBox" Content="Suivre la couleur d'accent de Windows"
+                        <CheckBox x:Name="FollowSystemAccentCheckBox" Content="Suivre la couleur d'accent de Windows (remplace l'accent de la palette)"
                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"
                                   Checked="FollowSystemTheme_Changed" Unchecked="FollowSystemTheme_Changed"/>
-                        <TextBlock Text="Désactivez pour garder la palette sombre et la couleur de fond ci-dessous, indépendamment de Windows." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16" TextWrapping="Wrap"/>
+                        <TextBlock Text="Avec le thème Windows clair, la palette claire s'applique ; le choix ci-dessus ne change alors que l'accent." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16" TextWrapping="Wrap"/>
 
                         <TextBlock Text="Thème de l'interface" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
@@ -111,26 +114,20 @@
                         </StackPanel>
 
                         <StackPanel x:Name="ManualColorSection">
-                            <TextBlock Text="Couleur de fond personnalisée" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                            <TextBlock Text="Utilisée quand « suivre le thème système » est désactivé ci-dessus." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                            <TextBlock Text="Fond personnalisé (avancé)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                            <TextBlock Text="Remplace le fond de la palette quand « suivre le thème Windows » est désactivé. Laissez vide pour garder celui de la palette." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
-                            <WrapPanel Margin="0,0,0,10">
-                                <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#1E1E2E" Cursor="Hand" Tag="#1E1E2E" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Violet (défaut)"/>
-                                <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#0F172A" Cursor="Hand" Tag="#0F172A" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Bleu nuit"/>
-                                <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#14231A" Cursor="Hand" Tag="#14231A" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Vert forêt"/>
-                                <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#2A1418" Cursor="Hand" Tag="#2A1418" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Bordeaux"/>
-                                <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#1A1A1A" Cursor="Hand" Tag="#1A1A1A" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Noir"/>
-                                <Border Width="34" Height="34" Margin="0,0,6,6" CornerRadius="7" Background="#232323" Cursor="Hand" Tag="#232323" MouseLeftButtonDown="ColorSwatch_Click" ToolTip="Gris anthracite"/>
-                            </WrapPanel>
-
-                            <TextBlock Text="Ou couleur personnalisée (code hexadécimal)" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                             <Grid Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBox x:Name="CustomColorBox" Grid.Column="0" Height="28" Margin="0,0,8,0"/>
-                                <Button Grid.Column="1" Content="Appliquer" Padding="10,0" Click="ApplyCustomColor_Click"
+                                <TextBox x:Name="CustomColorBox" Grid.Column="0" Height="28" Margin="0,0,8,0" ToolTip="Code hexadécimal, ex : #101820"/>
+                                <Button Grid.Column="1" Content="Appliquer" Padding="10,0" Margin="0,0,6,0" Click="ApplyCustomColor_Click"
+                                        Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                        BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                                <Button Grid.Column="2" Content="Effacer" Padding="10,0" Click="ClearCustomColor_Click"
                                         Background="Transparent" Foreground="{DynamicResource TextBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
                             </Grid>
@@ -167,7 +164,7 @@
                         <TextBlock x:Name="UpdateResultText" Margin="0,10,0,10" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
                         <Button x:Name="OpenReleaseButton" Content="Voir la nouvelle version" Height="34" HorizontalAlignment="Left" Padding="16,0"
                                 Click="OpenReleaseButton_Click" Visibility="Collapsed"
-                                Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                                Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
                     </StackPanel>
 
                     <!-- Page : Administration (admins de serveur uniquement) -->
@@ -177,7 +174,7 @@
 
                         <Button x:Name="OpenAdminPanelButton" Content="Ouvrir le panel d'administration" Height="34" HorizontalAlignment="Left" Padding="16,0"
                                 Click="OpenAdminPanelButton_Click"
-                                Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                                Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
                         <TextBlock Text="Sons du serveur, corbeille, réglages (rôle admin, quotas, anti-spam, membres bloqués), statistiques, journal d'actions et lien d'invitation."
                                    FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,10,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
@@ -185,7 +182,7 @@
             </ScrollViewer>
 
             <Button Grid.Row="1" Content="Enregistrer" Height="38" HorizontalAlignment="Right" Width="130" Margin="20,0,20,16"
-                    Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"
+                    Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"
                     FontWeight="SemiBold" Click="SaveButton_Click"/>
             </Grid>
             </Border>

@@ -22,7 +22,7 @@
                     <Button Content="Non" Padding="16,6" Margin="0,0,8,0" Click="No_Click" IsCancel="True"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
                     <Button Content="Oui" Padding="16,6" Click="Yes_Click" IsDefault="True"
-                            Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
                 </StackPanel>
             </StackPanel>
         </Grid>

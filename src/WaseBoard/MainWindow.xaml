@@ -16,7 +16,20 @@
     <Window.Resources>
         <local:SoundButtonTemplateSelector x:Key="SoundButtonTemplateSelector"/>
 
-        <!-- Gabarit classique (carte) réutilisé pour chaque bouton de son. -->
+        <!-- Halo de lecture : « respiration » lente d'un halo flou de la couleur du son, derrière le bouton
+             (jamais d'Effect lié à une couleur : seul un Brush peut être lié, d'où un Border flouté plutôt
+             qu'un DropShadowEffect). Visible uniquement pendant la lecture, donc aucun coût au repos. -->
+        <Storyboard x:Key="HaloPulseStoryboard">
+            <DoubleAnimation Storyboard.TargetName="Halo" Storyboard.TargetProperty="Opacity"
+                             From="0.30" To="0.85" Duration="0:0:0.75" AutoReverse="True" RepeatBehavior="Forever">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
+        <!-- Gabarit classique (carte) : colonne d'aperçu à gauche ; nom (2 lignes max), puis UNE ligne
+             « ★ raccourci avatars » (hauteur réservée, rien ne se superpose), puis la mini-waveform. -->
         <DataTemplate x:Key="SoundButtonTemplate">
             <Button Width="136" Height="68" Margin="5"
                     Click="SoundButton_Click"
@@ -25,27 +38,40 @@
                     PreviewMouseMove="SoundButton_PreviewMouseMove"
                     DragOver="SoundButton_DragOver" DragLeave="SoundButton_DragLeave"
                     Tag="{Binding}"
-                    Background="{DynamicResource PanelBrush}"
                     Foreground="{DynamicResource TextBrush}"
-                    BorderThickness="2"
-                    BorderBrush="Transparent"
                     FontSize="12"
                     FontWeight="SemiBold"
                     ToolTip="Clic gauche : jouer dans le vocal • Clic droit : options • Glisser : déplacer/classer • 📣 : aperçu local">
-                <Button.Style>
-                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                        <Style.Triggers>
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="Halo" Visibility="Collapsed" Margin="-6" CornerRadius="16" IsHitTestVisible="False" Opacity="0.3"
+                                    Background="{Binding Id, Converter={StaticResource IdToColorConverter}}">
+                                <Border.Effect><BlurEffect Radius="16"/></Border.Effect>
+                            </Border>
+                            <Border x:Name="CardBorder" Background="{DynamicResource PanelBrush}" CornerRadius="10" BorderThickness="2" BorderBrush="Transparent">
+                                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="4,3,4,2"/>
+                            </Border>
+                            <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="10" BorderThickness="2" IsHitTestVisible="False"
+                                    BorderBrush="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CardBorder" Property="Opacity" Value="0.85"/>
+                            </Trigger>
                             <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                                <Setter Property="Effect">
-                                    <Setter.Value>
-                                        <DropShadowEffect Color="#7C5CFF" BlurRadius="22" ShadowDepth="0" Opacity="0.95"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter TargetName="Halo" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Ring" Property="Visibility" Value="Visible"/>
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard x:Name="HaloPulse" Storyboard="{StaticResource HaloPulseStoryboard}"/>
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <StopStoryboard BeginStoryboardName="HaloPulse"/>
+                                </DataTrigger.ExitActions>
                             </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="32"/>
@@ -53,7 +79,7 @@
                     </Grid.ColumnDefinitions>
 
                     <Border Grid.Column="0" Width="26" Height="26" CornerRadius="6"
-                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,8,0,0"
                             MouseLeftButtonDown="PreviewIcon_MouseLeftButtonDown" Cursor="Hand"
                             ToolTip="Aperçu (lecture locale uniquement, sans envoi à Discord)">
                         <Border.Style>
@@ -72,40 +98,37 @@
                     <Grid Grid.Column="1">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*"/>
-                            <RowDefinition Height="14"/>
+                            <RowDefinition Height="16"/>
+                            <RowDefinition Height="12"/>
                         </Grid.RowDefinitions>
 
-                        <Grid Grid.Row="0">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0,8,0">
-                                <Image Source="{Binding Emoji, Converter={StaticResource EmojiToImageSourceConverter}}"
-                                       Width="16" Height="16" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding Name}" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="90" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <TextBlock Text="★" FontSize="12" Foreground="Gold" FontWeight="Bold"
-                                       HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,2,0"
-                                       Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                        <!-- Emoji + nom (2 lignes max, tronqué) -->
+                        <DockPanel Grid.Row="0" VerticalAlignment="Center" Margin="0,0,2,0">
+                            <Image DockPanel.Dock="Left" Source="{Binding Emoji, Converter={StaticResource EmojiToImageSourceConverter}}"
+                                   Width="16" Height="16" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Name}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="32"
+                                       TextAlignment="Left" VerticalAlignment="Center"/>
+                        </DockPanel>
 
-                            <!-- Badge de raccourci clavier, visible seulement au survol du bouton -->
+                        <!-- Une seule ligne d'indicateurs : ★ favori, raccourci (toujours affiché s'il existe), avatars -->
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="★" FontSize="11" Foreground="Gold" FontWeight="Bold" Margin="0,0,5,0" VerticalAlignment="Center"
+                                       Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             <Border Background="{DynamicResource BgBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
-                                    CornerRadius="4" Padding="4,1" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="2,2,0,0">
+                                    CornerRadius="4" Padding="4,0" Margin="0,0,5,0" VerticalAlignment="Center">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
-                                            <MultiDataTrigger>
-                                                <MultiDataTrigger.Conditions>
-                                                    <Condition Binding="{Binding Hotkey, Converter={StaticResource StringNotEmptyConverter}}" Value="True"/>
-                                                    <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True"/>
-                                                </MultiDataTrigger.Conditions>
+                                            <DataTrigger Binding="{Binding Hotkey, Converter={StaticResource StringNotEmptyConverter}}" Value="True">
                                                 <Setter Property="Visibility" Value="Visible"/>
-                                            </MultiDataTrigger>
+                                            </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
                                 <TextBlock Text="{Binding Hotkey}" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
                             </Border>
-
-                            <ItemsControl ItemsSource="{Binding ActiveUsers}" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="0,0,0,1">
+                            <ItemsControl ItemsSource="{Binding ActiveUsers}" VerticalAlignment="Center">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
@@ -121,20 +144,22 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </Grid>
+                        </StackPanel>
 
-                        <!-- Mini-waveform (thème classique uniquement) : calculée en arrière-plan, voir SoundItem.WaveformPeaks -->
-                        <Path Grid.Row="1" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Opacity="0.55"
-                              Stretch="Fill" VerticalAlignment="Center" HorizontalAlignment="Stretch" Margin="2,0"
-                              Data="{Binding WaveformPeaks, Converter={StaticResource WaveformPeaksToPathConverter}, ConverterParameter='96,12'}"/>
+                        <!-- Mini-waveform : calculée en arrière-plan, voir SoundItem.WaveformPeaks -->
+                        <Path Grid.Row="2" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Opacity="0.55"
+                              Stretch="Fill" VerticalAlignment="Center" HorizontalAlignment="Stretch" Margin="0,0,2,0"
+                              Data="{Binding WaveformPeaks, Converter={StaticResource WaveformPeaksToPathConverter}, ConverterParameter='96,10'}"/>
                     </Grid>
                 </Grid>
             </Button>
         </DataTemplate>
 
-        <!-- Gabarit moderne (pilule) réutilisé pour chaque bouton de son, façon maquette. -->
+        <!-- Gabarit moderne (pilule) : largeur adaptée au nom (96 → 210 px, nom tronqué au-delà). Pendant la
+             lecture, l'avatar de qui joue remplace la pastille d'icône (« +N » s'ils sont plusieurs) et un halo
+             de la couleur du son respire derrière — la pilule ne change jamais de taille. -->
         <DataTemplate x:Key="ModernSoundButtonTemplate">
-            <Button Height="42" Margin="4" ClipToBounds="True"
+            <Button Height="38" Margin="3" MinWidth="96" MaxWidth="210"
                     Click="SoundButton_Click"
                     MouseRightButtonUp="SoundButton_RightClick"
                     PreviewMouseLeftButtonDown="SoundButton_PreviewMouseLeftButtonDown"
@@ -146,84 +171,99 @@
                     ToolTip="Clic gauche : jouer dans le vocal • Clic droit : options • Glisser : déplacer/classer">
                 <Button.Template>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="21"
-                                BorderThickness="2" BorderBrush="Transparent" Padding="4,0,14,0">
-                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
-                        </Border>
+                        <Grid>
+                            <Border x:Name="Halo" Visibility="Collapsed" Margin="-5" CornerRadius="24" IsHitTestVisible="False" Opacity="0.3"
+                                    Background="{Binding Id, Converter={StaticResource IdToColorConverter}}">
+                                <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
+                            </Border>
+                            <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="19"
+                                    BorderThickness="2" BorderBrush="Transparent" Padding="3,0,12,0">
+                                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                            </Border>
+                            <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="19" BorderThickness="2" IsHitTestVisible="False"
+                                    BorderBrush="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="PillBorder" Property="Opacity" Value="0.85"/>
                             </Trigger>
                             <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                                <Setter TargetName="PillBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                                <Setter TargetName="PillBorder" Property="Effect">
-                                    <Setter.Value>
-                                        <DropShadowEffect Color="#7C5CFF" BlurRadius="18" ShadowDepth="0" Opacity="0.95"/>
-                                    </Setter.Value>
-                                </Setter>
+                                <Setter TargetName="Halo" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Ring" Property="Visibility" Value="Visible"/>
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard x:Name="HaloPulse" Storyboard="{StaticResource HaloPulseStoryboard}"/>
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <StopStoryboard BeginStoryboardName="HaloPulse"/>
+                                </DataTrigger.ExitActions>
                             </DataTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Button.Template>
-                <StackPanel Orientation="Horizontal">
-                    <Border Width="30" Height="30" CornerRadius="15" Margin="0,0,10,0"
-                            MouseLeftButtonDown="PreviewIcon_MouseLeftButtonDown" Cursor="Hand"
-                            ToolTip="Aperçu (lecture locale uniquement, sans envoi à Discord)">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background" Value="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsPreviewing}" Value="True">
-                                        <Setter Property="Background" Value="White"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <Image Source="{Binding Emoji, Converter={StaticResource EmojiToImageSourceConverter}, ConverterParameter=🔊}"
-                               Width="17" Height="17" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" MaxWidth="150" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="★" Foreground="Gold" FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Pastille d'icône (couleur du son + emoji) ; l'avatar de qui joue la recouvre pendant la lecture -->
+                    <Grid Grid.Column="0" Width="28" Height="28" Margin="0,0,8,0" Cursor="Hand" Background="Transparent"
+                          MouseLeftButtonDown="PreviewIcon_MouseLeftButtonDown"
+                          ToolTip="Aperçu (lecture locale uniquement, sans envoi à Discord)">
+                        <Border CornerRadius="14">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPreviewing}" Value="True">
+                                            <Setter Property="Background" Value="White"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <Image Source="{Binding Emoji, Converter={StaticResource EmojiToImageSourceConverter}, ConverterParameter=🔊}"
+                                   Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Ellipse Visibility="{Binding HasActivePlayers, Converter={StaticResource BoolToVisibilityConverter}}"
+                                 ToolTip="{Binding ActiveUsersTooltip}"
+                                 Stroke="{Binding Id, Converter={StaticResource IdToColorConverter}}" StrokeThickness="2">
+                            <Ellipse.Fill>
+                                <ImageBrush ImageSource="{Binding PrimaryAvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
+                            </Ellipse.Fill>
+                        </Ellipse>
+                        <Border Visibility="{Binding HasExtraActivePlayers, Converter={StaticResource BoolToVisibilityConverter}}"
+                                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-5,-3" Height="14" MinWidth="14"
+                                CornerRadius="7" Padding="3,0" Background="{DynamicResource BgBrush}"
+                                BorderBrush="{Binding Id, Converter={StaticResource IdToColorConverter}}" BorderThickness="1">
+                            <TextBlock Text="{Binding ExtraActiveUsersText}" FontSize="9" FontWeight="Bold" VerticalAlignment="Center"
+                                       HorizontalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+
+                    <TextBlock Grid.Column="2" Text="★" Foreground="Gold" FontSize="12" Margin="6,0,0,0" VerticalAlignment="Center"
                                Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
-                    <!-- Badge de raccourci clavier, visible seulement au survol du bouton -->
-                    <Border Background="{DynamicResource BgBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
+                    <!-- Badge de raccourci clavier : affiché en permanence s'il existe (jamais seulement au survol,
+                         sinon la pilule s'élargirait au survol et décalerait ses voisines). -->
+                    <Border Grid.Column="3" Background="{DynamicResource BgBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
                             CornerRadius="4" Padding="4,1" Margin="6,0,0,0" VerticalAlignment="Center">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
-                                    <MultiDataTrigger>
-                                        <MultiDataTrigger.Conditions>
-                                            <Condition Binding="{Binding Hotkey, Converter={StaticResource StringNotEmptyConverter}}" Value="True"/>
-                                            <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Button}}" Value="True"/>
-                                        </MultiDataTrigger.Conditions>
+                                    <DataTrigger Binding="{Binding Hotkey, Converter={StaticResource StringNotEmptyConverter}}" Value="True">
                                         <Setter Property="Visibility" Value="Visible"/>
-                                    </MultiDataTrigger>
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Border.Style>
                         <TextBlock Text="{Binding Hotkey}" FontSize="9" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
                     </Border>
-
-                    <!-- Avatars de qui joue ce son en ce moment (déjà présent en thème Classique). -->
-                    <ItemsControl ItemsSource="{Binding ActiveUsers}" Margin="8,0,0,0" VerticalAlignment="Center">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Width="16" Height="16" CornerRadius="8" Margin="0,0,3,0"
-                                        BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1"
-                                        ToolTip="{Binding Username}">
-                                    <Border.Background>
-                                        <ImageBrush ImageSource="{Binding AvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
-                                    </Border.Background>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
+                </Grid>
             </Button>
         </DataTemplate>
 
@@ -455,7 +495,7 @@
 
                 <Button x:Name="SidebarHomeButton" Grid.Row="2" Content="🏠 Accueil" Click="NavHome_Click"
                         HorizontalContentAlignment="Left" Height="36" Margin="0,0,0,8" Padding="10,0"
-                        Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                        Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
 
                 <!-- Liste dynamique : une entrée par section actuellement affichée (Favoris, chaque
                      catégorie perso, chaque guilde Discord), pas seulement des raccourcis fixes. -->
@@ -540,7 +580,7 @@
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"
                             BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
                     <Button x:Name="AddSoundButton" Content="+ Ajouter un son" Padding="10,6"
-                            Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"
+                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"
                             Click="AddSoundButton_Click"/>
                 </StackPanel>
 

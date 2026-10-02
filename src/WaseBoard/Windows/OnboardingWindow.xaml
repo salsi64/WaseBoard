@@ -66,7 +66,7 @@
                                Text="Un bot Discord (ajouté au serveur du Discord concerné par la personne qui héberge) rejoint votre salon vocal et joue les sons — jamais via votre micro. Une fois connecté, faites « /join » dans Discord (ou le bouton « 🔊 Rejoindre mon vocal » dans WaseBoard) pour que le bot vous rejoigne."/>
 
                     <Button x:Name="ConnectDiscordButton" Content="Se connecter avec Discord" Height="34" Click="ConnectDiscordButton_Click"
-                            Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
 
                     <Border x:Name="DiscordResultBorder" CornerRadius="6" Padding="8" Visibility="Collapsed" Margin="0,10,0,0">
                         <StackPanel Orientation="Horizontal">
@@ -95,7 +95,7 @@
                     <Button x:Name="SkipButton" Content="Passer" Padding="14,6" Margin="0,0,8,0" Click="Skip_Click"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
                     <Button x:Name="NextButton" Content="Suivant" Padding="18,6" Click="Next_Click" IsDefault="True"
-                            Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
                 </StackPanel>
             </Grid>
         </Grid>

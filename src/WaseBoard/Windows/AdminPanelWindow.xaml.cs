@@ -79,7 +79,7 @@ namespace WaseBoard.Windows
                 var isSelected = pageKey == key;
                 page.Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed;
                 nav.Background = isSelected ? accent : Brushes.Transparent;
-                nav.Foreground = isSelected ? Brushes.White : (Brush)FindResource("TextBrush");
+                nav.Foreground = (Brush)FindResource(isSelected ? "OnAccentBrush" : "TextBrush");
             }
         }
 

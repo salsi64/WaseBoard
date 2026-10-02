@@ -22,7 +22,7 @@
                     <Button Content="Annuler" Padding="12,6" Margin="0,0,8,0" Click="Cancel_Click"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
                     <Button Content="Valider" Padding="16,6" Click="Ok_Click" IsDefault="True"
-                            Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
                 </StackPanel>
             </StackPanel>
         </Grid>

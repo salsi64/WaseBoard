@@ -13,11 +13,15 @@
         <local:WaveformPeaksToPathConverter x:Key="WaveformPeaksToPathConverter"/>
         <local:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>
 
-        <SolidColorBrush x:Key="BgBrush" Color="#1E1E2E"/>
-        <SolidColorBrush x:Key="PanelBrush" Color="#2A2A3C"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="#7C5CFF"/>
-        <SolidColorBrush x:Key="TextBrush" Color="#F2F2F7"/>
-        <SolidColorBrush x:Key="TrackBrush" Color="#3A3A50"/>
+        <!-- Valeurs de départ (palette « Bleu nuit ») : MainWindow.ApplyColorScheme les remplace à chaud
+             selon la palette choisie, le thème Windows et l'accent. OnAccentBrush = texte posé sur un
+             fond d'accent (sombre sur un accent clair, blanc sur un accent foncé). -->
+        <SolidColorBrush x:Key="BgBrush" Color="#0F1624"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="#182236"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#38BDF8"/>
+        <SolidColorBrush x:Key="OnAccentBrush" Color="#0B1220"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#EAF0FA"/>
+        <SolidColorBrush x:Key="TrackBrush" Color="#26324A"/>
 
         <!-- Boutons : coins arrondis + retour visuel au survol/clic, tout en respectant
              les couleurs déjà définies (Background/Foreground) sur chaque bouton. -->

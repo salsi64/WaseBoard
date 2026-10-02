@@ -17,6 +17,7 @@ namespace WaseBoard.Windows
         private readonly AppSettings _settings;
         private readonly SoundLibraryService _library;
         private string? _selectedBgColorHex;
+        private string _selectedPaletteId = PalettePresets.DefaultId;
         private string _selectedTheme = "Classic";
         private string? _latestReleaseUrl;
 
@@ -66,9 +67,12 @@ namespace WaseBoard.Windows
             LocalVolumeSlider.Value = _settings.LocalPlaybackVolume;
             UpdateVolumeLabel(LocalVolumeLabel, _settings.LocalPlaybackVolume);
 
-            _selectedBgColorHex = _settings.BackgroundColorHex ?? "#1E1E2E";
-            CustomColorBox.Text = _selectedBgColorHex;
+            _selectedBgColorHex = _settings.BackgroundColorHex;
+            CustomColorBox.Text = _selectedBgColorHex ?? "";
             UpdateColorPreview();
+
+            _selectedPaletteId = _settings.PaletteId ?? PalettePresets.DefaultId;
+            BuildPaletteCards();
 
             _selectedTheme = _settings.UiTheme;
             UpdateThemeButtons();
@@ -110,7 +114,7 @@ namespace WaseBoard.Windows
                 var isSelected = pageKey == key;
                 page.Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed;
                 nav.Background = isSelected ? accent : Brushes.Transparent;
-                nav.Foreground = isSelected ? Brushes.White : (Brush)FindResource("TextBrush");
+                nav.Foreground = (Brush)FindResource(isSelected ? "OnAccentBrush" : "TextBrush");
             }
         }
 
@@ -155,19 +159,78 @@ namespace WaseBoard.Windows
             ModernThemeButton.Background = _selectedTheme == "Modern" ? accent : transparent;
         }
 
-        private void ColorSwatch_Click(object sender, MouseButtonEventArgs e)
+        /// <summary>Une carte par palette (fond, panneau, accent et nom dans ses propres couleurs), construite
+        /// en code : la liste vient de PalettePresets, pas d'un XAML à tenir à jour.</summary>
+        private void BuildPaletteCards()
         {
-            if (sender is FrameworkElement { Tag: string hex })
+            PaletteList.Children.Clear();
+            foreach (var preset in PalettePresets.All)
             {
-                _selectedBgColorHex = hex;
-                CustomColorBox.Text = hex;
-                UpdateColorPreview();
+                var card = new Border
+                {
+                    Width = 104, Height = 62, Margin = new Thickness(0, 0, 8, 8), CornerRadius = new CornerRadius(9),
+                    Background = new SolidColorBrush(preset.Bg), BorderThickness = new Thickness(2),
+                    Cursor = Cursors.Hand, Tag = preset.Id, ToolTip = preset.Name
+                };
+                var bar = new Border
+                {
+                    Height = 20, CornerRadius = new CornerRadius(10), Background = new SolidColorBrush(preset.Panel),
+                    VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(8, 8, 8, 0),
+                    Child = new System.Windows.Shapes.Ellipse
+                    {
+                        Width = 10, Height = 10, Fill = new SolidColorBrush(preset.Accent),
+                        HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(6, 0, 0, 0)
+                    }
+                };
+                var name = new TextBlock
+                {
+                    Text = preset.Name, FontSize = 11, FontWeight = FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(preset.Text), VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(10, 0, 0, 7)
+                };
+                var content = new Grid();
+                content.Children.Add(bar);
+                content.Children.Add(name);
+                card.Child = content;
+                card.MouseLeftButtonDown += PaletteCard_Click;
+                PaletteList.Children.Add(card);
             }
+            UpdatePaletteSelection();
+        }
+
+        private void PaletteCard_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: string id }) return;
+            _selectedPaletteId = id;
+            // Choisir une palette remplace un éventuel fond personnalisé : sinon le choix semblerait sans effet.
+            _selectedBgColorHex = null;
+            CustomColorBox.Text = "";
+            UpdateColorPreview();
+            UpdatePaletteSelection();
+        }
+
+        private void UpdatePaletteSelection()
+        {
+            foreach (var child in PaletteList.Children.OfType<Border>())
+            {
+                var preset = PalettePresets.Get(child.Tag as string);
+                child.BorderBrush = child.Tag as string == _selectedPaletteId
+                    ? new SolidColorBrush(preset.Accent)
+                    : (Brush)FindResource("TrackBrush");
+            }
+        }
+
+        private void ClearCustomColor_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedBgColorHex = null;
+            CustomColorBox.Text = "";
+            UpdateColorPreview();
         }
 
         private void ApplyCustomColor_Click(object sender, RoutedEventArgs e)
         {
             var text = CustomColorBox.Text.Trim();
+            if (text.Length == 0) { ClearCustomColor_Click(sender, e); return; }
             if (!text.StartsWith("#")) text = "#" + text;
 
             try
@@ -178,13 +241,18 @@ namespace WaseBoard.Windows
             }
             catch
             {
-                AlertDialog.Show(this, "Couleur invalide. Utilisez un code hexadécimal, ex: #1E1E2E",
+                AlertDialog.Show(this, "Couleur invalide. Utilisez un code hexadécimal, ex: #101820",
                     "WaseBoard", AlertKind.Warning);
             }
         }
 
         private void UpdateColorPreview()
         {
+            if (string.IsNullOrEmpty(_selectedBgColorHex))
+            {
+                ColorPreview.Background = Brushes.Transparent;
+                return;
+            }
             try
             {
                 ColorPreview.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_selectedBgColorHex));
@@ -363,6 +431,7 @@ namespace WaseBoard.Windows
             _settings.ServerToken = ServerTokenBox.Text;
             _settings.LocalPlaybackVolume = (float)LocalVolumeSlider.Value;
             _settings.BackgroundColorHex = _selectedBgColorHex;
+            _settings.PaletteId = _selectedPaletteId;
             _settings.UiTheme = _selectedTheme;
             _settings.FollowSystemTheme = FollowSystemThemeCheckBox.IsChecked == true;
             _settings.FollowSystemAccent = FollowSystemAccentCheckBox.IsChecked == true;

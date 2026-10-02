@@ -77,8 +77,13 @@ namespace WaseBoard.Models
         /// <summary>Si vrai, la palette clair/sombre suit automatiquement le thème Windows (ignore BackgroundColorHex).</summary>
         public bool FollowSystemTheme { get; set; } = true;
 
-        /// <summary>Si vrai, la couleur d'accent suit automatiquement la couleur d'accent Windows.</summary>
+        /// <summary>Si vrai, la couleur d'accent suit automatiquement la couleur d'accent Windows
+        /// (au lieu de l'accent de la palette choisie).</summary>
         public bool FollowSystemAccent { get; set; } = true;
+
+        /// <summary>Palette de l'interface (voir PalettePresets). Null = réglages antérieurs aux palettes :
+        /// migrés une fois au chargement (SoundLibraryService.MigrateAppearance).</summary>
+        public string? PaletteId { get; set; }
 
         /// <summary>Vrai dès que l'assistant de premier lancement a été fermé une fois (Terminer ou Passer) —
         /// évite de le rouvrir à chaque démarrage tant que le jeton/la connexion Discord ne sont pas remplis.</summary>
