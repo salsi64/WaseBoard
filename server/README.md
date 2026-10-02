@@ -185,8 +185,16 @@ côté WaseBoard.
 
 ## Sécurité
 
-- Le `shared_secret` est la seule protection de l'API — aucune limitation de débit sur les
-  tentatives, choisissez-le long et aléatoire, ne le partagez qu'à des personnes de confiance.
+- Depuis l'ajout de la connexion Discord (OAuth2), l'accès réel au catalogue/aux sons repose
+  sur une identité Discord vérifiée + l'appartenance à la bonne guilde — plus seulement sur
+  `shared_secret`. Ce dernier protège désormais surtout les quelques routes utilisables avant
+  toute connexion (`/status`, `/activity`, `/oauth/client-id`, `/oauth/exchange`), pour éviter
+  qu'un inconnu sur internet puisse ne serait-ce que sonder le serveur ou saturer l'échange
+  OAuth2 — choisissez-le quand même long et aléatoire, aucune limitation de débit n'existe
+  en complément.
+- Le lien de connexion (`/configurer-invitation`) contient ce `shared_secret` en clair — qui
+  voit le bouton Discord qui le distribue doit donc être contrôlé via les permissions du
+  salon où vous le postez, pas seulement en gardant le secret pour vous.
 
 ## Dépannage
 

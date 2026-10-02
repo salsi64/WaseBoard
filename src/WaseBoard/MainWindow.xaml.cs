@@ -367,6 +367,18 @@ namespace WaseBoard
         /// en théorie être déclenché par n'importe quelle page/appli sur la machine).</summary>
         private async Task ApplyDeepLinkAsync(string uri, bool isRuntimeTrigger)
         {
+            // Une autre fenêtre modale (Paramètres, sélecteur de guilde à l'upload, découpe
+            // audio...) est déjà ouverte : ne pas empiler une confirmation par-dessus, ce serait
+            // visuellement confus et pourrait se perdre derrière la fenêtre active. On prévient
+            // et on abandonne — l'utilisateur peut recliquer le lien une fois libre.
+            if (Application.Current.Windows.Cast<Window>().Any(w => w != this && w.IsVisible))
+            {
+                ToastService.Show(
+                    "Lien de connexion WaseBoard reçu — terminez d'abord l'action en cours, puis recliquez le lien.",
+                    ToastKind.Warning);
+                return;
+            }
+
             string? url = null, token = null;
             try
             {
@@ -393,6 +405,11 @@ namespace WaseBoard
                 var confirmed = ConfirmDialog.Show(this,
                     $"Se connecter à un nouveau serveur WaseBoard ?\n\n{url}\n\nVos réglages de connexion actuels seront remplacés.");
                 if (!confirmed) return;
+
+                // Les fichiers en cache appartiennent à l'ancien serveur — plus valides une fois
+                // qu'on en change (et un ID de son pourrait en théorie se recouper entre deux
+                // instances différentes).
+                _library.ClearLocalCache();
             }
 
             _library.Settings.ServerUrl = url;

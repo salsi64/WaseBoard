@@ -117,6 +117,22 @@ namespace WaseBoard.Services
             if (migrated) SaveSettings();
         }
 
+        /// <summary>Vide le cache local de fichiers audio téléchargés — à appeler quand on change
+        /// de serveur (ex: lien waseboard://connect vers une autre instance) : les fichiers mis en
+        /// cache appartiennent à l'ancien serveur et n'ont plus lieu d'être conservés (par ailleurs,
+        /// deux instances différentes pourraient en théorie réutiliser le même ID de son).</summary>
+        public void ClearLocalCache()
+        {
+            try
+            {
+                foreach (var file in Directory.GetFiles(_cacheFolder))
+                {
+                    try { File.Delete(file); } catch { /* best-effort, fichier verrouillé ou déjà supprimé */ }
+                }
+            }
+            catch { /* dossier inaccessible : rien de grave, juste de l'espace disque non libéré */ }
+        }
+
         public void SaveSettings()
         {
             // Sauvegarde de secours (un seul niveau) avant d'écraser : en cas de perte de données
