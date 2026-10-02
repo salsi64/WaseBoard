@@ -57,6 +57,9 @@ Copiez `config.example.json` vers `config.json` et renseignez :
   `https://waseboard.exemple.com` une fois l'étape 6 faite, ou l'IP locale en test). Sert
   uniquement à construire le lien de connexion cliquable (voir étape 7) — peut rester vide
   en attendant, le reste du serveur fonctionne sans.
+- `trash_retention_days` *(optionnel, 30 par défaut)* : nombre de jours pendant lesquels un
+  son supprimé reste restaurable (corbeille, voir « Rôles et administration ») avant d'être
+  définitivement effacé ; `0` = jamais purgé.
 
 ## 4. Activer la connexion Discord (OAuth2)
 
@@ -184,6 +187,37 @@ côté WaseBoard.
    vocal" dans WaseBoard). `/leave` pour le déconnecter — il part aussi seul si le salon se vide.
 3. Les sons ajoutés/joués depuis n'importe quel client sont partagés entre tous les
    utilisateurs connectés au même serveur.
+
+## Rôles et administration
+
+Les droits sont décidés **par le serveur** (le client ne fait que masquer ce qui est interdit),
+à partir de l'identité Discord vérifiée de chaque utilisateur.
+
+**Qui est administrateur d'un serveur Discord ?** Le propriétaire, toute personne ayant la
+permission Discord *Administrateur*, et — si un admin le règle dans le panel — les membres
+d'un rôle Discord désigné (utile pour déléguer sans donner la permission Administrateur).
+
+| Action | Qui peut |
+|---|---|
+| Jouer un son, favoris, catégories/raccourcis/volumes personnels | tout membre |
+| Ajouter un son | tout membre par défaut ; réglable : réservé aux admins, ou refusé à un membre précis |
+| Renommer, changer l'emoji, supprimer un son | son auteur, ou un admin de la guilde où le son a été uploadé |
+| Ajouter/retirer un son d'une catégorie partagée | son auteur, ou un admin de cette guilde |
+
+Les sons uploadés avant l'arrivée des rôles n'ont pas d'auteur enregistré : seuls les admins
+peuvent les gérer. Un son supprimé va dans une **corbeille** (fichier conservé, partages
+mémorisés) : un admin peut le restaurer pendant `trash_retention_days` jours.
+
+**Panel d'administration** (bouton « Administration » dans WaseBoard, visible des seuls admins) :
+sons de la guilde (auteur, date, taille, nombre de lectures), corbeille, réglages (rôle admin,
+upload réservé aux admins, quotas de nombre/taille/durée, anti-spam à la lecture, membres
+bloqués), statistiques d'usage, journal d'actions, lien d'invitation. La limite de durée
+nécessite `ffprobe` (fourni avec ffmpeg) ; s'il manque, elle est simplement ignorée.
+
+**Fichiers de données créés à côté de `server.py`** (à inclure dans vos sauvegardes avec
+`sounds_data/` et `shared_categories.json`) : `guild_settings.json` (réglages par serveur),
+`audit.jsonl` (journal d'actions), `stats.jsonl` (lectures), `sounds_data/trash/` +
+`sounds_data/trash.json` (corbeille).
 
 ## Sécurité
 

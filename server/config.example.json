@@ -6,5 +6,6 @@
   "shared_secret": "changez-moi",
   "oauth2_client_id": "",
   "oauth2_client_secret": "",
-  "public_url": ""
+  "public_url": "",
+  "trash_retention_days": 30
 }

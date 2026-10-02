@@ -12,9 +12,12 @@ import json
 import logging
 import os
 import secrets
+import shutil
 import threading
 import time
 import uuid
+from collections import Counter, deque
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -36,6 +39,10 @@ CATALOG_PATH = SOUNDS_DIR / "catalog.json"
 SHARED_CATEGORIES_PATH = BASE_DIR / "shared_categories.json"
 OAUTH_SESSIONS_PATH = BASE_DIR / "oauth_sessions.json"
 STATS_PATH = BASE_DIR / "stats.jsonl"
+GUILD_SETTINGS_PATH = BASE_DIR / "guild_settings.json"
+AUDIT_PATH = BASE_DIR / "audit.jsonl"
+TRASH_DIR = SOUNDS_DIR / "trash"
+TRASH_PATH = SOUNDS_DIR / "trash.json"
 
 DISCORD_API_BASE = "https://discord.com/api/v10"
 # Marge de sécurité avant l'expiration réelle du token Discord sous-jacent : couvre la
@@ -61,8 +68,11 @@ SHARED_SECRET: str = CONFIG.get("shared_secret", "")
 OAUTH2_CLIENT_ID: str = CONFIG.get("oauth2_client_id", "")
 OAUTH2_CLIENT_SECRET: str = CONFIG.get("oauth2_client_secret", "")
 PUBLIC_URL: str = CONFIG.get("public_url", "")
+# Durée de conservation d'un son supprimé avant purge définitive (0 = jamais purgé).
+TRASH_RETENTION_DAYS: int = CONFIG.get("trash_retention_days", 30)
 
 SOUNDS_DIR.mkdir(exist_ok=True)
+TRASH_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma"}
 
@@ -131,9 +141,19 @@ def record_play_stat(
         log.exception("Échec de l'enregistrement des statistiques de lecture")
 
 
+def _atomic_write_json(path: Path, data, private: bool = False) -> None:
+    """Écriture atomique (temp + os.replace) : un crash en plein write ne laisse jamais un JSON
+    tronqué à la place de l'ancien contenu."""
+    tmp_path = path.with_name(path.name + ".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    if private:
+        os.chmod(tmp_path, 0o600)
+    os.replace(tmp_path, path)
+
+
 def save_catalog(catalog: list[dict]) -> None:
-    with open(CATALOG_PATH, "w", encoding="utf-8") as f:
-        json.dump(catalog, f, indent=2, ensure_ascii=False)
+    _atomic_write_json(CATALOG_PATH, catalog)
 
 
 def load_shared_categories() -> dict:
@@ -144,8 +164,7 @@ def load_shared_categories() -> dict:
 
 
 def save_shared_categories(data: dict) -> None:
-    with open(SHARED_CATEGORIES_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    _atomic_write_json(SHARED_CATEGORIES_PATH, data)
 
 
 def load_oauth_sessions() -> dict:
@@ -156,15 +175,306 @@ def load_oauth_sessions() -> dict:
 
 
 def save_oauth_sessions(data: dict) -> None:
-    # Écriture atomique (temp + os.replace) : contrairement à shared_categories.json (écrit
-    # seulement sur action utilisateur explicite), ce fichier est réécrit à chaque connexion
-    # ET à chaque rafraîchissement paresseux de token — un crash en plein write ne doit
-    # jamais laisser un JSON tronqué (ce fichier contient des jetons Discord vivants).
-    tmp_path = OAUTH_SESSIONS_PATH.with_suffix(".json.tmp")
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    os.chmod(tmp_path, 0o600)
-    os.replace(tmp_path, OAUTH_SESSIONS_PATH)
+    # Ce fichier est réécrit à chaque connexion ET à chaque rafraîchissement paresseux de
+    # token, et contient des jetons Discord vivants : écriture atomique, lisible par le seul
+    # propriétaire.
+    _atomic_write_json(OAUTH_SESSIONS_PATH, data, private=True)
+
+
+# ---------- Réglages par guilde, journal d'actions, corbeille ----------
+
+DEFAULT_GUILD_SETTINGS = {
+    "admin_role_id": None,        # rôle Discord (id en str) considéré admin en plus de propriétaire/Administrateur
+    "upload_admins_only": False,  # True : seuls les admins peuvent uploader dans cette guilde
+    "max_sounds": 0,              # 0 = illimité (sons natifs de la guilde)
+    "max_file_mb": 0,             # 0 = pas de limite propre à la guilde
+    "max_duration_s": 0,          # 0 = pas de limite
+    "play_rate_per_min": 0,       # 0 = pas d'anti-spam à la lecture
+    "blocked_uploaders": [],      # ids Discord (str) interdits d'upload sur cette guilde
+}
+
+
+def load_all_guild_settings() -> dict:
+    if not GUILD_SETTINGS_PATH.exists():
+        return {}
+    with open(GUILD_SETTINGS_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def get_guild_settings(guild_id, all_settings: Optional[dict] = None) -> dict:
+    """Réglages complets (valeurs par défaut incluses) d'une guilde. `all_settings` permet de
+    ne lire le fichier qu'une fois quand on traite plusieurs guildes."""
+    if all_settings is None:
+        all_settings = load_all_guild_settings()
+    merged = {**DEFAULT_GUILD_SETTINGS, **all_settings.get(str(guild_id), {})}
+    merged["blocked_uploaders"] = [str(u) for u in merged["blocked_uploaders"]]
+    return merged
+
+
+def save_guild_settings(guild_id, settings: dict) -> None:
+    all_settings = load_all_guild_settings()
+    all_settings[str(guild_id)] = settings
+    _atomic_write_json(GUILD_SETTINGS_PATH, all_settings)
+
+
+def record_audit(
+    guild_id,
+    actor_id,
+    actor_name: Optional[str],
+    action: str,
+    sound_id: Optional[str] = None,
+    sound_name: Optional[str] = None,
+    details: Optional[dict] = None,
+) -> None:
+    """Ajoute une ligne au journal d'actions (une ligne JSON par action) — consultable par les
+    admins de la guilde concernée."""
+    record = {
+        "ts": time.time(),
+        "guild_id": str(guild_id) if guild_id is not None else None,
+        "actor_id": str(actor_id) if actor_id is not None else None,
+        "actor_name": actor_name,
+        "action": action,
+        "sound_id": sound_id,
+        "sound_name": sound_name,
+        "details": details or {},
+    }
+    try:
+        with open(AUDIT_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        log.exception("Échec de l'écriture du journal d'actions")
+
+
+def is_guild_admin(guild, member, settings: Optional[dict] = None) -> bool:
+    """Admin d'une guilde = propriétaire du serveur Discord, OU permission Discord
+    « Administrateur », OU membre du rôle désigné dans les réglages de la guilde."""
+    if member.id == guild.owner_id:
+        return True
+    if member.guild_permissions.administrator:
+        return True
+    if settings is None:
+        settings = get_guild_settings(guild.id)
+    role_id = settings.get("admin_role_id")
+    return bool(role_id) and any(str(r.id) == str(role_id) for r in member.roles)
+
+
+def compute_permissions(memberships) -> dict[str, dict]:
+    """Droits de l'utilisateur sur chacune de ses guildes : {guild_id: {is_admin, can_upload}}.
+    `memberships` = liste de (guilde, membre). Les quotas (nombre/taille/durée) ne sont pas
+    inclus : ils dépendent de l'état courant et sont vérifiés à l'upload."""
+    all_settings = load_all_guild_settings()
+    perms: dict[str, dict] = {}
+    for guild, member in memberships:
+        settings = get_guild_settings(guild.id, all_settings)
+        admin = is_guild_admin(guild, member, settings)
+        can_upload = admin or (not settings["upload_admins_only"] and str(member.id) not in settings["blocked_uploaders"])
+        perms[str(guild.id)] = {"is_admin": admin, "can_upload": can_upload}
+    return perms
+
+
+def is_sound_mine(entry: dict, user_id) -> bool:
+    return entry.get("uploaded_by") is not None and entry["uploaded_by"] == str(user_id)
+
+
+def can_edit_sound(entry: dict, user_id, perms: dict[str, dict]) -> bool:
+    """Renommer / changer l'emoji / supprimer : membre de la guilde NATIVE du son, et auteur
+    du son ou admin de cette guilde. Un ancien son (sans auteur) n'est donc gérable que par un admin."""
+    native = perms.get(str(entry.get("guild_id")))
+    return native is not None and (native["is_admin"] or is_sound_mine(entry, user_id))
+
+
+def can_share_sound(entry: dict, user_id, target_guild_id: str, perms: dict[str, dict]) -> bool:
+    """Ajouter/retirer un son à la catégorie partagée de la guilde cible : membre de la cible,
+    et auteur du son ou admin de la cible."""
+    target = perms.get(str(target_guild_id))
+    return target is not None and (target["is_admin"] or is_sound_mine(entry, user_id))
+
+
+def _read_jsonl(path: Path):
+    """Itère sur les lignes JSON valides d'un fichier .jsonl (inexistant = vide, lignes corrompues ignorées)."""
+    if not path.exists():
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                yield json.loads(line)
+            except ValueError:
+                continue
+
+
+def count_plays_per_sound() -> Counter:
+    """Nombre total de lectures par son (toutes guildes confondues, depuis le début du journal)."""
+    return Counter(r.get("sound_id") for r in _read_jsonl(STATS_PATH))
+
+
+def aggregate_play_stats(guild_id: str, days: int, catalog_names: dict[str, dict]) -> dict:
+    """Statistiques de lecture dans le vocal de cette guilde sur les `days` derniers jours.
+    `catalog_names` : {sound_id: entrée du catalogue}, pour afficher le nom ACTUEL d'un son renommé."""
+    now = datetime.now()
+    first_day = (now - timedelta(days=days - 1)).date()
+    cutoff = datetime.combine(first_day, datetime.min.time()).timestamp()
+
+    sounds: Counter = Counter()
+    sound_meta: dict[str, dict] = {}
+    users: Counter = Counter()
+    user_meta: dict[str, dict] = {}
+    per_day: Counter = Counter()
+    total = 0
+
+    for r in _read_jsonl(STATS_PATH):
+        if r.get("guild_id") != guild_id or r.get("ts", 0) < cutoff:
+            continue
+        total += 1
+        sid, uid = r.get("sound_id"), r.get("user_id")
+        sounds[sid] += 1
+        sound_meta[sid] = r
+        users[uid] += 1
+        user_meta[uid] = r
+        per_day[datetime.fromtimestamp(r["ts"]).date().isoformat()] += 1
+
+    def sound_row(sid: str, count: int) -> dict:
+        current = catalog_names.get(sid)
+        recorded = sound_meta[sid]
+        return {
+            "sound_id": sid,
+            "name": (current or {}).get("name") or recorded.get("sound_name") or "(son supprimé)",
+            "emoji": (current or {}).get("emoji") or recorded.get("emoji"),
+            "count": count,
+        }
+
+    return {
+        "days": days,
+        "total_plays": total,
+        "top_sounds": [sound_row(sid, c) for sid, c in sounds.most_common(10)],
+        "top_users": [
+            {"user_id": uid, "username": user_meta[uid].get("username"),
+             "avatar_url": user_meta[uid].get("avatar_url"), "count": c}
+            for uid, c in users.most_common(10)
+        ],
+        "per_day": [
+            {"date": (first_day + timedelta(days=i)).isoformat(),
+             "count": per_day.get((first_day + timedelta(days=i)).isoformat(), 0)}
+            for i in range(days)
+        ],
+    }
+
+
+def read_audit(guild_id: str, limit: int, before: Optional[float]) -> list[dict]:
+    """Dernières actions de cette guilde, la plus récente d'abord."""
+    entries = [r for r in _read_jsonl(AUDIT_PATH)
+               if r.get("guild_id") == guild_id and (before is None or r.get("ts", 0) < before)]
+    entries.sort(key=lambda r: r.get("ts", 0), reverse=True)
+    return entries[:limit]
+
+
+async def probe_duration_seconds(path: Path) -> Optional[float]:
+    """Durée d'un fichier audio via ffprobe (livré avec ffmpeg). None si ffprobe est absent ou
+    illisible : la limite de durée est alors simplement ignorée plutôt que de bloquer l'upload."""
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", str(path),
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=15)
+        return float(stdout.decode().strip())
+    except Exception:
+        return None
+
+
+def load_trash() -> list[dict]:
+    if not TRASH_PATH.exists():
+        return []
+    with open(TRASH_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_trash(trash: list[dict]) -> None:
+    _atomic_write_json(TRASH_PATH, trash)
+
+
+def trash_sound(sound_id: str, deleted_by) -> Optional[dict]:
+    """Supprime un son du catalogue en le plaçant à la corbeille (fichier conservé, partages
+    mémorisés pour une éventuelle restauration). Synchrone et sans await : le chargement et la
+    réécriture du catalogue ne peuvent pas s'entrecroiser avec une autre requête. Chaque étape
+    laisse un état récupérable si le processus s'arrête en route (le fichier d'origine n'est
+    supprimé qu'en dernier). Renvoie l'entrée supprimée, ou None si le son n'existe plus."""
+    catalog = load_catalog()
+    entry = next((s for s in catalog if s["id"] == sound_id), None)
+    if entry is None:
+        return None
+
+    source = SOUNDS_DIR / f"{sound_id}{entry['extension']}"
+    if source.exists():
+        shutil.copy2(source, TRASH_DIR / source.name)
+
+    shared = load_shared_categories()
+    shared_in = [gid for gid, ids in shared.items() if sound_id in ids]
+
+    trash = load_trash()
+    trash.append({**entry, "deleted_by": str(deleted_by), "deleted_at": time.time(), "shared_in": shared_in})
+    save_trash(trash)
+
+    save_catalog([s for s in catalog if s["id"] != sound_id])
+    if shared_in:
+        for gid in shared_in:
+            shared[gid].remove(sound_id)
+        save_shared_categories(shared)
+
+    if source.exists():
+        source.unlink()
+    return entry
+
+
+def restore_sound(sound_id: str) -> Optional[dict]:
+    """Inverse de trash_sound : remet le fichier, l'entrée du catalogue et ses partages.
+    Renvoie l'entrée restaurée, ou None si elle n'est pas (ou plus) à la corbeille."""
+    trash = load_trash()
+    record = next((t for t in trash if t["id"] == sound_id), None)
+    if record is None:
+        return None
+
+    entry = {k: v for k, v in record.items() if k not in ("deleted_by", "deleted_at", "shared_in")}
+    trashed_file = TRASH_DIR / f"{sound_id}{entry['extension']}"
+    restored_file = SOUNDS_DIR / trashed_file.name
+    if trashed_file.exists():
+        shutil.copy2(trashed_file, restored_file)
+
+    catalog = load_catalog()
+    if not any(s["id"] == sound_id for s in catalog):
+        catalog.append(entry)
+        save_catalog(catalog)
+
+    shared_in = record.get("shared_in", [])
+    if shared_in:
+        shared = load_shared_categories()
+        for gid in shared_in:
+            ids = shared.setdefault(gid, [])
+            if sound_id not in ids:
+                ids.append(sound_id)
+        save_shared_categories(shared)
+
+    save_trash([t for t in trash if t["id"] != sound_id])
+    if trashed_file.exists():
+        trashed_file.unlink()
+    return entry
+
+
+def purge_expired_trash(now: Optional[float] = None) -> list[dict]:
+    """Supprime définitivement les sons restés à la corbeille plus de TRASH_RETENTION_DAYS jours
+    (0 = jamais). Renvoie les enregistrements purgés, pour le journal d'actions."""
+    if TRASH_RETENTION_DAYS <= 0:
+        return []
+    cutoff = (now if now is not None else time.time()) - TRASH_RETENTION_DAYS * 86400
+    trash = load_trash()
+    expired = [t for t in trash if t.get("deleted_at", 0) < cutoff]
+    if not expired:
+        return []
+    for record in expired:
+        (TRASH_DIR / f"{record['id']}{record['extension']}").unlink(missing_ok=True)
+    expired_ids = {t["id"] for t in expired}
+    save_trash([t for t in trash if t["id"] not in expired_ids])
+    return expired
 
 
 class MixingAudioSource(discord.AudioSource):
@@ -328,9 +638,13 @@ class WaseBoardServer(commands.Bot):
         self._session_refresh_locks: dict[str, asyncio.Lock] = {}
         self.http_session: Optional[aiohttp.ClientSession] = None
         self._commands_synced = False  # on_ready peut se rejouer à chaque reconnexion
+        self._trash_purge_task: Optional[asyncio.Task] = None
+        # Anti-spam à la lecture : (guild_id, user_id) -> horodatages (monotonic) des lectures récentes
+        self._play_history: dict[tuple[int, str], deque] = {}
 
     async def setup_hook(self) -> None:
         self.http_session = aiohttp.ClientSession()
+        self._trash_purge_task = asyncio.create_task(self._trash_purge_loop())
 
         # Enregistrement persistant (custom_id fixe) : le bouton reste fonctionnel sur le
         # message déjà posté par /configurer-invitation après un redémarrage, sans avoir à
@@ -373,9 +687,24 @@ class WaseBoardServer(commands.Bot):
             log.exception("Échec de la synchronisation des commandes sur %s", guild.id)
 
     async def close(self) -> None:
+        if self._trash_purge_task is not None:
+            self._trash_purge_task.cancel()
         if self.http_session is not None:
             await self.http_session.close()
         await super().close()
+
+    async def _trash_purge_loop(self) -> None:
+        """Purge périodique de la corbeille (voir TRASH_RETENTION_DAYS) : au démarrage, puis toutes les 6 h."""
+        while True:
+            try:
+                for record in purge_expired_trash():
+                    record_audit(record.get("guild_id"), None, "système", "purge",
+                                 record["id"], record.get("name"),
+                                 {"deleted_by": record.get("deleted_by")})
+                    log.info("Corbeille : « %s » purgé définitivement (%s).", record.get("name"), record["id"])
+            except Exception:
+                log.exception("Échec de la purge de la corbeille")
+            await asyncio.sleep(6 * 3600)
 
     # ---------- Salons vocaux ----------
 
@@ -455,10 +784,11 @@ class WaseBoardServer(commands.Bot):
                 continue
         return None
 
-    async def find_all_guilds_for_user(self, user_id: int) -> list[discord.Guild]:
-        """Retrouve TOUS les serveurs Discord dont cet utilisateur est membre — chacun aura
-        automatiquement sa propre catégorie partagée, indépendamment de toute présence vocale."""
-        found: list[discord.Guild] = []
+    async def find_memberships(self, user_id: int) -> list[tuple[discord.Guild, discord.Member]]:
+        """Retrouve TOUS les serveurs Discord dont cet utilisateur est membre (avec son membre
+        sur chacun, pour les contrôles de rôle) — chacun aura automatiquement sa propre
+        catégorie partagée, indépendamment de toute présence vocale."""
+        found: list[tuple[discord.Guild, discord.Member]] = []
         for guild in self.guilds:
             member = guild.get_member(user_id)
             if member is None:
@@ -467,13 +797,22 @@ class WaseBoardServer(commands.Bot):
                 except (discord.NotFound, discord.HTTPException):
                     member = None
             if member is not None:
-                found.append(guild)
+                found.append((guild, member))
         return found
+
+    async def find_all_guilds_for_user(self, user_id: int) -> list[discord.Guild]:
+        return [guild for guild, _ in await self.find_memberships(user_id)]
 
     async def resolve_visible_guild_ids(self, user_id: int) -> set[str]:
         """Guildes (en str) dont cet utilisateur est membre, parmi celles où le bot est présent."""
         guilds = await self.find_all_guilds_for_user(user_id)
         return {str(g.id) for g in guilds}
+
+    async def user_access(self, user_id) -> tuple[set[str], dict[str, dict]]:
+        """(guildes visibles, droits par guilde) d'un utilisateur — une seule résolution des
+        membres Discord par requête."""
+        memberships = await self.find_memberships(int(user_id))
+        return {str(g.id) for g, _ in memberships}, compute_permissions(memberships)
 
     @staticmethod
     def catalog_visible_to(catalog: list[dict], visible_guild_ids: set[str]) -> list[dict]:
@@ -679,6 +1018,14 @@ class WaseBoardServer(commands.Bot):
         app.router.add_get("/my-guilds", self._handle_my_guilds)
         app.router.add_get("/shared-categories", self._handle_get_shared_categories)
         app.router.add_post("/shared-categories/sounds", self._handle_shared_category_sound)
+        app.router.add_get("/admin/guilds/{guild_id}/settings", self._handle_admin_get_settings)
+        app.router.add_put("/admin/guilds/{guild_id}/settings", self._handle_admin_put_settings)
+        app.router.add_get("/admin/guilds/{guild_id}/sounds", self._handle_admin_sounds)
+        app.router.add_get("/admin/guilds/{guild_id}/trash", self._handle_admin_trash)
+        app.router.add_post("/admin/guilds/{guild_id}/trash/{sound_id}/restore", self._handle_admin_restore)
+        app.router.add_get("/admin/guilds/{guild_id}/stats", self._handle_admin_stats)
+        app.router.add_get("/admin/guilds/{guild_id}/audit", self._handle_admin_audit)
+        app.router.add_post("/admin/guilds/{guild_id}/blocked", self._handle_admin_blocked)
         app.router.add_get("/oauth/client-id", self._handle_oauth_client_id)
         app.router.add_post("/oauth/exchange", self._handle_oauth_exchange)
 
@@ -702,8 +1049,15 @@ class WaseBoardServer(commands.Bot):
         if err is not None:
             return err
 
-        visible = await self.resolve_visible_guild_ids(int(session["user_id"]))
-        return web.json_response({"sounds": self.catalog_visible_to(load_catalog(), visible)})
+        user_id = session["user_id"]
+        visible, perms = await self.user_access(user_id)
+        # is_mine / can_edit sont calculés pour CE demandeur : le client s'en sert uniquement
+        # pour masquer des actions, le serveur les re-vérifie à chaque requête de modification.
+        sounds = [
+            {**entry, "is_mine": is_sound_mine(entry, user_id), "can_edit": can_edit_sound(entry, user_id, perms)}
+            for entry in self.catalog_visible_to(load_catalog(), visible)
+        ]
+        return web.json_response({"sounds": sounds})
 
     async def _handle_get_file(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
@@ -743,17 +1097,26 @@ class WaseBoardServer(commands.Bot):
             if not name or file_field is None or not raw_guild_id:
                 return web.json_response({"error": "champs 'name', 'file' et 'guild_id' requis"}, status=400)
 
-            guilds = await self.find_all_guilds_for_user(int(session["user_id"]))
-            if not any(str(g.id) == raw_guild_id for g in guilds):
+            user_id = session["user_id"]
+            memberships = await self.find_memberships(int(user_id))
+            if not any(str(g.id) == raw_guild_id for g, _ in memberships):
                 return web.json_response({"error": "vous n'êtes pas membre de ce serveur Discord"}, status=403)
+
+            settings = get_guild_settings(raw_guild_id)
+            if not compute_permissions(memberships)[raw_guild_id]["can_upload"]:
+                message = ("Les ajouts de sons sont réservés aux administrateurs de ce serveur."
+                           if settings["upload_admins_only"]
+                           else "Un administrateur de ce serveur vous a retiré le droit d'ajouter des sons.")
+                return web.json_response({"error": message}, status=403)
+
+            max_sounds = settings["max_sounds"]
+            if max_sounds > 0 and sum(1 for s in load_catalog() if s.get("guild_id") == raw_guild_id) >= max_sounds:
+                return web.json_response({"error": f"Ce serveur a atteint sa limite de {max_sounds} sons."}, status=403)
 
             original_filename = getattr(file_field, "filename", "") or ""
             extension = Path(original_filename).suffix.lower()
             if extension not in ALLOWED_EXTENSIONS:
                 return web.json_response({"error": f"extension non supportée : {extension}"}, status=400)
-
-            sound_id = uuid.uuid4().hex
-            destination = SOUNDS_DIR / f"{sound_id}{extension}"
 
             # Hash du contenu (calculé ici, jamais fourni par le client) : sert de base à la
             # détection de doublons côté client, qui compare son fichier final (après découpe)
@@ -761,16 +1124,37 @@ class WaseBoardServer(commands.Bot):
             file_bytes = file_field.file.read()
             content_hash = hashlib.sha256(file_bytes).hexdigest()
 
+            max_file_mb = settings["max_file_mb"]
+            if max_file_mb > 0 and len(file_bytes) > max_file_mb * 1024 * 1024:
+                return web.json_response({"error": f"Fichier trop volumineux (maximum {max_file_mb} Mo sur ce serveur)."}, status=413)
+
+            sound_id = uuid.uuid4().hex
+            destination = SOUNDS_DIR / f"{sound_id}{extension}"
             with open(destination, "wb") as out_file:
                 out_file.write(file_bytes)
 
+            max_duration = settings["max_duration_s"]
+            if max_duration > 0:
+                duration = await probe_duration_seconds(destination)
+                if duration is not None and duration > max_duration:
+                    destination.unlink(missing_ok=True)
+                    return web.json_response(
+                        {"error": f"Son trop long ({duration:.0f} s, maximum {max_duration} s sur ce serveur)."},
+                        status=413)
+
+            # Catalogue chargé APRÈS tous les await : aucun autre handler ne peut s'intercaler
+            # entre ce chargement et la réécriture.
             catalog = load_catalog()
-            entry = {"id": sound_id, "name": name, "extension": extension, "hash": content_hash, "guild_id": raw_guild_id}
+            entry = {
+                "id": sound_id, "name": name, "extension": extension, "hash": content_hash,
+                "guild_id": raw_guild_id, "uploaded_by": str(user_id), "uploaded_at": int(time.time()),
+            }
             catalog.append(entry)
             save_catalog(catalog)
+            record_audit(raw_guild_id, user_id, session.get("username"), "upload", sound_id, name)
 
             log.info("Son ajouté : %s (%s)", name, sound_id)
-            return web.json_response(entry)
+            return web.json_response({**entry, "is_mine": True, "can_edit": True})
         except Exception as ex:
             log.exception("Échec de l'upload")
             return web.json_response({"error": str(ex)}, status=500)
@@ -790,18 +1174,24 @@ class WaseBoardServer(commands.Bot):
         except Exception:
             return web.json_response({"error": "corps JSON invalide"}, status=400)
 
+        user_id = session["user_id"]
+        visible, perms = await self.user_access(user_id)
+
+        # Catalogue chargé APRÈS le dernier await : sinon un upload concurrent, terminé pendant
+        # la résolution des membres Discord ci-dessus, serait écrasé par la réécriture plus bas.
         catalog = load_catalog()
         entry = next((s for s in catalog if s["id"] == sound_id), None)
-        if entry is None:
+        if entry is None or not self.sound_visible_to(entry, visible):
             return web.json_response({"error": "son introuvable"}, status=404)
 
-        visible = await self.resolve_visible_guild_ids(int(session["user_id"]))
-        if not self.sound_visible_to(entry, visible):
-            return web.json_response({"error": "son introuvable"}, status=404)
+        if not can_edit_sound(entry, user_id, perms):
+            return web.json_response(
+                {"error": "Seuls l'auteur du son ou un administrateur du serveur peuvent le modifier."}, status=403)
 
         if "name" not in data and "emoji" not in data:
             return web.json_response({"error": "'name' ou 'emoji' requis"}, status=400)
 
+        old_name = entry["name"]
         if "name" in data:
             new_name = str(data.get("name", "")).strip()
             if not new_name:
@@ -812,7 +1202,13 @@ class WaseBoardServer(commands.Bot):
             entry["emoji"] = str(data.get("emoji") or "").strip()
 
         save_catalog(catalog)
-        return web.json_response(entry)
+        if "name" in data:
+            record_audit(entry.get("guild_id"), user_id, session.get("username"), "rename",
+                         sound_id, entry["name"], {"from": old_name, "to": entry["name"]})
+        if "emoji" in data:
+            record_audit(entry.get("guild_id"), user_id, session.get("username"), "emoji",
+                         sound_id, entry["name"], {"emoji": entry["emoji"]})
+        return web.json_response({**entry, "is_mine": is_sound_mine(entry, user_id), "can_edit": True})
 
     async def _handle_delete_sound(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
@@ -822,30 +1218,21 @@ class WaseBoardServer(commands.Bot):
             return err
 
         sound_id = request.match_info["id"]
-        catalog = load_catalog()
-        entry = next((s for s in catalog if s["id"] == sound_id), None)
-        if entry is None:
+        user_id = session["user_id"]
+        visible, perms = await self.user_access(user_id)
+
+        # Pas d'await entre ce chargement et trash_sound (qui relit lui-même le catalogue).
+        entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
+        if entry is None or not self.sound_visible_to(entry, visible):
             return web.json_response({"error": "son introuvable"}, status=404)
 
-        visible = await self.resolve_visible_guild_ids(int(session["user_id"]))
-        if not self.sound_visible_to(entry, visible):
-            return web.json_response({"error": "son introuvable"}, status=404)
+        if not can_edit_sound(entry, user_id, perms):
+            return web.json_response(
+                {"error": "Seuls l'auteur du son ou un administrateur du serveur peuvent le supprimer."}, status=403)
 
-        file_path = SOUNDS_DIR / f"{sound_id}{entry['extension']}"
-        if file_path.exists():
-            file_path.unlink()
-
-        catalog = [s for s in catalog if s["id"] != sound_id]
-        save_catalog(catalog)
-
-        shared = load_shared_categories()
-        changed = False
-        for sound_ids in shared.values():
-            if sound_id in sound_ids:
-                sound_ids.remove(sound_id)
-                changed = True
-        if changed:
-            save_shared_categories(shared)
+        # Corbeille plutôt que suppression définitive : un admin peut restaurer le son.
+        trash_sound(sound_id, user_id)
+        record_audit(entry.get("guild_id"), user_id, session.get("username"), "delete", sound_id, entry["name"])
 
         return web.json_response({"status": "ok"})
 
@@ -860,11 +1247,15 @@ class WaseBoardServer(commands.Bot):
         if err is not None:
             return err
 
-        guilds = await self.find_all_guilds_for_user(int(session["user_id"]))
+        memberships = await self.find_memberships(int(session["user_id"]))
+        perms = compute_permissions(memberships)
         return web.json_response({
             "guilds": [
-                {"id": str(g.id), "name": g.name, "icon_url": str(g.icon.url) if g.icon else None}
-                for g in guilds
+                {
+                    "id": str(g.id), "name": g.name, "icon_url": str(g.icon.url) if g.icon else None,
+                    "is_admin": perms[str(g.id)]["is_admin"], "can_upload": perms[str(g.id)]["can_upload"],
+                }
+                for g, _ in memberships
             ]
         })
 
@@ -1043,27 +1434,244 @@ class WaseBoardServer(commands.Bot):
         sound_id = str(data.get("sound_id", ""))
         action = data.get("action", "add")
         user_id = session["user_id"]
+        if action not in ("add", "remove"):
+            return web.json_response({"error": "action invalide"}, status=400)
 
-        guilds = await self.find_all_guilds_for_user(int(user_id))
-        if not any(str(g.id) == guild_id for g in guilds):
+        visible, perms = await self.user_access(user_id)
+        if guild_id not in visible:
             return web.json_response({"error": "vous n'êtes pas membre de ce serveur Discord"}, status=403)
 
-        if action == "add":
-            visible = await self.resolve_visible_guild_ids(int(user_id))
-            entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
-            if entry is None or not self.sound_visible_to(entry, visible):
-                return web.json_response({"error": "son introuvable"}, status=404)
+        entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
+        if entry is None or not self.sound_visible_to(entry, visible):
+            return web.json_response({"error": "son introuvable"}, status=404)
+
+        # Même règle pour ajouter et retirer : un membre ordinaire ne touche qu'à ses propres sons.
+        if not can_share_sound(entry, user_id, guild_id, perms):
+            return web.json_response(
+                {"error": "Seuls l'auteur du son ou un administrateur de ce serveur peuvent modifier sa catégorie partagée."},
+                status=403)
 
         shared = load_shared_categories()
         sound_ids = shared.setdefault(guild_id, [])
 
         if action == "add" and sound_id not in sound_ids:
             sound_ids.append(sound_id)
+            record_audit(guild_id, user_id, session.get("username"), "share_add", sound_id, entry["name"])
         elif action == "remove" and sound_id in sound_ids:
             sound_ids.remove(sound_id)
+            record_audit(guild_id, user_id, session.get("username"), "share_remove", sound_id, entry["name"])
 
         save_shared_categories(shared)
         return web.json_response({"sound_ids": sound_ids})
+
+    # ---------- Administration d'une guilde ----------
+
+    async def _admin_context(self, request: web.Request):
+        """Authentifie la requête et vérifie que l'appelant est admin de la guilde de l'URL
+        (/admin/guilds/{guild_id}/...). Renvoie (session, guilde, None) ou (None, None, réponse d'erreur)."""
+        if not self._check_auth(request):
+            return None, None, web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return None, None, err
+
+        guild_id = request.match_info["guild_id"]
+        memberships = await self.find_memberships(int(session["user_id"]))
+        match = next(((g, m) for g, m in memberships if str(g.id) == guild_id), None)
+        if match is None or not is_guild_admin(match[0], match[1]):
+            return None, None, web.json_response({"error": "Réservé aux administrateurs de ce serveur."}, status=403)
+        return session, match[0], None
+
+    @staticmethod
+    def _member_display_name(guild: discord.Guild, user_id) -> Optional[str]:
+        member = guild.get_member(int(user_id)) if user_id and str(user_id).isdigit() else None
+        return member.display_name if member else None
+
+    def _settings_payload(self, guild: discord.Guild) -> dict:
+        settings = get_guild_settings(guild.id)
+        roles = [
+            {"id": str(r.id), "name": r.name}
+            for r in sorted(guild.roles, key=lambda r: r.position, reverse=True)
+            if not r.is_default() and not r.managed
+        ]
+        blocked = [{"user_id": uid, "username": self._member_display_name(guild, uid)} for uid in settings["blocked_uploaders"]]
+        return {"settings": settings, "roles": roles, "blocked": blocked}
+
+    async def _handle_admin_get_settings(self, request: web.Request) -> web.Response:
+        session, guild, err = await self._admin_context(request)
+        if err is not None:
+            return err
+        return web.json_response(self._settings_payload(guild))
+
+    async def _handle_admin_put_settings(self, request: web.Request) -> web.Response:
+        """Met à jour les réglages de la guilde. Seules les clés présentes dans le corps sont
+        modifiées (les membres bloqués ont leur propre endpoint)."""
+        session, guild, err = await self._admin_context(request)
+        if err is not None:
+            return err
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "corps JSON invalide"}, status=400)
+        if not isinstance(data, dict):
+            return web.json_response({"error": "corps JSON invalide"}, status=400)
+
+        def is_count(value, maximum: int) -> bool:
+            return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= maximum
+
+        limits = {"max_sounds": 100000, "max_file_mb": 1024, "max_duration_s": 3600, "play_rate_per_min": 600}
+        settings = get_guild_settings(guild.id)
+        before = dict(settings)
+
+        if "admin_role_id" in data:
+            raw = data["admin_role_id"]
+            if raw in (None, ""):
+                settings["admin_role_id"] = None
+            elif str(raw).isdigit() and guild.get_role(int(raw)) is not None:
+                settings["admin_role_id"] = str(raw)
+            else:
+                return web.json_response({"error": "rôle introuvable sur ce serveur"}, status=400)
+
+        if "upload_admins_only" in data:
+            if not isinstance(data["upload_admins_only"], bool):
+                return web.json_response({"error": "'upload_admins_only' doit être un booléen"}, status=400)
+            settings["upload_admins_only"] = data["upload_admins_only"]
+
+        for key, maximum in limits.items():
+            if key in data:
+                if not is_count(data[key], maximum):
+                    return web.json_response({"error": f"'{key}' doit être un entier entre 0 et {maximum}"}, status=400)
+                settings[key] = data[key]
+
+        save_guild_settings(guild.id, settings)
+        changed = {k: [before[k], settings[k]] for k in settings if before[k] != settings[k]}
+        if changed:
+            record_audit(guild.id, session["user_id"], session.get("username"), "settings", details=changed)
+        return web.json_response(self._settings_payload(guild))
+
+    async def _handle_admin_sounds(self, request: web.Request) -> web.Response:
+        session, guild, err = await self._admin_context(request)
+        if err is not None:
+            return err
+
+        plays = await asyncio.to_thread(count_plays_per_sound)
+        sounds = []
+        for entry in load_catalog():
+            if entry.get("guild_id") != str(guild.id):
+                continue
+            file_path = SOUNDS_DIR / f"{entry['id']}{entry['extension']}"
+            uploader = entry.get("uploaded_by")
+            sounds.append({
+                "id": entry["id"],
+                "name": entry["name"],
+                "emoji": entry.get("emoji"),
+                "uploaded_by": uploader,
+                "uploaded_by_name": self._member_display_name(guild, uploader),
+                "uploaded_at": entry.get("uploaded_at"),
+                "size": file_path.stat().st_size if file_path.exists() else None,
+                "plays": plays.get(entry["id"], 0),
+            })
+        return web.json_response({"sounds": sounds})
+
+    async def _handle_admin_trash(self, request: web.Request) -> web.Response:
+        session, guild, err = await self._admin_context(request)
+        if err is not None:
+            return err
+
+        now = time.time()
+        items = []
+        for record in load_trash():
+            if record.get("guild_id") != str(guild.id):
+                continue
+            days_left = None
+            if TRASH_RETENTION_DAYS > 0:
+                days_left = max(0, int((record["deleted_at"] + TRASH_RETENTION_DAYS * 86400 - now) // 86400))
+            items.append({
+                "id": record["id"],
+                "name": record["name"],
+                "emoji": record.get("emoji"),
+                "uploaded_by_name": self._member_display_name(guild, record.get("uploaded_by")),
+                "deleted_by": record.get("deleted_by"),
+                "deleted_by_name": self._member_display_name(guild, record.get("deleted_by")),
+                "deleted_at": record["deleted_at"],
+                "days_left": days_left,
+            })
+        items.sort(key=lambda i: i["deleted_at"], reverse=True)
+        return web.json_response({"trash": items, "retention_days": TRASH_RETENTION_DAYS})
+
+    async def _handle_admin_restore(self, request: web.Request) -> web.Response:
+        session, guild, err = await self._admin_context(request)
+        if err is not None:
+            return err
+
+        sound_id = request.match_info["sound_id"]
+        record = next((t for t in load_trash() if t["id"] == sound_id and t.get("guild_id") == str(guild.id)), None)
+        if record is None:
+            return web.json_response({"error": "son introuvable dans la corbeille"}, status=404)
+
+        entry = restore_sound(sound_id)
+        if entry is None:
+            return web.json_response({"error": "son introuvable dans la corbeille"}, status=404)
+        record_audit(guild.id, session["user_id"], session.get("username"), "restore", sound_id, entry["name"])
+        return web.json_response({"status": "ok"})
+
+    async def _handle_admin_stats(self, request: web.Request) -> web.Response:
+        session, guild, err = await self._admin_context(request)
+        if err is not None:
+            return err
+        try:
+            days = min(max(int(request.query.get("days", "30")), 1), 365)
+        except ValueError:
+            return web.json_response({"error": "'days' doit être un entier"}, status=400)
+
+        catalog_by_id = {e["id"]: e for e in load_catalog()}
+        stats = await asyncio.to_thread(aggregate_play_stats, str(guild.id), days, catalog_by_id)
+        return web.json_response(stats)
+
+    async def _handle_admin_audit(self, request: web.Request) -> web.Response:
+        session, guild, err = await self._admin_context(request)
+        if err is not None:
+            return err
+        try:
+            limit = min(max(int(request.query.get("limit", "100")), 1), 500)
+            before = float(request.query["before"]) if "before" in request.query else None
+        except ValueError:
+            return web.json_response({"error": "paramètres invalides"}, status=400)
+
+        entries = await asyncio.to_thread(read_audit, str(guild.id), limit, before)
+        return web.json_response({"entries": entries})
+
+    async def _handle_admin_blocked(self, request: web.Request) -> web.Response:
+        """Interdit (ou ré-autorise) un membre d'uploader sur cette guilde. Body: {user_id, blocked}."""
+        session, guild, err = await self._admin_context(request)
+        if err is not None:
+            return err
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "corps JSON invalide"}, status=400)
+
+        target_id = str(data.get("user_id", ""))
+        blocked = data.get("blocked")
+        if not target_id.isdigit() or not isinstance(blocked, bool):
+            return web.json_response({"error": "'user_id' (numérique) et 'blocked' (booléen) requis"}, status=400)
+
+        member = guild.get_member(int(target_id))
+        if blocked and member is not None and is_guild_admin(guild, member):
+            return web.json_response({"error": "Impossible de bloquer un administrateur."}, status=400)
+
+        settings = get_guild_settings(guild.id)
+        if blocked and target_id not in settings["blocked_uploaders"]:
+            settings["blocked_uploaders"].append(target_id)
+        elif not blocked and target_id in settings["blocked_uploaders"]:
+            settings["blocked_uploaders"].remove(target_id)
+        else:
+            return web.json_response(self._settings_payload(guild))
+
+        save_guild_settings(guild.id, settings)
+        record_audit(guild.id, session["user_id"], session.get("username"), "block" if blocked else "unblock",
+                     details={"user_id": target_id, "username": member.display_name if member else None})
+        return web.json_response(self._settings_payload(guild))
 
     # ---------- Lecture / arrêt ----------
 
@@ -1122,6 +1730,15 @@ class WaseBoardServer(commands.Bot):
         if not file_path.exists():
             return web.json_response({"error": "fichier manquant sur le serveur"}, status=404)
 
+        # Anti-spam réglé par l'admin de la guilde ciblée (où le son sera réellement joué) ;
+        # les admins en sont exemptés. Vérifié en dernier : une requête refusée plus haut ne compte pas.
+        retry_after = self._check_play_rate(guild_id, str(user_id))
+        if retry_after is not None:
+            return web.json_response({
+                "error": f"Trop de sons envoyés : réessayez dans {retry_after} s.",
+                "retry_after": retry_after,
+            }, status=429)
+
         # On AJOUTE au mixeur plutôt que de remplacer la lecture en cours : plusieurs sons
         # (déclenchés par le même utilisateur ou des utilisateurs différents) se superposent
         # au lieu de s'annuler mutuellement.
@@ -1140,6 +1757,29 @@ class WaseBoardServer(commands.Bot):
             asyncio.create_task(self._record_play_activity(sound_id, str_user_id, guild_id))
 
         return web.json_response({"status": "ok"})
+
+    def _check_play_rate(self, guild_id: int, user_id: str) -> Optional[int]:
+        """Anti-spam à la lecture : None si ce son peut partir (et le comptabilise), sinon le
+        nombre de secondes à attendre. Fenêtre glissante de 60 s par (guilde, utilisateur) ;
+        limite à 0 = désactivé ; admins de la guilde exemptés."""
+        settings = get_guild_settings(guild_id)
+        limit = settings["play_rate_per_min"]
+        if limit <= 0:
+            return None
+
+        guild = self.get_guild(guild_id)
+        member = guild.get_member(int(user_id)) if guild is not None and user_id.isdigit() else None
+        if member is not None and is_guild_admin(guild, member, settings):
+            return None
+
+        now = time.monotonic()
+        history = self._play_history.setdefault((guild_id, user_id), deque())
+        while history and now - history[0] >= 60:
+            history.popleft()
+        if len(history) >= limit:
+            return max(1, int(60 - (now - history[0]) + 0.999))
+        history.append(now)
+        return None
 
     async def _record_play_activity(self, sound_id: str, user_id: str, guild_id: int) -> None:
         """Résout le membre et enregistre l'activité partagée (highlight/avatar) en arrière-plan,
