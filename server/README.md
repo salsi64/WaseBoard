@@ -57,6 +57,8 @@ Copiez `config.example.json` vers `config.json` et renseignez :
   `https://waseboard.exemple.com` une fois l'étape 6 faite, ou l'IP locale en test). Sert
   uniquement à construire le lien de connexion cliquable (voir étape 7) — peut rester vide
   en attendant, le reste du serveur fonctionne sans.
+- `download_url` *(optionnel)* : où télécharger WaseBoard, proposé sur la page d'invitation (étape 7) ;
+  par défaut la dernière version publiée sur GitHub.
 - `trash_retention_days` *(optionnel, 30 par défaut)* : nombre de jours pendant lesquels un
   son supprimé reste restaurable (corbeille, voir « Rôles et administration ») avant d'être
   définitivement effacé ; `0` = jamais purgé.
@@ -173,10 +175,20 @@ domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit u
 Une fois `public_url` et `shared_secret` renseignés (étape 3), tapez `/configurer-invitation`
 dans un salon Discord — ça poste un bouton persistant (survit aux redémarrages du bot).
 Toute personne pouvant voir ce salon peut cliquer dessus pour recevoir, en message visible
-d'elle seule, un lien `waseboard://connect?...` qui pré-remplit automatiquement l'adresse et
-le jeton d'accès dans WaseBoard (rien à copier-coller). Qui voit ce bouton se règle en
-restreignant l'accès au salon via les permissions Discord habituelles — rien à configurer
-côté WaseBoard.
+d'elle seule, un **bouton « Ouvrir WaseBoard »** : il ouvre une petite page de votre serveur
+(`<public_url>/connect/<code>`) qui lance l'application et pré-remplit automatiquement
+l'adresse et le jeton d'accès (rien à copier-coller). Cette page propose aussi le téléchargement
+de WaseBoard à qui ne l'a pas encore (`download_url` dans `config.json`, par défaut la dernière
+version publiée sur GitHub) et un lien à coller dans Windows + R en dernier recours.
+
+Pourquoi une page et pas directement le lien `waseboard://` : Discord n'affiche pas comme
+cliquable un lien à schéma personnalisé, alors qu'un bouton https marche partout (ordinateur,
+web, mobile). Le code de l'adresse est aléatoire, valable 15 minutes et gardé en mémoire
+seulement ; **le jeton d'accès n'apparaît jamais dans l'URL**, seulement dans la page, une fois
+le code validé. Cette route est publique par conception (elle s'ouvre depuis un navigateur,
+sans en-tête d'authentification) mais ne révèle rien sans code valide. Qui voit le bouton Discord
+se règle en restreignant l'accès au salon via les permissions Discord habituelles — rien à
+configurer côté WaseBoard.
 
 ## 8. Utilisation
 
@@ -234,7 +246,7 @@ nécessite `ffprobe` (fourni avec ffmpeg) ; s'il manque, elle est simplement ign
   qu'un inconnu sur internet puisse ne serait-ce que sonder le serveur ou saturer l'échange
   OAuth2 — choisissez-le quand même long et aléatoire, aucune limitation de débit n'existe
   en complément.
-- Le lien de connexion (`/configurer-invitation`) contient ce `shared_secret` en clair — qui
+- Le lien de connexion (`/configurer-invitation`) donne accès à ce `shared_secret` — qui
   voit le bouton Discord qui le distribue doit donc être contrôlé via les permissions du
   salon où vous le postez, pas seulement en gardant le secret pour vous.
 

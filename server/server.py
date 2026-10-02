@@ -8,6 +8,7 @@ Voir README.md pour la mise en place complète.
 
 import asyncio
 import hashlib
+import html
 import json
 import logging
 import os
@@ -68,6 +69,8 @@ SHARED_SECRET: str = CONFIG.get("shared_secret", "")
 OAUTH2_CLIENT_ID: str = CONFIG.get("oauth2_client_id", "")
 OAUTH2_CLIENT_SECRET: str = CONFIG.get("oauth2_client_secret", "")
 PUBLIC_URL: str = CONFIG.get("public_url", "")
+# Où télécharger WaseBoard (proposé sur la page d'invitation à qui ne l'a pas encore installé).
+DOWNLOAD_URL: str = CONFIG.get("download_url") or "https://github.com/salsi64/WaseBoard/releases/latest"
 # Durée de conservation d'un son supprimé avant purge définitive (0 = jamais purgé).
 TRASH_RETENTION_DAYS: int = CONFIG.get("trash_retention_days", 30)
 
@@ -628,12 +631,84 @@ intents.members = True  # requis pour résoudre un membre par id ; à activer au
                          # Portail Développeur > Bot > "Server Members Intent".
 
 
+# ---------- Lien d'invitation ----------
+# Discord ne rend pas cliquable un lien « waseboard:// » (schéma personnalisé) : le message du bouton porte donc un
+# vrai bouton-lien https vers une petite page de CE serveur (/connect/<code>), qui redirige vers l'appli. Le code
+# est aléatoire, à durée limitée (réutilisable pendant ce délai : le navigateur redemande parfois la permission
+# d'ouvrir l'appli) ; le secret partagé n'apparaît jamais dans l'URL, seulement dans la page, une fois le code validé.
+INVITE_CODE_TTL_SECONDS = 15 * 60
+INVITE_CODES: dict[str, float] = {}  # code -> expiration (epoch, en mémoire seulement)
+
+
+def create_invite_code() -> str:
+    now = time.time()
+    for code in [code for code, expires in INVITE_CODES.items() if expires <= now]:
+        del INVITE_CODES[code]
+    if len(INVITE_CODES) >= 1000:  # garde-fou mémoire : on retire les plus anciens
+        for code in sorted(INVITE_CODES, key=INVITE_CODES.get)[: len(INVITE_CODES) - 999]:
+            del INVITE_CODES[code]
+    code = secrets.token_urlsafe(16)
+    INVITE_CODES[code] = now + INVITE_CODE_TTL_SECONDS
+    return code
+
+
+def invite_code_is_valid(code: str) -> bool:
+    expires = INVITE_CODES.get(code)
+    return expires is not None and expires > time.time()
+
+
+def build_connect_link() -> str:
+    """Le lien waseboard://connect qui pré-remplit l'adresse et le jeton dans l'appli."""
+    return f"waseboard://connect?url={quote(PUBLIC_URL, safe='')}&token={quote(SHARED_SECRET, safe='')}"
+
+
+_CONNECT_PAGE_STYLE = (
+    "body{font-family:system-ui,Segoe UI,sans-serif;background:#0f1624;color:#eaf0fa;margin:0;"
+    "display:flex;min-height:100vh;align-items:center;justify-content:center}"
+    "main{max-width:460px;padding:32px;text-align:center}h1{font-size:22px;margin:0 0 12px}"
+    "p{line-height:1.5;color:#b8c4d9;margin:0 0 16px}"
+    ".btn{display:inline-block;background:#38bdf8;color:#0b1220;font-weight:600;text-decoration:none;"
+    "padding:12px 22px;border-radius:10px;margin:8px 0 18px}"
+    "textarea{width:100%;box-sizing:border-box;height:72px;background:#182236;color:#eaf0fa;border:1px solid #26324a;"
+    "border-radius:8px;padding:8px;font-size:12px}a.dl{color:#38bdf8}small{color:#7f8da6}"
+)
+
+
+def render_connect_page(link: Optional[str], nonce: str = "") -> str:
+    """Page d'invitation (français). link=None : code inconnu ou expiré."""
+    if link is None:
+        body = (
+            "<h1>Ce lien n'est plus valide</h1>"
+            "<p>Il a expiré (ou n'a jamais existé). Retournez sur Discord et cliquez de nouveau sur "
+            "« Recevoir mon lien WaseBoard » pour en obtenir un nouveau.</p>"
+        )
+        script = ""
+    else:
+        body = (
+            "<h1>Ouvrir WaseBoard</h1>"
+            "<p>WaseBoard va s'ouvrir et se connecter tout seul à ce serveur. Si votre navigateur demande "
+            "l'autorisation d'ouvrir l'application, acceptez.</p>"
+            f'<a class="btn" href="{html.escape(link)}">Ouvrir WaseBoard</a>'
+            f'<p>WaseBoard n\'est pas encore installé ? <a class="dl" href="{html.escape(DOWNLOAD_URL)}">Téléchargez-le ici</a>, '
+            "puis revenez cliquer sur le bouton.</p>"
+            "<p><small>Rien ne se passe ? Copiez ce lien, puis collez-le dans la fenêtre Exécuter de Windows "
+            "(touches Windows + R).</small></p>"
+            f'<textarea readonly onclick="this.select()">{html.escape(link)}</textarea>'
+        )
+        script = f'<script nonce="{nonce}">setTimeout(function(){{location.href={json.dumps(link)}}},400)</script>'
+    return (
+        '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>WaseBoard</title>'
+        '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">'
+        f"<style>{_CONNECT_PAGE_STYLE}</style></head><body><main>{body}</main>{script}</body></html>"
+    )
+
+
 class InviteView(discord.ui.View):
     """Bouton persistant (voir setup_hook : bot.add_view) posté par /configurer-invitation —
-    répond en message éphémère avec le lien waseboard://connect de cette instance. Le lien
-    est identique pour tout le monde (adresse + secret partagé de ce déploiement) ; seule la
-    visibilité du message qui porte ce bouton est restreinte, nativement via les permissions
-    du salon Discord où l'admin l'a posté — aucun contrôle de rôle à faire ici."""
+    répond en message éphémère avec un vrai bouton-lien https vers la page d'invitation de ce
+    serveur (voir plus haut). Le lien mène à la même adresse + même secret partagé pour tout le
+    monde ; seule la visibilité du message qui porte ce bouton est restreinte, nativement via les
+    permissions du salon Discord où l'admin l'a posté — aucun contrôle de rôle à faire ici."""
 
     def __init__(self) -> None:
         super().__init__(timeout=None)
@@ -647,8 +722,16 @@ class InviteView(discord.ui.View):
                 ephemeral=True,
             )
             return
-        link = f"waseboard://connect?url={quote(PUBLIC_URL, safe='')}&token={quote(SHARED_SECRET, safe='')}"
-        await interaction.response.send_message(f"Votre lien de connexion WaseBoard :\n{link}", ephemeral=True)
+        page_url = f"{PUBLIC_URL.rstrip('/')}/connect/{create_invite_code()}"
+        link_view = discord.ui.View()
+        link_view.add_item(discord.ui.Button(label="🚀 Ouvrir WaseBoard", style=discord.ButtonStyle.link, url=page_url))
+        await interaction.response.send_message(
+            "Cliquez sur le bouton : WaseBoard s'ouvre et se connecte tout seul à ce serveur "
+            f"(le lien expire dans {INVITE_CODE_TTL_SECONDS // 60} minutes).\n"
+            f"Pas encore installé ? Téléchargez-le : <{DOWNLOAD_URL}>",
+            view=link_view,
+            ephemeral=True,
+        )
 
 
 class WaseBoardServer(commands.Bot):
@@ -1047,6 +1130,7 @@ class WaseBoardServer(commands.Bot):
         app.router.add_post("/stop", self._handle_stop_all)
         app.router.add_post("/join-my-channel", self._handle_join_my_channel)
         app.router.add_get("/status", self._handle_status)
+        app.router.add_get("/connect/{code}", self._handle_connect_page)  # publique : voir _handle_connect_page
         app.router.add_get("/activity", self._handle_activity)
         app.router.add_get("/my-guilds", self._handle_my_guilds)
         app.router.add_get("/shared-categories", self._handle_get_shared_categories)
@@ -1072,6 +1156,21 @@ class WaseBoardServer(commands.Bot):
         if not SHARED_SECRET:
             return True
         return request.headers.get("X-WaseBoard-Token") == SHARED_SECRET
+
+    async def _handle_connect_page(self, request: web.Request) -> web.Response:
+        """GET /connect/{code} : page ouverte depuis le bouton Discord (donc SANS en-tête d'authentification, par
+        conception). Elle ne livre le lien de connexion — adresse + secret partagé — qu'avec un code valide, émis
+        à un membre qui a cliqué sur le bouton ; sans code valide, elle ne révèle rien."""
+        headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex"}
+        code = request.match_info["code"]
+        if not (PUBLIC_URL and SHARED_SECRET and invite_code_is_valid(code)):
+            return web.Response(text=render_connect_page(None), content_type="text/html", status=404, headers=headers)
+
+        nonce = secrets.token_urlsafe(12)
+        headers["Content-Security-Policy"] = (
+            f"default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-{nonce}'; base-uri 'none'; form-action 'none'"
+        )
+        return web.Response(text=render_connect_page(build_connect_link(), nonce), content_type="text/html", headers=headers)
 
     # ---------- Catalogue de sons ----------
 

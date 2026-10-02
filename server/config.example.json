@@ -7,5 +7,6 @@
   "oauth2_client_id": "",
   "oauth2_client_secret": "",
   "public_url": "",
+  "download_url": "https://github.com/salsi64/WaseBoard/releases/latest",
   "trash_retention_days": 30
 }
