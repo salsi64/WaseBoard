@@ -186,11 +186,13 @@ namespace WaseBoard
             await RefreshSharedCategoriesAsync();
             await RefreshVoiceStatusAsync();
 
-            // Intervalle court (150ms, au lieu de 300ms auparavant) : l'allumage est désormais
-            // optimiste (voir PlayAndPollAsync), mais l'extinction dépend toujours de ce sondage —
-            // un intervalle plus long faisait persister le highlight visiblement après la fin réelle
-            // du son, surtout sur les clips courts.
-            _activityTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            // 300ms : sur son PROPRE clic, l'allumage est optimiste et l'extinction dépend de la
+            // durée réelle du son (voir PlayAndPollAsync/ScheduleLocalStopAsync), donc ni l'un ni
+            // l'autre n'attend ce minuteur. Il ne sert plus qu'à refléter l'activité des AUTRES
+            // utilisateurs (avatar, qui joue quoi) — pas assez sensible au timing pour justifier un
+            // intervalle plus court, qui ne faisait qu'alourdir le fil UI (sondage réseau + mise à
+            // jour des liaisons à chaque tick) sans bénéfice perçu.
+            _activityTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             _activityTimer.Tick += async (_, _) => await PollActivityAsync();
             _activityTimer.Start();
 
@@ -640,7 +642,10 @@ namespace WaseBoard
             ServerStatusText.ToolTip = connected ? null : _library.LastErrorDetail;
             SetStatusDot(connected ? Color.FromRgb(0x4C, 0xAF, 0x50) : Color.FromRgb(0xE8, 0x11, 0x23), pulsing: false);
 
-            _ = _library.PrefetchAllAsync(items);
+            // PrecomputeWaveformsAsync télécharge déjà (en cache) chaque son non encore vu pour en
+            // tirer la durée/waveform : un second passage de préchargement séparé téléchargerait les
+            // mêmes fichiers une deuxième fois en parallèle (deux écritures concurrentes sur le même
+            // chemin de cache) sans rien gagner, d'où sa suppression.
             _ = PrecomputeWaveformsAsync(items);
         }
 

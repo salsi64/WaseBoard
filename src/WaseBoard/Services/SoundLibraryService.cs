@@ -580,18 +580,6 @@ namespace WaseBoard.Services
             }
         }
 
-        public async Task PrefetchAllAsync(IEnumerable<SoundItem> items, int maxConcurrent = 4)
-        {
-            using var semaphore = new System.Threading.SemaphoreSlim(maxConcurrent);
-            var tasks = items.Select(async item =>
-            {
-                await semaphore.WaitAsync();
-                try { await GetOrDownloadCachedFileAsync(item); }
-                finally { semaphore.Release(); }
-            });
-            await Task.WhenAll(tasks);
-        }
-
         /// <summary>SHA-256 d'un fichier local, en minuscules hexadécimal — même format que le hash calculé
         /// côté serveur à l'upload, pour permettre au client de détecter un doublon AVANT d'envoyer le fichier.</summary>
         public static string ComputeFileHash(string filePath)

@@ -739,7 +739,7 @@ RATE_LIMITER = RateLimiter(HTTP_RATE_LIMIT_PER_MIN)
 
 def rate_limit_bucket(request: web.Request) -> Optional[str]:
     """Seules les routes que n'importe qui peut atteindre sans session valide, ou qui coûtent cher (upload), sont limitées :
-    le client sonde /activity toutes les 150 ms en usage normal, ces routes-là ne doivent jamais être freinées."""
+    le client sonde /activity toutes les 300 ms en usage normal, ces routes-là ne doivent jamais être freinées."""
     path = request.path
     if request.method == "GET" and path.startswith("/connect/"):
         return "connect"
@@ -1891,7 +1891,7 @@ class WaseBoardServer(commands.Bot):
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
 
-        # Sondé toutes les 150ms, y compris AVANT toute connexion Discord : reste utilisable
+        # Sondé toutes les 300ms, y compris AVANT toute connexion Discord : reste utilisable
         # sans session (comportement inchangé dans ce cas — aucune présence enregistrée).
         session, err = await self._require_session(request, required=False)
         if err is not None:
