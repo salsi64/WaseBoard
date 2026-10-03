@@ -833,6 +833,58 @@ def render_connect_page(link: Optional[str], nonce: str = "") -> str:
     )
 
 
+# Résumé affiché par le bouton ❓ Aide du panneau (message éphémère) : la version longue vit dans
+# docs/FAQ-utilisateurs.md, partagée avec le README du dépôt — ce texte-ci doit rester cohérent avec elle.
+PANEL_HELP_TEXT = (
+    "**Comment utiliser WaseBoard**\n"
+    "1. Rejoignez un salon vocal sur Discord.\n"
+    "2. Cliquez **🔊 Rejoindre mon vocal** (ici ou dans l'application) : le bot vous rejoint.\n"
+    "3. Dans l'application WaseBoard, cliquez un son : il joue chez tout le monde dans ce salon.\n\n"
+    "Rien ne s'entend ? Vérifiez que le bot est bien dans **votre** salon (bouton 🔊 ci-dessus). "
+    "Pas encore installé WaseBoard ? Cliquez le bouton 📬 pour recevoir votre lien de connexion.\n"
+    "Guide complet : demandez le lien à un administrateur de ce serveur."
+)
+
+
+class MemberPanelView(discord.ui.View):
+    """Panneau de boutons persistant (voir /panneau, et setup_hook : bot.add_view) — une alternative aux
+    commandes slash pour les membres qui ne les utilisent pas spontanément. Posté une fois par un admin dans
+    un salon, fonctionne ensuite pour tout le monde et survit aux redémarrages (custom_id fixes)."""
+
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Rejoindre mon vocal", emoji="🔊", style=discord.ButtonStyle.primary,
+                        custom_id="waseboard_panel_join")
+    async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        member = interaction.user
+        if not isinstance(member, discord.Member) or member.voice is None or member.voice.channel is None:
+            await interaction.response.send_message(
+                "Connectez-vous d'abord à un salon vocal sur Discord, puis recliquez ce bouton.", ephemeral=True)
+            return
+        channel = member.voice.channel
+        try:
+            await bot.join_guild_voice(interaction.guild_id, channel)
+        except CapacityError as ex:
+            await interaction.response.send_message(f"⚠️ {ex}", ephemeral=True)
+            return
+        await interaction.response.send_message(
+            f"Connecté à **{channel.name}**. Prêt à jouer les sons envoyés par WaseBoard.", ephemeral=True)
+
+    @discord.ui.button(label="Stop", emoji="⏹️", style=discord.ButtonStyle.secondary, custom_id="waseboard_panel_stop")
+    async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        mixer = bot.mixers.get(interaction.guild_id)
+        if mixer is None or mixer.count() == 0:
+            await interaction.response.send_message("Aucun son n'est en cours sur ce serveur.", ephemeral=True)
+            return
+        mixer.clear()  # déclenche aussi les callbacks on_finish : l'activité est effacée immédiatement (voir _handle_stop_all)
+        await interaction.response.send_message("Tous les sons ont été coupés.", ephemeral=True)
+
+    @discord.ui.button(label="Aide", emoji="❓", style=discord.ButtonStyle.secondary, custom_id="waseboard_panel_help")
+    async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(PANEL_HELP_TEXT, ephemeral=True)
+
+
 class InviteView(discord.ui.View):
     """Bouton persistant (voir setup_hook : bot.add_view) posté par /configurer-invitation —
     répond en message éphémère avec un vrai bouton-lien https vers la page d'invitation de ce
@@ -951,6 +1003,7 @@ class WaseBoardServer(commands.Bot):
         # message déjà posté par /configurer-invitation après un redémarrage, sans avoir à
         # retenir où il a été posté.
         self.add_view(InviteView())
+        self.add_view(MemberPanelView())
 
         if not GUILD_ID:
             await self.tree.sync()
@@ -2381,6 +2434,26 @@ async def configurer_invitation(interaction: discord.Interaction) -> None:
         return
     await interaction.channel.send("Cliquez pour recevoir votre lien de connexion WaseBoard :", view=InviteView())
     await interaction.response.send_message("Bouton posté.", ephemeral=True)
+
+
+@bot.tree.command(name="panneau",
+                   description="Poste un panneau de boutons (rejoindre le vocal, stop, aide) utilisable par tous les membres")
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
+async def panneau(interaction: discord.Interaction) -> None:
+    member = interaction.user
+    if not isinstance(member, discord.Member) or not member.guild_permissions.administrator:
+        # Défense en profondeur (comme /diagnostic) : default_permissions ci-dessus cache déjà la commande aux
+        # non-admins dans l'interface, mais un admin de serveur peut rouvrir l'accès via les réglages d'intégration
+        # Discord — ce contrôle explicite ne dépend donc pas uniquement de ce que Discord affiche.
+        await interaction.response.send_message("Cette commande est réservée aux administrateurs du serveur.", ephemeral=True)
+        return
+    await interaction.channel.send(
+        "**WaseBoard** — une fois connecté dans un salon vocal, cliquez 🔊 pour que le bot vous rejoigne, "
+        "puis jouez vos sons depuis l'application.",
+        view=MemberPanelView(),
+    )
+    await interaction.response.send_message("Panneau posté.", ephemeral=True)
 
 
 @bot.tree.command(name="diagnostic",

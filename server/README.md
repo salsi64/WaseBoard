@@ -275,7 +275,10 @@ domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit u
 ## 7. Distribuer le lien de connexion
 
 Une fois `public_url` et `shared_secret` renseignés (étape 3), tapez `/configurer-invitation`
-dans un salon Discord — ça poste un bouton persistant (survit aux redémarrages du bot).
+dans un salon Discord — ça poste un bouton persistant (survit aux redémarrages du bot). Vous pouvez
+aussi taper `/panneau` dans un salon pour y poster trois boutons utilisables par tout le monde sans
+commande : 🔊 rejoindre son vocal, ⏹️ couper les sons en cours, ❓ un rappel du fonctionnement — guide
+complet pour vos membres : [`docs/FAQ-utilisateurs.md`](../docs/FAQ-utilisateurs.md).
 Toute personne pouvant voir ce salon peut cliquer dessus pour recevoir, en message visible
 d'elle seule, un **bouton « Ouvrir WaseBoard »** : il ouvre une petite page de votre serveur
 (`<public_url>/connect/<code>`) qui lance l'application et pré-remplit automatiquement

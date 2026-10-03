@@ -23,6 +23,8 @@ Discord) :
 3. Cliquez sur le bouton: Rejoindre mon vocal.   
 4. Cliquez un son — c'est prêt.
 
+Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
+
 ## Fonctionnalités
 
 - **Aperçu local** (émoticône sur la gauche des boutons) avant de jouer réellement dans le vocal ; le bouton s'illumine
