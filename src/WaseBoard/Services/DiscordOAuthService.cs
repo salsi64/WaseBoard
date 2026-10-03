@@ -124,13 +124,12 @@ namespace WaseBoard.Services
             "a.link:hover{border-color:#38bdf8}";
 
         // Site et communauté du projet, pas spécifiques à ce serveur WaseBoard — utile même si la
-        // personne qui vous a invité n'a pas (encore) tout configuré. "Le site" est pour l'instant sur
-        // l'ancien domaine ; à mettre à jour vers waseboard.salsi.bid une fois la page migrée là-bas.
+        // personne qui vous a invité n'a pas (encore) tout configuré.
         private const string FooterLinks =
             """
             <div class="links">
                 <a class="link" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord WaseBoard</a>
-                <a class="link" href="https://waseboard.duckdns.org/">🌐 Le site</a>
+                <a class="link" href="https://waseboard.salsi.bid/">🌐 Le site</a>
                 <a class="link" href="https://github.com/salsi64/WaseBoard">🐙 Code source (GitHub)</a>
             </div>
             """;
