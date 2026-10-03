@@ -169,10 +169,25 @@ namespace WaseBoard
             // Couvre aussi le cas d'une session invalidée en cours de route (voir SessionInvalidated).
             var needsFirstRun = !_library.Settings.HasSeenOnboarding;
             var needsLogin = string.IsNullOrWhiteSpace(_library.Settings.DiscordSessionToken);
-            if (needsFirstRun || needsLogin)
+
+            // Un utilisateur qui a déjà vu l'assistant peut avoir des réglages Serveur devenus
+            // invalides (jeton partagé changé côté serveur — ex. une rotation de sécurité) : sans
+            // cette vérification, l'assistant sautait droit à l'étape Discord avec une adresse/un
+            // jeton caducs, pour un échec confus une étape plus tard au lieu du vrai problème.
+            var serverNeedsReconfig = false;
+            if (!needsFirstRun && !string.IsNullOrWhiteSpace(_library.Settings.ServerUrl))
             {
+                var (status, _) = await _library.GetServerStatusAsync();
+                serverNeedsReconfig = status == SoundLibraryService.ServerStatusResult.Unauthorized;
+            }
+
+            if (needsFirstRun || needsLogin || serverNeedsReconfig)
+            {
+                if (serverNeedsReconfig)
+                    ToastService.Show("Votre serveur WaseBoard a changé d'adresse ou de jeton d'accès — mettez à jour vos réglages ci-dessous.", ToastKind.Warning);
+
                 var onboarding = new OnboardingWindow(_library.Settings, _library,
-                    startAtDiscordStep: !needsFirstRun) { Owner = this };
+                    startAtDiscordStep: !needsFirstRun && !serverNeedsReconfig) { Owner = this };
                 onboarding.ShowDialog();
                 _library.Settings.HasSeenOnboarding = true;
                 _library.SaveSettings();
@@ -182,9 +197,16 @@ namespace WaseBoard
 
             _hotkeys = new GlobalHotkeyManager(this);
             ApplyTheme();
+
+            // RefreshVoiceStatusAsync ne touche que la barre latérale (statut vocal) et ne dépend
+            // de rien ici : lancé en parallèle plutôt qu'après les deux autres, qui eux doivent
+            // rester séquentiels (RefreshSharedCategoriesAsync lit Sounds, rempli par
+            // RefreshCatalogAsync). Évite d'ajouter un troisième aller-retour réseau plein au
+            // démarrage alors qu'il peut se faire en même temps que les deux premiers.
+            var voiceStatusTask = RefreshVoiceStatusAsync();
             await RefreshCatalogAsync();
             await RefreshSharedCategoriesAsync();
-            await RefreshVoiceStatusAsync();
+            await voiceStatusTask;
 
             // 300ms : sur son PROPRE clic, l'allumage est optimiste et l'extinction dépend de la
             // durée réelle du son (voir PlayAndPollAsync/ScheduleLocalStopAsync), donc ni l'un ni
@@ -721,8 +743,15 @@ namespace WaseBoard
         private async Task PollActivityAsync()
         {
             var (activity, online) = await _library.GetActivityAsync();
+            // Construit la table de correspondance id->son PENDANT ce même parcours (plutôt qu'un
+            // Sounds.FirstOrDefault(...) séparé par son actif plus bas) : sur un gros catalogue avec
+            // plusieurs sons joués en même temps, ce sondage toutes les 300ms finissait par repasser
+            // en boucle sur tout le catalogue pour chaque son actif (coût qui grossit avec les deux
+            // à la fois), perceptible surtout en usage actif — exactement quand la réactivité compte.
+            var soundsById = new Dictionary<string, SoundItem>(Sounds.Count);
             foreach (var item in Sounds)
             {
+                soundsById[item.Id] = item;
                 if (activity.TryGetValue(item.Id, out var users))
                 {
                     item.IsPlaying = true;
@@ -748,7 +777,7 @@ namespace WaseBoard
                 .SelectMany(kv => kv.Value.Select(u => (SoundId: kv.Key, User: u)))
                 .Select(t =>
                 {
-                    var sound = Sounds.FirstOrDefault(s => s.Id == t.SoundId);
+                    soundsById.TryGetValue(t.SoundId, out var sound);
                     return new NowPlayingEntry
                     {
                         SoundId = t.SoundId,
