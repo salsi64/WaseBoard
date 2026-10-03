@@ -914,13 +914,16 @@ class InviteView(discord.ui.View):
         page_url = f"{PUBLIC_URL.rstrip('/')}/connect/{create_invite_code()}"
         link_view = discord.ui.View()
         link_view.add_item(discord.ui.Button(label="🚀 Ouvrir WaseBoard", style=discord.ButtonStyle.link, url=page_url))
+        # Discord affiche toujours les boutons APRÈS tout le texte d'un message : pour que le
+        # bouton apparaisse visuellement avant le lien de téléchargement (et pas l'inverse), le
+        # lien de téléchargement part dans un second message (followup) plutôt que dans celui-ci.
         await interaction.response.send_message(
             "Cliquez sur le bouton : WaseBoard s'ouvre et se connecte tout seul à ce serveur "
-            f"(le lien expire dans {INVITE_CODE_TTL_SECONDS // 60} minutes).\n"
-            f"Pas encore installé ? Téléchargez-le : <{DOWNLOAD_URL}>",
+            f"(le lien expire dans {INVITE_CODE_TTL_SECONDS // 60} minutes).",
             view=link_view,
             ephemeral=True,
         )
+        await interaction.followup.send(f"Pas encore installé ? Téléchargez-le : <{DOWNLOAD_URL}>", ephemeral=True)
 
 
 def format_bytes(number: float) -> str:
@@ -1251,17 +1254,30 @@ class WaseBoardServer(commands.Bot):
         if cached is not None and now - cached[0] < MEMBERSHIP_CACHE_TTL:
             return cached[1]
 
-        found: list[tuple[discord.Guild, discord.Member]] = []
+        member_by_guild_id: dict[int, discord.Member] = {}
+        guilds_to_fetch: list[discord.Guild] = []
         for guild in self.guilds:
             member = guild.get_member(user_id)
-            if member is None:
-                try:
-                    member = await guild.fetch_member(user_id)
-                except (discord.NotFound, discord.HTTPException):
-                    member = None
             if member is not None:
-                found.append((guild, member))
+                member_by_guild_id[guild.id] = member
+            else:
+                guilds_to_fetch.append(guild)
 
+        if guilds_to_fetch:
+            async def _safe_fetch(guild: discord.Guild):
+                try:
+                    return guild.id, await guild.fetch_member(user_id)
+                except (discord.NotFound, discord.HTTPException):
+                    return guild.id, None
+
+            # En parallèle (pas guilde par guilde) : un cache froid coûte alors le temps du PLUS
+            # LENT appel REST, pas leur somme — c'est ce qui rendait perceptible le tout premier
+            # clic (ou le premier après un moment d'inactivité, une fois le cache expiré).
+            for gid, member in await asyncio.gather(*(_safe_fetch(g) for g in guilds_to_fetch)):
+                if member is not None:
+                    member_by_guild_id[gid] = member
+
+        found = [(guild, member_by_guild_id[guild.id]) for guild in self.guilds if guild.id in member_by_guild_id]
         self._membership_cache[user_id] = (now, found)
         if len(self._membership_cache) > 500:  # garde-fou bas coût contre une croissance illimitée
             expired = [uid for uid, (ts, _) in self._membership_cache.items() if now - ts >= MEMBERSHIP_CACHE_TTL]
