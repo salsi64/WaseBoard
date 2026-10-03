@@ -8,5 +8,12 @@
   "oauth2_client_secret": "",
   "public_url": "",
   "download_url": "https://github.com/salsi64/WaseBoard/releases/latest",
-  "trash_retention_days": 30
+  "trash_retention_days": 30,
+  "max_guilds": 0,
+  "max_concurrent_voice": 0,
+  "max_sources_per_guild": 0,
+  "max_ffmpeg_processes": 0,
+  "http_rate_limit_per_min": 0,
+  "default_guild_limits": {},
+  "guild_limit_ceilings": {}
 }

@@ -21,7 +21,15 @@ namespace WaseBoard.Services
             [JsonPropertyName("max_sounds")] public int MaxSounds { get; set; }
             [JsonPropertyName("max_file_mb")] public int MaxFileMb { get; set; }
             [JsonPropertyName("max_duration_s")] public int MaxDurationSeconds { get; set; }
+            [JsonPropertyName("max_total_mb")] public int MaxTotalMb { get; set; }
             [JsonPropertyName("play_rate_per_min")] public int PlayRatePerMinute { get; set; }
+        }
+
+        /// <summary>Consommation actuelle d'une guilde (renvoyée par les serveurs récents, absente sinon).</summary>
+        public class AdminUsage
+        {
+            [JsonPropertyName("sounds")] public int Sounds { get; set; }
+            [JsonPropertyName("total_mb")] public double TotalMb { get; set; }
         }
 
         public class AdminRole
@@ -44,6 +52,12 @@ namespace WaseBoard.Services
             [JsonPropertyName("settings")] public AdminSettings Settings { get; set; } = new();
             [JsonPropertyName("roles")] public List<AdminRole> Roles { get; set; } = new();
             [JsonPropertyName("blocked")] public List<AdminBlockedUser> Blocked { get; set; } = new();
+
+            /// <summary>Plafonds imposés par l'hébergeur du serveur (nom du réglage → valeur maximale). Vide = aucun.</summary>
+            [JsonPropertyName("ceilings")] public Dictionary<string, int>? Ceilings { get; set; }
+
+            /// <summary>Null pour un serveur antérieur aux quotas d'espace : le champ correspondant est alors masqué.</summary>
+            [JsonPropertyName("usage")] public AdminUsage? Usage { get; set; }
         }
 
         public class AdminSound
@@ -161,6 +175,7 @@ namespace WaseBoard.Services
                 max_sounds = settings.MaxSounds,
                 max_file_mb = settings.MaxFileMb,
                 max_duration_s = settings.MaxDurationSeconds,
+                max_total_mb = settings.MaxTotalMb,
                 play_rate_per_min = settings.PlayRatePerMinute
             });
 

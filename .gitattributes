@@ -5,3 +5,4 @@ server/Caddyfile text eol=lf
 server/docker-compose.yml text eol=lf
 server/.env.example text eol=lf
 server/.dockerignore text eol=lf
+server/deploy/* text eol=lf

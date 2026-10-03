@@ -28,6 +28,21 @@ def _optional_int(value) -> Optional[int]:
     return int(value)
 
 
+def _json_object(value) -> dict:
+    """Variable d'environnement contenant un objet JSON (ex : {"max_total_mb": 500})."""
+    parsed = json.loads(value)
+    if not isinstance(parsed, dict):
+        raise ValueError("un objet JSON {...} est attendu")
+    return parsed
+
+
+# Réglages de guilde auxquels l'hébergeur peut imposer des valeurs par défaut ou des plafonds (0 = illimité).
+GUILD_LIMIT_KEYS = ("max_sounds", "max_file_mb", "max_duration_s", "max_total_mb", "play_rate_per_min")
+# Plafonds de ressources de l'instance (0 = désactivé) : voir « Capacité » dans le README.
+RESOURCE_CAP_KEYS = ("max_guilds", "max_concurrent_voice", "max_sources_per_guild", "max_ffmpeg_processes",
+                     "http_rate_limit_per_min")
+
+
 # clé de config.json -> (variable d'environnement, conversion)
 ENV_OVERRIDES: dict[str, tuple[str, Callable]] = {
     "bot_token": ("WASEBOARD_BOT_TOKEN", str),
@@ -40,7 +55,36 @@ ENV_OVERRIDES: dict[str, tuple[str, Callable]] = {
     "public_url": ("WASEBOARD_PUBLIC_URL", str),
     "download_url": ("WASEBOARD_DOWNLOAD_URL", str),
     "trash_retention_days": ("WASEBOARD_TRASH_RETENTION_DAYS", int),
+    "max_guilds": ("WASEBOARD_MAX_GUILDS", int),
+    "max_concurrent_voice": ("WASEBOARD_MAX_CONCURRENT_VOICE", int),
+    "max_sources_per_guild": ("WASEBOARD_MAX_SOURCES_PER_GUILD", int),
+    "max_ffmpeg_processes": ("WASEBOARD_MAX_FFMPEG_PROCESSES", int),
+    "http_rate_limit_per_min": ("WASEBOARD_HTTP_RATE_LIMIT_PER_MIN", int),
+    "default_guild_limits": ("WASEBOARD_DEFAULT_GUILD_LIMITS", _json_object),
+    "guild_limit_ceilings": ("WASEBOARD_GUILD_LIMIT_CEILINGS", _json_object),
 }
+
+
+def _is_count(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def validate_limits(config: dict) -> None:
+    """Refuse au démarrage (avec un message précis) une limite mal écrite plutôt que de l'ignorer en silence."""
+    for key in RESOURCE_CAP_KEYS:
+        if key in config and not _is_count(config[key]):
+            raise ConfigError(f"{key} doit être un entier positif ou nul (0 = désactivé), pas {config[key]!r}.")
+    for name in ("default_guild_limits", "guild_limit_ceilings"):
+        value = config.get(name)
+        if value is None:
+            continue
+        if not isinstance(value, dict):
+            raise ConfigError(f"{name} doit être un objet JSON, par exemple {{\"max_total_mb\": 500}}.")
+        for key, number in value.items():
+            if key not in GUILD_LIMIT_KEYS:
+                raise ConfigError(f"{name} : « {key} » est inconnu (valeurs possibles : {', '.join(GUILD_LIMIT_KEYS)}).")
+            if not _is_count(number):
+                raise ConfigError(f"{name}.{key} doit être un entier positif ou nul (0 = illimité), pas {number!r}.")
 
 
 def load_config(environ: Optional[Mapping[str, str]] = None, config_path: Optional[Path] = None) -> dict:
@@ -69,6 +113,8 @@ def load_config(environ: Optional[Mapping[str, str]] = None, config_path: Option
             config[key] = convert(raw.strip())
         except ValueError as ex:
             raise ConfigError(f"La variable {variable} a une valeur invalide ({raw!r}) : {ex}") from ex
+
+    validate_limits(config)
 
     if "guild_id" in config:
         try:

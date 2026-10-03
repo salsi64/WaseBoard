@@ -9,6 +9,7 @@ Voir README.md pour la mise en place complète.
 import asyncio
 import hashlib
 import html
+import ipaddress
 import json
 import logging
 import os
@@ -76,6 +77,19 @@ PUBLIC_URL: str = CONFIG.get("public_url", "")
 DOWNLOAD_URL: str = CONFIG.get("download_url") or "https://github.com/salsi64/WaseBoard/releases/latest"
 # Durée de conservation d'un son supprimé avant purge définitive (0 = jamais purgé).
 TRASH_RETENTION_DAYS: int = CONFIG.get("trash_retention_days", 30)
+
+# Plafonds de ressources de l'instance (0 = désactivé : comportement historique). Voir « Capacité » dans le README.
+MAX_GUILDS: int = CONFIG.get("max_guilds", 0)                          # serveurs Discord où le bot reste présent
+MAX_CONCURRENT_VOICE: int = CONFIG.get("max_concurrent_voice", 0)      # connexions vocales simultanées
+MAX_SOURCES_PER_GUILD: int = CONFIG.get("max_sources_per_guild", 0)    # sons différents joués en même temps, par serveur
+MAX_FFMPEG_PROCESSES: int = CONFIG.get("max_ffmpeg_processes", 0)      # sons joués en même temps, toutes guildes (1 ffmpeg chacun)
+HTTP_RATE_LIMIT_PER_MIN: int = CONFIG.get("http_rate_limit_per_min", 0)  # requêtes/min/IP sur les routes publiques
+# Réglages imposés par l'hébergeur aux guildes : valeurs PAR DÉFAUT de celles qui n'ont encore rien enregistré
+# (leurs admins peuvent les modifier) et PLAFONDS (que leurs admins ne peuvent pas dépasser ; « illimité » n'est alors
+# plus permis pour ce réglage). Clés possibles : voir wb_config.GUILD_LIMIT_KEYS.
+DEFAULT_GUILD_LIMITS: dict = CONFIG.get("default_guild_limits") or {}
+GUILD_LIMIT_CEILINGS: dict = CONFIG.get("guild_limit_ceilings") or {}
+STARTED_AT = time.time()
 
 SOUNDS_DIR.mkdir(parents=True, exist_ok=True)
 TRASH_DIR.mkdir(exist_ok=True)
@@ -195,6 +209,7 @@ DEFAULT_GUILD_SETTINGS = {
     "max_sounds": 0,              # 0 = illimité (sons natifs de la guilde)
     "max_file_mb": 0,             # 0 = pas de limite propre à la guilde
     "max_duration_s": 0,          # 0 = pas de limite
+    "max_total_mb": 0,            # 0 = pas de limite d'espace disque cumulé (sons natifs de la guilde)
     "play_rate_per_min": 0,       # 0 = pas d'anti-spam à la lecture
     "blocked_uploaders": [],      # ids Discord (str) interdits d'upload sur cette guilde
 }
@@ -207,14 +222,42 @@ def load_all_guild_settings() -> dict:
         return json.load(f)
 
 
-def get_guild_settings(guild_id, all_settings: Optional[dict] = None) -> dict:
-    """Réglages complets (valeurs par défaut incluses) d'une guilde. `all_settings` permet de
-    ne lire le fichier qu'une fois quand on traite plusieurs guildes."""
+def apply_guild_ceilings(settings: dict) -> dict:
+    """Applique les plafonds de l'hébergeur (GUILD_LIMIT_CEILINGS) : pour un réglage plafonné, « illimité » (0)
+    devient le plafond et toute valeur supérieure y est ramenée. Sans plafond configuré, ne change rien."""
+    for key, ceiling in GUILD_LIMIT_CEILINGS.items():
+        if ceiling > 0:
+            value = settings.get(key, 0)
+            settings[key] = ceiling if value == 0 else min(value, ceiling)
+    return settings
+
+
+def get_guild_settings(guild_id, all_settings: Optional[dict] = None, clamp: bool = True) -> dict:
+    """Réglages complets d'une guilde : valeurs par défaut, puis (seulement pour une guilde qui n'a encore rien
+    enregistré) les valeurs par défaut de l'hébergeur, puis ce que l'admin a enregistré, puis les plafonds de
+    l'hébergeur (clamp=False les ignore : valeurs brutes, pour pouvoir les réécrire telles quelles).
+    `all_settings` permet de ne lire le fichier qu'une fois quand on traite plusieurs guildes."""
     if all_settings is None:
         all_settings = load_all_guild_settings()
-    merged = {**DEFAULT_GUILD_SETTINGS, **all_settings.get(str(guild_id), {})}
+    saved = all_settings.get(str(guild_id))
+    merged = {**DEFAULT_GUILD_SETTINGS, **(DEFAULT_GUILD_LIMITS if saved is None else {}), **(saved or {})}
     merged["blocked_uploaders"] = [str(u) for u in merged["blocked_uploaders"]]
-    return merged
+    return apply_guild_ceilings(merged) if clamp else merged
+
+
+def guild_used_bytes(guild_id, catalog: Optional[list] = None) -> tuple[int, int]:
+    """(nombre de sons, octets sur disque) des sons NATIFS d'une guilde (la corbeille n'est pas comptée : elle est
+    purgée automatiquement)."""
+    count = total = 0
+    for entry in (load_catalog() if catalog is None else catalog):
+        if entry.get("guild_id") != str(guild_id):
+            continue
+        count += 1
+        try:
+            total += (SOUNDS_DIR / f"{entry['id']}{entry['extension']}").stat().st_size
+        except OSError:
+            pass
+    return count, total
 
 
 def save_guild_settings(guild_id, settings: dict) -> None:
@@ -549,6 +592,15 @@ class MixingAudioSource(discord.AudioSource):
                 except Exception:
                     log.exception("Erreur dans un callback on_finish (relance)")
 
+    def count(self) -> int:
+        """Nombre de sons actuellement en lecture sur ce mixeur (un processus ffmpeg chacun)."""
+        with self._lock:
+            return len(self._entries)
+
+    def has(self, key: str) -> bool:
+        with self._lock:
+            return key in self._entries
+
     def clear(self) -> None:
         """Coupe immédiatement tous les sons en cours sur ce mixeur (bouton "Stop tout")."""
         with self._lock:
@@ -632,6 +684,81 @@ intents.voice_states = True
 intents.guilds = True
 intents.members = True  # requis pour résoudre un membre par id ; à activer aussi dans le
                          # Portail Développeur > Bot > "Server Members Intent".
+
+
+# ---------- Limitation de débit des routes publiques ----------
+
+class CapacityError(Exception):
+    """L'instance a atteint un de ses plafonds de ressources (message destiné à l'utilisateur)."""
+
+
+def client_ip(request: web.Request) -> str:
+    """Adresse du client. Derrière un reverse proxy local (nginx, Caddy, conteneur voisin : pair en boucle locale ou en
+    réseau privé), c'est la DERNIÈRE entrée de X-Forwarded-For — celle que le proxy a lui-même constatée ; les entrées
+    précédentes peuvent avoir été forgées par le client."""
+    peer = request.remote or "?"
+    try:
+        ip = ipaddress.ip_address(peer)
+    except ValueError:
+        return peer
+    if ip.is_loopback or ip.is_private:
+        last = request.headers.get("X-Forwarded-For", "").split(",")[-1].strip()
+        try:
+            return str(ipaddress.ip_address(last))
+        except ValueError:
+            pass
+    return peer
+
+
+class RateLimiter:
+    """Fenêtre glissante de 60 s par clé (ex : (route, IP)). limit <= 0 : désactivé."""
+
+    def __init__(self, limit_per_min: int) -> None:
+        self.limit = limit_per_min
+        self._hits: dict[tuple, deque] = {}
+
+    def check(self, key: tuple) -> Optional[int]:
+        """None si la requête peut passer (et la comptabilise), sinon le nombre de secondes à attendre."""
+        if self.limit <= 0:
+            return None
+        now = time.monotonic()
+        history = self._hits.setdefault(key, deque())
+        while history and now - history[0] >= 60:
+            history.popleft()
+        if len(history) >= self.limit:
+            return max(1, int(60 - (now - history[0]) + 0.999))
+        history.append(now)
+        if len(self._hits) > 10000:  # garde-fou mémoire : on oublie les clés dont la fenêtre est vide
+            for stale in [k for k, h in self._hits.items() if not h or now - h[-1] >= 60]:
+                del self._hits[stale]
+        return None
+
+
+RATE_LIMITER = RateLimiter(HTTP_RATE_LIMIT_PER_MIN)
+
+
+def rate_limit_bucket(request: web.Request) -> Optional[str]:
+    """Seules les routes que n'importe qui peut atteindre sans session valide, ou qui coûtent cher (upload), sont limitées :
+    le client sonde /activity toutes les 300 ms en usage normal, ces routes-là ne doivent jamais être freinées."""
+    path = request.path
+    if request.method == "GET" and path.startswith("/connect/"):
+        return "connect"
+    if path.startswith("/oauth/"):
+        return "oauth"
+    if request.method == "POST" and path == "/sounds":
+        return "upload"
+    return None
+
+
+@web.middleware
+async def rate_limit_middleware(request: web.Request, handler):
+    bucket = rate_limit_bucket(request)
+    if bucket is not None:
+        wait = RATE_LIMITER.check((bucket, client_ip(request)))
+        if wait is not None:
+            return web.json_response({"error": f"Trop de requêtes : réessayez dans {wait} s.", "retry_after": wait},
+                                     status=429, headers={"Retry-After": str(wait)})
+    return await handler(request)
 
 
 # ---------- Lien d'invitation ----------
@@ -737,6 +864,61 @@ class InviteView(discord.ui.View):
         )
 
 
+def format_bytes(number: float) -> str:
+    for unit in ("octets", "Ko", "Mo", "Go"):
+        if number < 1024 or unit == "Go":
+            return f"{number:.0f} {unit}" if unit == "octets" else f"{number:.1f} {unit}"
+        number /= 1024
+    return f"{number:.1f} Go"
+
+
+def format_duration(seconds: float) -> str:
+    minutes = int(seconds // 60)
+    days, minutes = divmod(minutes, 1440)
+    hours, minutes = divmod(minutes, 60)
+    if days:
+        return f"{days} j {hours} h"
+    return f"{hours} h {minutes:02d} min" if hours else f"{minutes} min"
+
+
+def active_limits_text() -> str:
+    """Résumé des plafonds actifs de l'instance (ceux à 0 / absents ne sont pas listés)."""
+    parts = []
+    for label, value in (("serveurs", MAX_GUILDS), ("salons vocaux", MAX_CONCURRENT_VOICE),
+                         ("sons/serveur", MAX_SOURCES_PER_GUILD), ("sons au total", MAX_FFMPEG_PROCESSES)):
+        if value > 0:
+            parts.append(f"{label} : {value}")
+    if HTTP_RATE_LIMIT_PER_MIN > 0:
+        parts.append(f"requêtes publiques : {HTTP_RATE_LIMIT_PER_MIN}/min/IP")
+    if GUILD_LIMIT_CEILINGS:
+        parts.append("plafonds des serveurs : " + ", ".join(f"{k}={v}" for k, v in GUILD_LIMIT_CEILINGS.items()))
+    if DEFAULT_GUILD_LIMITS:
+        parts.append("valeurs par défaut des nouveaux serveurs : " + ", ".join(f"{k}={v}" for k, v in DEFAULT_GUILD_LIMITS.items()))
+    return " · ".join(parts) if parts else "aucun (instance sans limite)"
+
+
+def render_instance_stats(stats: dict) -> str:
+    def capacity(value: int, limit: int) -> str:
+        return f"{value} / {limit}" if limit > 0 else str(value)
+
+    latency = f"{stats['latency_ms']} ms" if stats["latency_ms"] is not None else "—"
+    lines = [
+        f"**Instance WaseBoard** — en ligne depuis {format_duration(stats['uptime_s'])} · latence Discord {latency}",
+        f"• Serveurs Discord : {capacity(stats['guilds'], MAX_GUILDS)}",
+        f"• Salons vocaux actifs : {capacity(stats['voice'], MAX_CONCURRENT_VOICE)}",
+        f"• Sons en lecture (processus ffmpeg) : {capacity(stats['sources'], MAX_FFMPEG_PROCESSES)}",
+        f"• Applications ouvertes en ce moment : {stats['online_users']}",
+        f"• Catalogue : {stats['catalog_sounds']} sons — {format_bytes(stats['bytes_total'])} "
+        f"(corbeille : {format_bytes(stats['bytes_trash'])})",
+        f"• Disque : {format_bytes(stats['disk_free'])} libres",
+    ]
+    if stats["top_guilds"]:
+        lines.append("• Serveurs les plus lourds : " + " ; ".join(
+            f"{g['name']} ({g['sounds']} sons, {format_bytes(g['bytes'])})" for g in stats["top_guilds"]))
+    lines.append(f"• Plafonds actifs : {active_limits_text()}")
+    return "\n".join(lines)
+
+
 class WaseBoardServer(commands.Bot):
     def __init__(self) -> None:
         super().__init__(command_prefix="!", intents=intents)
@@ -804,7 +986,26 @@ class WaseBoardServer(commands.Bot):
             except Exception:
                 log.exception("Échec de la synchronisation des commandes sur %s", guild.id)
 
+    async def _decline_guild(self, guild: discord.Guild) -> None:
+        """Instance pleine (MAX_GUILDS) : prévient le propriétaire du serveur qui vient d'inviter le bot (message privé,
+        s'il les accepte) puis le quitte. Les serveurs déjà présents ne sont jamais touchés."""
+        log.warning("Capacité maximale atteinte (%s serveurs) : « %s » (%s) est refusé.", MAX_GUILDS, guild.name, guild.id)
+        text = (f"Cette instance WaseBoard a atteint sa capacité maximale ({MAX_GUILDS} serveurs Discord) : le bot quitte "
+                f"« {guild.name} ». Vous pouvez réessayer plus tard, ou héberger votre propre instance (voir la documentation).")
+        try:
+            owner = guild.owner or await guild.fetch_member(guild.owner_id)
+            await owner.send(text)
+        except Exception:
+            log.info("Message de refus non remis au propriétaire de %s (messages privés fermés ?).", guild.id)
+        try:
+            await guild.leave()
+        except Exception:
+            log.exception("Impossible de quitter le serveur refusé %s", guild.id)
+
     async def on_guild_join(self, guild: discord.Guild) -> None:
+        if MAX_GUILDS > 0 and len(self.guilds) > MAX_GUILDS:
+            await self._decline_guild(guild)
+            return
         if not GUILD_ID:
             return  # synchro globale : déjà valable pour ce nouveau serveur
         try:
@@ -835,11 +1036,77 @@ class WaseBoardServer(commands.Bot):
 
     # ---------- Salons vocaux ----------
 
+    def active_voice_count(self) -> int:
+        return sum(1 for vc in self.voice_clients_map.values() if vc.is_connected())
+
+    def active_source_count(self) -> int:
+        """Sons en cours de lecture sur toutes les guildes (= processus ffmpeg vivants)."""
+        return sum(mixer.count() for mixer in list(self.mixers.values()))
+
+    @staticmethod
+    def _storage_usage() -> dict:
+        """Occupation disque (bloquant : à lancer dans un thread) : total des sons, corbeille, détail par guilde."""
+        per_guild: dict[str, list[int]] = {}
+        total = 0
+        for entry in load_catalog():
+            try:
+                size = (SOUNDS_DIR / f"{entry['id']}{entry['extension']}").stat().st_size
+            except OSError:
+                continue
+            slot = per_guild.setdefault(str(entry.get("guild_id")), [0, 0])
+            slot[0] += 1
+            slot[1] += size
+            total += size
+        trash = 0
+        if TRASH_DIR.exists():
+            for item in TRASH_DIR.iterdir():
+                try:
+                    if item.is_file():
+                        trash += item.stat().st_size
+                except OSError:
+                    pass
+        return {"total": total, "trash": trash, "per_guild": per_guild, "disk_free": shutil.disk_usage(DATA_DIR).free}
+
+    async def instance_stats(self) -> dict:
+        """Chiffres de santé/capacité de cette instance (commande /instance, réservée à son propriétaire)."""
+        usage = await asyncio.to_thread(self._storage_usage)
+        top = []
+        for guild_id, (count, size) in sorted(usage["per_guild"].items(), key=lambda kv: kv[1][1], reverse=True)[:5]:
+            guild = self.get_guild(int(guild_id)) if guild_id.isdigit() else None
+            top.append({"name": guild.name if guild else f"serveur inconnu ({guild_id})", "sounds": count, "bytes": size})
+        return {
+            "uptime_s": time.time() - STARTED_AT,
+            "latency_ms": round(self.latency * 1000) if self.latency == self.latency else None,  # NaN avant la connexion
+            "guilds": len(self.guilds),
+            "voice": self.active_voice_count(),
+            "sources": self.active_source_count(),
+            "online_users": len(self.get_online_snapshot()),
+            "catalog_sounds": len(load_catalog()),
+            "bytes_total": usage["total"], "bytes_trash": usage["trash"], "disk_free": usage["disk_free"],
+            "top_guilds": top,
+        }
+
+    def _play_capacity_error(self, sound_id: str, mixer: "MixingAudioSource") -> Optional[str]:
+        """Message de refus si lancer ce son dépasserait un plafond de ressources, sinon None. Rejouer un son déjà en
+        lecture le REMPLACE (voir MixingAudioSource.add) : cela ne consomme rien de plus, donc n'est jamais refusé."""
+        if MAX_SOURCES_PER_GUILD <= 0 and MAX_FFMPEG_PROCESSES <= 0:
+            return None
+        if mixer.has(sound_id):
+            return None
+        if MAX_SOURCES_PER_GUILD > 0 and mixer.count() >= MAX_SOURCES_PER_GUILD:
+            return f"Trop de sons en même temps sur ce serveur (maximum {MAX_SOURCES_PER_GUILD}) : réessayez dans un instant."
+        if MAX_FFMPEG_PROCESSES > 0 and self.active_source_count() >= MAX_FFMPEG_PROCESSES:
+            return "Le serveur WaseBoard est très sollicité en ce moment : réessayez dans un instant."
+        return None
+
     async def join_guild_voice(self, guild_id: int, channel: discord.VoiceChannel) -> discord.VoiceClient:
         existing = self.voice_clients_map.get(guild_id)
         if existing is not None and existing.is_connected():
             await existing.move_to(channel)
             return existing
+        if MAX_CONCURRENT_VOICE > 0 and self.active_voice_count() >= MAX_CONCURRENT_VOICE:
+            raise CapacityError(f"Ce serveur WaseBoard est saturé ({MAX_CONCURRENT_VOICE} salons vocaux actifs en même "
+                                "temps) : réessayez dans quelques minutes.")
 
         vc = await channel.connect()
         self.voice_clients_map[guild_id] = vc
@@ -1131,7 +1398,8 @@ class WaseBoardServer(commands.Bot):
             return [{"user_id": uid, "username": info["username"], "avatar_url": info["avatar_url"]} for uid, info in alive.items()]
 
     async def _start_http_server(self) -> None:
-        app = web.Application(client_max_size=64 * 1024 * 1024)  # 64 Mo max par upload
+        app = web.Application(client_max_size=64 * 1024 * 1024,  # 64 Mo max par upload
+                              middlewares=[rate_limit_middleware] if RATE_LIMITER.limit > 0 else [])
         app.router.add_get("/sounds", self._handle_list_sounds)
         app.router.add_get("/sounds/{id}/file", self._handle_get_file)
         app.router.add_post("/sounds", self._handle_upload_sound)
@@ -1287,6 +1555,15 @@ class WaseBoardServer(commands.Bot):
             max_file_mb = settings["max_file_mb"]
             if max_file_mb > 0 and len(file_bytes) > max_file_mb * 1024 * 1024:
                 return web.json_response({"error": f"Fichier trop volumineux (maximum {max_file_mb} Mo sur ce serveur)."}, status=413)
+
+            max_total_mb = settings["max_total_mb"]
+            if max_total_mb > 0:
+                _, used = await asyncio.to_thread(guild_used_bytes, raw_guild_id)
+                if used + len(file_bytes) > max_total_mb * 1024 * 1024:
+                    return web.json_response({
+                        "error": f"Espace insuffisant sur ce serveur : {used / 1048576:.0f} Mo utilisés sur {max_total_mb} Mo, "
+                                 f"et ce fichier fait {len(file_bytes) / 1048576:.1f} Mo."
+                    }, status=413)
 
             sound_id = uuid.uuid4().hex
             destination = SOUNDS_DIR / f"{sound_id}{extension}"
@@ -1686,7 +1963,13 @@ class WaseBoardServer(commands.Bot):
             if not r.is_default() and not r.managed
         ]
         blocked = [{"user_id": uid, "username": self._member_display_name(guild, uid)} for uid in settings["blocked_uploaders"]]
-        return {"settings": settings, "roles": roles, "blocked": blocked}
+        sound_count, used = guild_used_bytes(guild.id)
+        return {
+            "settings": settings, "roles": roles, "blocked": blocked,
+            # Plafonds imposés par l'hébergeur (déjà appliqués aux valeurs de "settings") et consommation actuelle.
+            "ceilings": dict(GUILD_LIMIT_CEILINGS),
+            "usage": {"sounds": sound_count, "total_mb": round(used / 1048576, 1)},
+        }
 
     async def _handle_admin_get_settings(self, request: web.Request) -> web.Response:
         session, guild, err = await self._admin_context(request)
@@ -1710,8 +1993,9 @@ class WaseBoardServer(commands.Bot):
         def is_count(value, maximum: int) -> bool:
             return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= maximum
 
-        limits = {"max_sounds": 100000, "max_file_mb": 1024, "max_duration_s": 3600, "play_rate_per_min": 600}
-        settings = get_guild_settings(guild.id)
+        limits = {"max_sounds": 100000, "max_file_mb": 1024, "max_duration_s": 3600, "max_total_mb": 1048576,
+                  "play_rate_per_min": 600}
+        settings = get_guild_settings(guild.id, clamp=False)  # valeurs brutes : les plafonds ne sont jamais écrits sur disque
         before = dict(settings)
 
         if "admin_role_id" in data:
@@ -1732,6 +2016,11 @@ class WaseBoardServer(commands.Bot):
             if key in data:
                 if not is_count(data[key], maximum):
                     return web.json_response({"error": f"'{key}' doit être un entier entre 0 et {maximum}"}, status=400)
+                ceiling = GUILD_LIMIT_CEILINGS.get(key, 0)
+                if ceiling > 0 and (data[key] == 0 or data[key] > ceiling):
+                    return web.json_response({
+                        "error": f"'{key}' est limité à {ceiling} par l'hébergeur de ce serveur WaseBoard "
+                                 "(« illimité » n'est pas permis)."}, status=400)
                 settings[key] = data[key]
 
         save_guild_settings(guild.id, settings)
@@ -1921,6 +2210,11 @@ class WaseBoardServer(commands.Bot):
         if not file_path.exists():
             return web.json_response({"error": "fichier manquant sur le serveur"}, status=404)
 
+        # Plafonds de ressources de l'hébergeur : vérifiés AVANT l'anti-spam (un refus ne doit pas compter dans le quota).
+        capacity_error = self._play_capacity_error(sound_id, mixer)
+        if capacity_error is not None:
+            return web.json_response({"error": capacity_error, "retry_after": 2}, status=429, headers={"Retry-After": "2"})
+
         # Anti-spam réglé par l'admin de la guilde ciblée (où le son sera réellement joué) ;
         # les admins en sont exemptés. Vérifié en dernier : une requête refusée plus haut ne compte pas.
         retry_after = self._check_play_rate(guild_id, str(user_id))
@@ -2030,7 +2324,10 @@ class WaseBoardServer(commands.Bot):
             }, status=404)
 
         guild_id, channel = found
-        await self.join_guild_voice(guild_id, channel)
+        try:
+            await self.join_guild_voice(guild_id, channel)
+        except CapacityError as ex:
+            return web.json_response({"error": str(ex)}, status=503, headers={"Retry-After": "60"})
 
         return web.json_response({
             "status": "ok",
@@ -2050,7 +2347,11 @@ async def join(interaction: discord.Interaction) -> None:
         return
 
     channel = member.voice.channel
-    await bot.join_guild_voice(interaction.guild_id, channel)
+    try:
+        await bot.join_guild_voice(interaction.guild_id, channel)
+    except CapacityError as ex:
+        await interaction.response.send_message(f"⚠️ {ex}", ephemeral=True)
+        return
 
     await interaction.response.send_message(
         f"Connecté à **{channel.name}**. Prêt à jouer les sons envoyés par WaseBoard.",
@@ -2095,12 +2396,35 @@ async def diagnostic(interaction: discord.Interaction) -> None:
     try:
         checks, _ = await diagnostics.run_checks(CONFIG, DATA_DIR, bot.http_session)
         checks += diagnostics.check_guild(interaction.guild, member)
-        checks.append(diagnostics.Check("info", "Serveurs connectés", f"{len(bot.guilds)} serveur(s) Discord sur cette instance"))
+        if MAX_GUILDS > 0 and len(bot.guilds) >= MAX_GUILDS:
+            checks.append(diagnostics.Check("warn", "Capacité de l'instance",
+                                            f"{len(bot.guilds)} serveurs sur {MAX_GUILDS} autorisés : les nouveaux serveurs sont refusés."))
+        else:
+            checks.append(diagnostics.Check("info", "Serveurs connectés", f"{len(bot.guilds)} serveur(s) Discord sur cette instance"
+                                            + (f" (maximum {MAX_GUILDS})" if MAX_GUILDS > 0 else "")))
         text = diagnostics.render(checks)
     except Exception:
         log.exception("Échec de /diagnostic")
         text = "❌ Le diagnostic a échoué (voir les journaux du serveur)."
     await interaction.followup.send(text, ephemeral=True)
+
+
+@bot.tree.command(name="instance",
+                   description="Santé et capacité de cette instance WaseBoard (propriétaire de l'application Discord)")
+@app_commands.default_permissions(administrator=True)
+async def instance_command(interaction: discord.Interaction) -> None:
+    if not await bot.is_owner(interaction.user):
+        await interaction.response.send_message(
+            "Cette commande est réservée à la personne qui héberge ce serveur WaseBoard "
+            "(propriétaire de l'application Discord).", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True, thinking=True)
+    try:
+        text = render_instance_stats(await bot.instance_stats())
+    except Exception:
+        log.exception("Échec de /instance")
+        text = "❌ Impossible de calculer les statistiques (voir les journaux du serveur)."
+    await interaction.followup.send(text[:1990], ephemeral=True)
 
 
 @bot.event

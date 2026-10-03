@@ -211,6 +211,14 @@
                             <TextBlock Text="Durée maximum d'un son (secondes)" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
                             <TextBox x:Name="MaxDurationBox" Grid.Column="1" Height="28"/>
                         </Grid>
+                        <Grid x:Name="MaxTotalRow" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Espace disque maximum de tous les sons (Mo)" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+                            <TextBox x:Name="MaxTotalMbBox" Grid.Column="1" Height="28"/>
+                        </Grid>
                         <Grid Margin="0,0,0,4">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -220,7 +228,11 @@
                             <TextBox x:Name="PlayRateBox" Grid.Column="1" Height="28"/>
                         </Grid>
                         <TextBlock Text="Les administrateurs ne sont pas concernés par l'anti-spam. La limite de durée nécessite ffprobe sur le serveur."
-                                   FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16"/>
+                                   FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="QuotaUsageText" FontSize="11" Opacity="0.85" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"
+                                   Visibility="Collapsed"/>
+                        <TextBlock x:Name="CeilingsText" FontSize="11" Opacity="0.85" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16"
+                                   Visibility="Collapsed"/>
 
                         <Button Content="Enregistrer les réglages" Height="34" HorizontalAlignment="Left" Padding="16,0" Margin="0,0,0,22"
                                 Click="SaveSettings_Click" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>

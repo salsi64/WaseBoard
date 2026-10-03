@@ -316,10 +316,111 @@ upload réservé aux admins, quotas de nombre/taille/durée, anti-spam à la lec
 bloqués), statistiques d'usage, journal d'actions, lien d'invitation. La limite de durée
 nécessite `ffprobe` (fourni avec ffmpeg) ; s'il manque, elle est simplement ignorée.
 
-**Fichiers de données créés à côté de `server.py`** (à inclure dans vos sauvegardes avec
+**Fichiers de données créés à côté de `server.py` (ou dans `WASEBOARD_DATA_DIR`)** (à inclure dans vos sauvegardes avec
 `sounds_data/` et `shared_categories.json`) : `guild_settings.json` (réglages par serveur),
 `audit.jsonl` (journal d'actions), `stats.jsonl` (lectures), `sounds_data/trash/` +
 `sounds_data/trash.json` (corbeille).
+
+## Capacité et exploitation (pour qui héberge)
+
+Tout ce qui suit est **facultatif et désactivé par défaut** : sans rien configurer, le serveur se comporte comme
+avant. À activer quand plusieurs serveurs Discord partagent votre machine. Chaque réglage existe dans `config.json`
+et sous forme de variable d'environnement (`WASEBOARD_` + le nom en majuscules, ex : `WASEBOARD_MAX_GUILDS`).
+
+### Plafonds de ressources de l'instance (0 = désactivé)
+
+| Réglage | Effet |
+|---|---|
+| `max_guilds` | nombre de serveurs Discord où le bot reste présent. Au-delà, le bot **quitte** le nouveau serveur après avoir prévenu son propriétaire par message privé. Les serveurs déjà présents ne sont jamais touchés. |
+| `max_concurrent_voice` | salons vocaux occupés en même temps. Au-delà, `/join` et le bouton « Rejoindre mon vocal » répondent « serveur saturé, réessayez dans quelques minutes ». |
+| `max_sources_per_guild` | sons **différents** joués en même temps sur un même serveur (rejouer un son déjà en cours le remplace : jamais refusé). |
+| `max_ffmpeg_processes` | sons joués en même temps, tous serveurs confondus (un processus ffmpeg chacun). |
+| `http_rate_limit_per_min` | requêtes par minute et par adresse IP sur les seules routes publiques ou coûteuses : `/connect/…`, `/oauth/…` (compteur commun) et l'envoi de sons. Les routes utilisées en continu par l'appli (`/activity`, `/status`, `/play`…) ne sont **jamais** freinées. Derrière nginx/Caddy, l'adresse du client est lue dans `X-Forwarded-For` (dernière entrée, celle vue par votre proxy). |
+
+Un refus de lecture répond `429` avec un message lisible (« Trop de sons en même temps… ») et **ne compte pas** dans
+l'anti-spam du membre.
+
+### Réglages imposés aux serveurs Discord
+
+Chaque serveur règle ses limites dans le panel d'administration (nombre de sons, taille d'un fichier, durée, anti-spam,
+et **espace disque total** `max_total_mb`). Vous pouvez, en tant qu'hébergeur, imposer :
+
+```json
+{
+  "default_guild_limits":  { "max_sounds": 300, "max_file_mb": 20, "max_total_mb": 500 },
+  "guild_limit_ceilings":  { "max_file_mb": 50, "max_total_mb": 2000 }
+}
+```
+
+- `default_guild_limits` : valeurs de départ des serveurs qui **n'ont encore rien enregistré** (leurs admins peuvent les
+  modifier). Un serveur qui a déjà enregistré ses réglages n'est jamais modifié rétroactivement. Pour que le vôtre
+  reste illimité, enregistrez une fois ses réglages dans le panel d'administration.
+- `guild_limit_ceilings` : plafonds que les admins de serveurs **ne peuvent pas dépasser** (« 0 = illimité » n'est alors
+  plus permis pour ce réglage ; le panel affiche la limite imposée et refuse une valeur au-dessus). Rien n'est supprimé :
+  seuls les futurs ajouts sont refusés.
+- Réglages concernés : `max_sounds`, `max_file_mb`, `max_duration_s`, `max_total_mb`, `play_rate_per_min`.
+
+### Voir l'état de l'instance : `/instance`
+
+Commande Discord réservée à la personne propriétaire de l'application (réponse visible d'elle seule) : durée de
+fonctionnement, serveurs / salons vocaux / sons en lecture face aux plafonds, applications ouvertes, taille du catalogue,
+espace disque libre, serveurs les plus lourds et plafonds actifs. Pour une sonde externe (UptimeRobot, Kuma…), utilisez
+`GET /health` : `200` quand le bot est connecté à Discord, `503` sinon, sans aucun détail.
+
+### Quelle capacité ? (mesures)
+
+Mesure sans Discord, sur la machine de test (6 cœurs, 11 Go, partagée avec d'autres services) : de vrais ffmpeg, le vrai
+mixeur et l'encodage Opus, une trame toutes les 20 ms par salon, retard de chaque trame relevé.
+
+| Salons × sons simultanés | Processus ffmpeg | CPU | Mémoire | Trames en retard (> 40 ms) |
+|---|---|---|---|---|
+| 8 × 3 | 24 | 0,8 cœur | ≈ 330 Mo | 0 % |
+| 16 × 3 | 48 | 1,5 cœur | ≈ 590 Mo | 0 % |
+| 24 × 3 | 72 | 2,2 cœurs | ≈ 840 Mo | 0 % |
+| 40 × 3 | 120 | 2,6 cœurs | ≈ 1,4 Go | 0 % |
+
+Soit environ **0,02 à 0,03 cœur et 10 Mo par son joué simultanément**. En usage réel les sons sont courts et rarement
+simultanés : la charge moyenne est très inférieure. Points de départ prudents pour cette machine, à ajuster avec
+`/instance` : `max_concurrent_voice` 40, `max_ffmpeg_processes` 100, `max_sources_per_guild` 8, `max_guilds` 100,
+`http_rate_limit_per_min` 60. Sur une autre machine, adaptez-les (le CPU décide : comptez ~0,03 cœur par son simultané,
+en laissant la moitié des cœurs libre).
+
+### Sauvegarde et restauration
+
+`deploy/backup.sh` archive le catalogue, les sons (corbeille comprise), les partages, les réglages des serveurs, le
+journal d'actions et les statistiques dans `~/waseboard-backups/waseboard-data-AAAAMMJJ-HHMMSS.tgz` (droits 600), vérifie que
+l'archive se relit, puis supprime celles de plus de 7 jours. `config.json` et `oauth_sessions.json` (secrets) n'y sont
+**pas** inclus, sauf avec `-s`. Sans danger pendant que le serveur tourne.
+
+```bash
+./deploy/backup.sh                       # une sauvegarde maintenant
+./deploy/backup.sh -d ~/waseboard-server -o /mnt/disque/sauvegardes -k 14   # dossiers et durée au choix
+```
+
+Sauvegarde quotidienne automatique (systemd) : copiez `deploy/waseboard-backup.service` et `deploy/waseboard-backup.timer`
+dans `/etc/systemd/system/`, remplacez `VOTRE_USER`, puis `sudo systemctl daemon-reload && sudo systemctl enable --now waseboard-backup.timer`
+(`systemctl list-timers` pour vérifier, `journalctl -u waseboard-backup` pour le résultat).
+
+**Restaurer** (serveur arrêté ; l'existant est mis de côté, pas écrasé) :
+
+```bash
+sudo systemctl stop waseboard
+cd ~/waseboard-server            # le dossier de données
+mkdir -p ~/avant-restauration && mv sounds_data shared_categories.json guild_settings.json audit.jsonl stats.jsonl ~/avant-restauration/ 2>/dev/null
+tar xzf ~/waseboard-backups/waseboard-data-AAAAMMJJ-HHMMSS.tgz
+sudo systemctl start waseboard
+```
+
+Avec Docker : la sauvegarde et la restauration du volume sont décrites plus haut (« Données et sauvegarde ») ;
+restaurer = `docker compose stop waseboard`, puis `tar xzf` de l'archive dans le volume avec la même commande
+`docker run … alpine`, puis `docker compose start waseboard`. Pour l'automatiser, une ligne de `crontab` suffit.
+
+### Service systemd durci
+
+`deploy/waseboard.service` remplace le service de l'étape 5 : le serveur ne peut écrire que dans son propre dossier
+(`ProtectSystem=strict`, `ProtectHome=read-only`, `NoNewPrivileges`, `/tmp` privé), il est arrêté proprement (les salons
+vocaux sont quittés) et borné en mémoire (`MemoryMax=2G`) et en processus (`TasksMax=512`) — à ajuster à votre machine.
+Remplacez `VOTRE_USER` et les chemins, puis `sudo systemctl daemon-reload && sudo systemctl restart waseboard`.
 
 ## Sécurité
 
@@ -328,8 +429,8 @@ nécessite `ffprobe` (fourni avec ffmpeg) ; s'il manque, elle est simplement ign
   `shared_secret`. Ce dernier protège désormais surtout les quelques routes utilisables avant
   toute connexion (`/status`, `/activity`, `/oauth/client-id`, `/oauth/exchange`), pour éviter
   qu'un inconnu sur internet puisse ne serait-ce que sonder le serveur ou saturer l'échange
-  OAuth2 — choisissez-le quand même long et aléatoire, aucune limitation de débit n'existe
-  en complément.
+  OAuth2 — choisissez-le quand même long et aléatoire. Aucune limitation de débit n'est active par
+  défaut : voir `http_rate_limit_per_min` dans « Capacité et exploitation ».
 - Le lien de connexion (`/configurer-invitation`) donne accès à ce `shared_secret` — qui
   voit le bouton Discord qui le distribue doit donc être contrôlé via les permissions du
   salon où vous le postez, pas seulement en gardant le secret pour vous.

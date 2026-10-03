@@ -333,9 +333,42 @@ namespace WaseBoard.Windows
             MaxFileMbBox.Text = info.Settings.MaxFileMb.ToString();
             MaxDurationBox.Text = info.Settings.MaxDurationSeconds.ToString();
             PlayRateBox.Text = info.Settings.PlayRatePerMinute.ToString();
+            MaxTotalMbBox.Text = info.Settings.MaxTotalMb.ToString();
+            ShowQuotaInfo(info);
 
             BlockedList.ItemsSource = info.Blocked;
             NoBlockedText.Visibility = info.Blocked.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private static readonly Dictionary<string, string> CeilingLabels = new()
+        {
+            ["max_sounds"] = "nombre de sons",
+            ["max_file_mb"] = "taille d'un fichier (Mo)",
+            ["max_duration_s"] = "durée d'un son (s)",
+            ["max_total_mb"] = "espace disque (Mo)",
+            ["play_rate_per_min"] = "anti-spam (sons/min)"
+        };
+
+        /// <summary>Espace consommé et plafonds imposés par l'hébergeur. Un serveur antérieur aux quotas d'espace ne renvoie
+        /// ni l'un ni l'autre : le champ « espace disque » est alors masqué (il n'aurait aucun effet).</summary>
+        private void ShowQuotaInfo(SoundLibraryService.AdminSettingsInfo info)
+        {
+            var hasQuotas = info.Usage is not null;
+            MaxTotalRow.Visibility = hasQuotas ? Visibility.Visible : Visibility.Collapsed;
+
+            QuotaUsageText.Visibility = hasQuotas ? Visibility.Visible : Visibility.Collapsed;
+            if (info.Usage is { } usage)
+                QuotaUsageText.Text = $"Actuellement : {usage.Sounds} son(s) pour {usage.TotalMb:0.#} Mo sur le disque du serveur.";
+
+            var ceilings = info.Ceilings?
+                .Where(c => c.Value > 0 && CeilingLabels.ContainsKey(c.Key))
+                .Select(c => $"{CeilingLabels[c.Key]} ≤ {c.Value}")
+                .ToList();
+            var hasCeilings = ceilings is { Count: > 0 };
+            CeilingsText.Visibility = hasCeilings ? Visibility.Visible : Visibility.Collapsed;
+            if (hasCeilings)
+                CeilingsText.Text = $"Limites imposées par l'hébergeur de ce serveur : {string.Join(" ; ", ceilings!)}. " +
+                                    "Pour ces réglages, « 0 = aucune limite » n'est pas permis.";
         }
 
         private static bool TryParseCount(string text, out int value) =>
@@ -346,7 +379,8 @@ namespace WaseBoard.Windows
             if (CurrentGuildId is not { } guildId) return;
 
             if (!TryParseCount(MaxSoundsBox.Text, out var maxSounds) || !TryParseCount(MaxFileMbBox.Text, out var maxFileMb)
-                || !TryParseCount(MaxDurationBox.Text, out var maxDuration) || !TryParseCount(PlayRateBox.Text, out var playRate))
+                || !TryParseCount(MaxDurationBox.Text, out var maxDuration) || !TryParseCount(PlayRateBox.Text, out var playRate)
+                || !TryParseCount(MaxTotalMbBox.Text, out var maxTotalMb))
             {
                 AlertDialog.Show(this, "Les limites doivent être des nombres entiers positifs (0 = aucune limite).", "Administration", AlertKind.Warning);
                 return;
@@ -360,6 +394,7 @@ namespace WaseBoard.Windows
                 MaxSounds = maxSounds,
                 MaxFileMb = maxFileMb,
                 MaxDurationSeconds = maxDuration,
+                MaxTotalMb = maxTotalMb,
                 PlayRatePerMinute = playRate
             };
 
@@ -513,6 +548,7 @@ namespace WaseBoard.Windows
             ["max_sounds"] = "nombre max de sons",
             ["max_file_mb"] = "taille max (Mo)",
             ["max_duration_s"] = "durée max (s)",
+            ["max_total_mb"] = "espace disque max (Mo)",
             ["play_rate_per_min"] = "anti-spam (sons/min)"
         };
 
