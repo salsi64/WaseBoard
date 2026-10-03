@@ -443,6 +443,12 @@ restaurer = `docker compose stop waseboard`, puis `tar xzf` de l'archive dans le
 vocaux sont quittés) et borné en mémoire (`MemoryMax=2G`) et en processus (`TasksMax=512`) — à ajuster à votre machine.
 Remplacez `VOTRE_USER` et les chemins, puis `sudo systemctl daemon-reload && sudo systemctl restart waseboard`.
 
+### Basculer une instance existante
+
+Pour passer une installation déjà en service (sans Docker) sur une version avec ces réglages de capacité :
+[`deploy/CUTOVER.md`](deploy/CUTOVER.md) — checklist dans l'ordre (sauvegarde, nouveau secret partagé,
+changement d'adresse publique, fermeture des anciens accès, sauvegardes automatiques).
+
 ## Sécurité
 
 - Depuis l'ajout de la connexion Discord (OAuth2), l'accès réel au catalogue/aux sons repose
