@@ -5,7 +5,7 @@
     <!-- Doit rester synchronisé avec MyAppVersion dans installer/setup.iss (source de vérité
          pour le numéro affiché par l'installeur ; celle-ci est lue à l'exécution pour le
          comparateur de mises à jour, UpdateCheckService). -->
-    <Version>3.0.0</Version>
+    <Version>3.0.1</Version>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
