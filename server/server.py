@@ -739,7 +739,7 @@ RATE_LIMITER = RateLimiter(HTTP_RATE_LIMIT_PER_MIN)
 
 def rate_limit_bucket(request: web.Request) -> Optional[str]:
     """Seules les routes que n'importe qui peut atteindre sans session valide, ou qui coûtent cher (upload), sont limitées :
-    le client sonde /activity toutes les 300 ms en usage normal, ces routes-là ne doivent jamais être freinées."""
+    le client sonde /activity toutes les 150 ms en usage normal, ces routes-là ne doivent jamais être freinées."""
     path = request.path
     if request.method == "GET" and path.startswith("/connect/"):
         return "connect"

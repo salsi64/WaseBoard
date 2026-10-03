@@ -186,11 +186,11 @@ namespace WaseBoard
             await RefreshSharedCategoriesAsync();
             await RefreshVoiceStatusAsync();
 
-            // Intervalle court (300ms, au lieu d'1s auparavant) : avec un sondage plus lent, un
-            // son de courte durée pouvait n'apparaître en highlight que sur un seul cycle (voire
-            // aucun), avec jusqu'à 1s de retard à l'affichage — d'où l'impression que le highlight
-            // se déclenchait tard et ne durait pas.
-            _activityTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            // Intervalle court (150ms, au lieu de 300ms auparavant) : l'allumage est désormais
+            // optimiste (voir PlayAndPollAsync), mais l'extinction dépend toujours de ce sondage —
+            // un intervalle plus long faisait persister le highlight visiblement après la fin réelle
+            // du son, surtout sur les clips courts.
+            _activityTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
             _activityTimer.Tick += async (_, _) => await PollActivityAsync();
             _activityTimer.Start();
 
@@ -1875,19 +1875,23 @@ namespace WaseBoard
         // ---------- Lecture audio ----------
 
         /// <summary>
-        /// Joue un son dans le vocal Discord et sonde l'activité immédiatement après (highlight
-        /// instantané sur son propre clic, sans attendre le cycle de sondage régulier).
+        /// Joue un son dans le vocal Discord. Le highlight s'allume localement dès le clic (sans
+        /// attendre la moindre réponse réseau) ; le sondage régulier (PollActivityAsync) prend
+        /// ensuite le relais pour refléter la réalité partagée (autres utilisateurs, extinction).
         /// </summary>
         private void Play(SoundItem item) => _ = PlayAndPollAsync(item);
 
         private async Task PlayAndPollAsync(SoundItem item)
         {
+            item.IsPlaying = true; // optimiste : corrigé par le prochain sondage si le serveur dit le contraire
             var ok = await _library.PlayOnServerAsync(item.Id, item.Volume);
             if (!ok)
             {
+                item.IsPlaying = false; // rien n'a réellement démarré, pas la peine d'attendre le sondage
                 ToastService.Show(
                     $"Impossible de jouer « {item.Name} »." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
                     ToastKind.Error);
+                return;
             }
             await PollActivityAsync();
         }
