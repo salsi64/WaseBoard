@@ -2436,6 +2436,29 @@ async def configurer_invitation(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("Bouton posté.", ephemeral=True)
 
 
+@bot.tree.command(name="inviter-bot",
+                   description="Poste un bouton pour ajouter ce bot WaseBoard à un autre serveur Discord")
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
+async def inviter_bot(interaction: discord.Interaction) -> None:
+    member = interaction.user
+    if not isinstance(member, discord.Member) or not member.guild_permissions.administrator:
+        # Défense en profondeur (comme /panneau et /diagnostic) : default_permissions cache déjà la
+        # commande aux non-admins, mais un admin de serveur peut rouvrir l'accès via les réglages
+        # d'intégration Discord — ce contrôle explicite ne dépend donc pas uniquement de Discord.
+        await interaction.response.send_message("Cette commande est réservée aux administrateurs du serveur.", ephemeral=True)
+        return
+    invite_url = diagnostics.build_invite_url(bot.oauth_client_id())
+    invite_view = discord.ui.View()
+    invite_view.add_item(discord.ui.Button(label="➕ Ajouter WaseBoard à mon serveur", style=discord.ButtonStyle.link, url=invite_url))
+    await interaction.channel.send(
+        "Pour utiliser WaseBoard sur un **autre** serveur Discord (le vôtre ou celui d'un ami) : cliquez ce "
+        "bouton — il faut avoir le droit « Gérer le serveur » sur ce nouveau serveur pour l'ajouter.",
+        view=invite_view,
+    )
+    await interaction.response.send_message("Bouton posté.", ephemeral=True)
+
+
 @bot.tree.command(name="panneau",
                    description="Poste un panneau de boutons (rejoindre le vocal, stop, aide) utilisable par tous les membres")
 @app_commands.guild_only()

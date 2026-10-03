@@ -313,6 +313,12 @@ sans en-tête d'authentification) mais ne révèle rien sans code valide. Qui vo
 se règle en restreignant l'accès au salon via les permissions Discord habituelles — rien à
 configurer côté WaseBoard.
 
+Pour ajouter ce même bot à un **autre** serveur Discord (le vôtre ou celui d'un ami), tapez
+`/inviter-bot` : ça poste un bouton-lien « ➕ Ajouter WaseBoard à mon serveur » qui ouvre la page
+d'invitation Discord classique (droit « Gérer le serveur » requis sur le serveur de destination,
+vérifié par Discord lui-même). Chaque nouveau serveur démarre avec un catalogue de sons isolé et
+les éventuels plafonds par défaut de l'étape « Réglages imposés aux serveurs Discord » ci-dessous.
+
 ## 8. Utilisation
 
 1. Chaque utilisateur installe WaseBoard et clique le lien de connexion reçu via le bouton

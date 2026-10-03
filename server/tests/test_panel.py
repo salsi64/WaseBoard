@@ -167,6 +167,34 @@ async def main():
     check("masquée aux non-admins dans l'interface Discord ET réservée aux serveurs (défense en profondeur, comme /diagnostic)",
           S.panneau.default_permissions is not None and S.panneau.default_permissions.administrator and S.panneau.guild_only)
 
+    print("\n--- commande /inviter-bot ---")
+    inter = FakeInteraction(FakeDiscordMember(False))
+    await S.inviter_bot.callback(inter)
+    check("non-admin : refus poli, éphémère, rien posté dans le salon",
+          not inter.channel_sent and inter.response.sent and inter.response.sent[0][1].get("ephemeral") is True
+          and "administrateurs" in inter.response.sent[0][0], (inter.channel_sent, inter.response.sent))
+
+    real_client_id = S.OAUTH2_CLIENT_ID
+    S.OAUTH2_CLIENT_ID = "999999"
+    try:
+        inter = FakeInteraction(FakeDiscordMember(True))
+        await S.inviter_bot.callback(inter)
+        check("admin : poste un message dans le salon avec un bouton-lien, puis confirme en éphémère",
+              len(inter.channel_sent) == 1 and inter.response.sent[0][1].get("ephemeral") is True
+              and "posté" in inter.response.sent[0][0].lower(), (inter.channel_sent, inter.response.sent))
+        link_view = inter.channel_sent[0][1].get("view")
+        buttons = list(link_view.children) if link_view else []
+        check("un seul bouton, de style lien", len(buttons) == 1 and buttons[0].style.name == "link", buttons)
+        url = buttons[0].url if buttons else ""
+        check("l'URL pointe vers le bon client_id, avec les permissions/scope attendus (diagnostics.build_invite_url)",
+              url == S.diagnostics.build_invite_url("999999"), url)
+    finally:
+        S.OAUTH2_CLIENT_ID = real_client_id
+
+    check("masquée aux non-admins dans l'interface Discord ET réservée aux serveurs (défense en profondeur, comme /panneau)",
+          S.inviter_bot.default_permissions is not None and S.inviter_bot.default_permissions.administrator
+          and S.inviter_bot.guild_only)
+
     print("\n--- vue persistante ---")
     check("timeout=None (persistante : survit aux redémarrages du bot)", S.MemberPanelView().timeout is None)
     custom_ids = {b.custom_id for b in S.MemberPanelView().children}
