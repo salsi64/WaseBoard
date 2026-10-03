@@ -1893,7 +1893,30 @@ namespace WaseBoard
                     ToastKind.Error);
                 return;
             }
+
+            // À cet instant, le son est déjà en train de jouer côté serveur (mixer.add() s'exécute
+            // avant la réponse HTTP, voir _handle_play) : plutôt que d'attendre qu'un sondage
+            // constate la fin réelle (jusqu'à 150ms de retard), on éteint localement dès la durée
+            // effective écoulée. Le sondage régulier reste la source de vérité si quelqu'un
+            // d'autre joue encore ce même son (il rallume dans ce cas).
+            var duration = GetEffectivePlaybackDuration(item);
+            if (duration > TimeSpan.Zero) _ = ScheduleLocalStopAsync(item, duration);
+
             await PollActivityAsync();
+        }
+
+        private static TimeSpan GetEffectivePlaybackDuration(SoundItem item)
+        {
+            var startMs = item.TrimStartMs ?? 0;
+            var endMs = item.TrimEndMs ?? item.DurationMs;
+            var ms = endMs - startMs;
+            return ms > 0 ? TimeSpan.FromMilliseconds(ms) : TimeSpan.Zero;
+        }
+
+        private static async Task ScheduleLocalStopAsync(SoundItem item, TimeSpan duration)
+        {
+            await Task.Delay(duration);
+            if (item.IsPlaying) item.IsPlaying = false;
         }
 
         /// <summary>Aperçu : lecture locale uniquement (icône mégaphone), jamais envoyée au serveur/bot Discord.</summary>

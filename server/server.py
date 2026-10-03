@@ -1891,7 +1891,7 @@ class WaseBoardServer(commands.Bot):
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
 
-        # Sondé toutes les 300ms, y compris AVANT toute connexion Discord : reste utilisable
+        # Sondé toutes les 150ms, y compris AVANT toute connexion Discord : reste utilisable
         # sans session (comportement inchangé dans ce cas — aucune présence enregistrée).
         session, err = await self._require_session(request, required=False)
         if err is not None:
