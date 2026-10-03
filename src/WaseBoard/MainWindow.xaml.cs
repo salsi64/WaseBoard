@@ -1902,7 +1902,13 @@ namespace WaseBoard
             var duration = GetEffectivePlaybackDuration(item);
             if (duration > TimeSpan.Zero) _ = ScheduleLocalStopAsync(item, duration);
 
-            await PollActivityAsync();
+            // PAS de sondage immédiat ici : côté serveur, l'enregistrement de l'activité (avatar,
+            // qui joue quoi) se fait dans une tâche asynchrone séparée, lancée APRÈS la réponse à
+            // /play (voir _record_play_activity) pour ne jamais retarder le son lui-même. Sonder
+            // tout de suite la voit donc souvent encore vide et écraserait le IsPlaying optimiste
+            // ci-dessus avec false, avant que le prochain tick du minuteur régulier (150ms) ne le
+            // remette à true — un allumage/extinction/rallumage bien visible. Le minuteur régulier
+            // se chargera de refléter l'activité réelle (avatar compris) sans cette course.
         }
 
         private static TimeSpan GetEffectivePlaybackDuration(SoundItem item)
