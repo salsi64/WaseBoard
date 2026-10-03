@@ -21,8 +21,21 @@ namespace WaseBoard
         // (l'avatar de qui joue remplace la pastille d'icône au lieu de s'ajouter), donc rien ne décale
         // leurs voisines. Les cartes classiques ont déjà une largeur fixe.
 
+        // Mémorise la largeur disponible et la taille souhaitée de chaque enfant au dernier passage :
+        // si rien de tout ça n'a changé, aucun enfant ne peut avoir bougé (le wrap d'un WrapPanel ne
+        // dépend que de ça), donc inutile de capturer/comparer les positions réelles (TransformToAncestor,
+        // deux fois par enfant) juste pour ne rien trouver. Sans ce garde-fou, un simple changement de
+        // visibilité dans UN bouton (le halo du glow, déclenché à chaque clic et par le sondage régulier)
+        // invalide l'arrangement de TOUT le panneau, et ce coût grossit avec le nombre de sons du
+        // catalogue — perceptible comme une latence au clic sur un gros catalogue.
+        private double _lastAvailableWidth = double.NaN;
+        private Dictionary<UIElement, Size> _lastDesiredSizes = new();
+
         protected override Size ArrangeOverride(Size finalSize)
         {
+            if (!LayoutMayHaveChanged(finalSize.Width))
+                return base.ArrangeOverride(finalSize);
+
             // Position de chaque enfant AVANT ce passage d'arrangement (donc sa position actuelle,
             // héritée du passage précédent).
             var previousPositions = new Dictionary<UIElement, Rect>();
@@ -52,6 +65,29 @@ namespace WaseBoard
             }
 
             return result;
+        }
+
+        /// <summary>Met à jour le relevé (largeur + taille souhaitée de chaque enfant) et renvoie
+        /// true si quelque chose a changé depuis le dernier passage — seul cas où un enfant peut
+        /// avoir changé de position dans un WrapPanel. Reconstruit le relevé à chaque appel (plutôt
+        /// que de le modifier en place) : un enfant retiré du catalogue disparaît ainsi naturellement,
+        /// sans quoi son entrée resterait indéfiniment et faussait la comparaison de nombre d'enfants.</summary>
+        private bool LayoutMayHaveChanged(double availableWidth)
+        {
+            var changed = Math.Abs(availableWidth - _lastAvailableWidth) > 0.5
+                          || InternalChildren.Count != _lastDesiredSizes.Count;
+            _lastAvailableWidth = availableWidth;
+
+            var current = new Dictionary<UIElement, Size>(InternalChildren.Count);
+            foreach (UIElement child in InternalChildren)
+            {
+                current[child] = child.DesiredSize;
+                if (!changed && (!_lastDesiredSizes.TryGetValue(child, out var previous) || previous != child.DesiredSize))
+                    changed = true;
+            }
+            _lastDesiredSizes = current;
+
+            return changed;
         }
 
         private static void AnimateChildMove(UIElement child, double fromX, double fromY)
