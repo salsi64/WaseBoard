@@ -7,6 +7,8 @@ les suppressions de bruit type Krisp).
 **[⬇ Télécharger le client Windows](https://github.com/salsi64/WaseBoard/releases/latest)** ·
 **[💬 Rejoindre le Discord WaseBoard](https://discord.gg/HAGTNGFyQd)**
 
+![Capture d'écran de WaseBoard : boutons de son en pilules colorées, plusieurs serveurs Discord dans la barre latérale](docs/img/hero.png)
+
 ## Comment ça marche
 
 WaseBoard est **auto-hébergé** : il n'y a pas de serveur central, chaque groupe fait tourner

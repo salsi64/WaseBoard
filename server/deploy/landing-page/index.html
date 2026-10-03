@@ -108,13 +108,21 @@
     </header>
 
     <div class="actions">
-      <a class="button primary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger le client Windows</a>
+      <a class="button primary" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter WaseBoard à mon serveur</a>
+      <a class="button secondary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger le client Windows</a>
       <a class="button secondary" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord WaseBoard</a>
     </div>
 
     <div class="card">
       <h2>Comment ça marche</h2>
       <p>Cette page est le point d'accès d'une instance de <strong>WaseBoard</strong> : une application Windows (le client, que vous installez) qui se connecte à un serveur hébergeant le catalogue de sons partagé et un bot Discord. Quand vous cliquez un son, il joue en même temps sur vos propres enceintes et par le bot dans votre salon vocal.</p>
+    </div>
+
+    <div class="card">
+      <h2>Utiliser cette instance sur votre serveur</h2>
+      <p>Pas besoin d'héberger quoi que ce soit : en cliquant « ➕ Ajouter WaseBoard à mon serveur » ci-dessus, le bot rejoint votre Discord avec un catalogue de sons propre à votre serveur, isolé des autres.</p>
+      <p>Ensuite, un admin tape <code>/configurer-invitation</code> dans Discord pour générer les liens de connexion des membres (ou poste un panneau de boutons avec <code>/panneau</code>). Guide complet : <a class="link" href="https://github.com/salsi64/WaseBoard/blob/master/docs/FAQ-utilisateurs.md">docs/FAQ-utilisateurs.md</a>.</p>
+      <p style="opacity:.8;">Instance gratuite, à usage raisonnable : quelques plafonds s'appliquent (nombre de sons, taille des fichiers) pour que ça reste disponible pour tous. Besoin de plus ? Hébergez <a class="link" href="#self-host">votre propre instance</a>, sans limite.</p>
     </div>
 
     <div class="card">
@@ -127,7 +135,7 @@
       </ol>
     </div>
 
-    <div class="card">
+    <div class="card" id="self-host">
       <h2>Héberger votre propre serveur</h2>
       <p>WaseBoard est open-source et fait pour être auto-hébergé : chaque groupe héberge sa propre instance, il n'y a pas de serveur central fourni avec le projet.</p>
       <p>Le plus simple : <code>git clone</code> le dépôt, puis lancer l'assistant Docker (<code>./setup.sh</code> ou <code>.\setup.ps1</code>) — il vous guide pour créer l'application bot Discord, vérifie la configuration et démarre tout, en une quinzaine de minutes.</p>
