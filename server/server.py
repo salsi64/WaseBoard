@@ -914,13 +914,16 @@ class InviteView(discord.ui.View):
         page_url = f"{PUBLIC_URL.rstrip('/')}/connect/{create_invite_code()}"
         link_view = discord.ui.View()
         link_view.add_item(discord.ui.Button(label="🚀 Ouvrir WaseBoard", style=discord.ButtonStyle.link, url=page_url))
+        # Discord affiche toujours les boutons APRÈS tout le texte d'un message : pour que le
+        # bouton apparaisse visuellement avant le lien de téléchargement (et pas l'inverse), le
+        # lien de téléchargement part dans un second message (followup) plutôt que dans celui-ci.
         await interaction.response.send_message(
             "Cliquez sur le bouton : WaseBoard s'ouvre et se connecte tout seul à ce serveur "
-            f"(le lien expire dans {INVITE_CODE_TTL_SECONDS // 60} minutes).\n"
-            f"Pas encore installé ? Téléchargez-le : <{DOWNLOAD_URL}>",
+            f"(le lien expire dans {INVITE_CODE_TTL_SECONDS // 60} minutes).",
             view=link_view,
             ephemeral=True,
         )
+        await interaction.followup.send(f"Pas encore installé ? Téléchargez-le : <{DOWNLOAD_URL}>", ephemeral=True)
 
 
 def format_bytes(number: float) -> str:
