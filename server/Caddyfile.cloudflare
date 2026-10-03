@@ -1,0 +1,14 @@
+# Reverse proxy HTTPS, certificat Let's Encrypt validé par DNS (Cloudflare) : voir Dockerfile.caddy-cloudflare.
+# Le jeton API (droit « DNS : Modifier » sur la zone) vient de CLOUDFLARE_API_TOKEN (fichier .env).
+{$WASEBOARD_DOMAIN} {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+		# Résolveur public : une box qui filtre les noms publics pointant vers une adresse privée ne bloque pas la validation
+		resolvers 1.1.1.1
+	}
+	# même limite d'upload que le serveur
+	request_body {
+		max_size 64MB
+	}
+	reverse_proxy waseboard:5005
+}

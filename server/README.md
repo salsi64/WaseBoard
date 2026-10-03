@@ -23,8 +23,9 @@ via Docker Desktop). Chacun héberge sa propre instance — pas de serveur centr
 ## Installation rapide (Docker)
 
 Il vous faut : une machine allumée en permanence avec [Docker](https://docs.docker.com/engine/install/)
-(Docker Desktop sous Windows/macOS), et pour un accès depuis Internet un nom de domaine (un sous-domaine
-gratuit [DuckDNS](https://www.duckdns.org/) convient) dont les ports **80 et 443** sont redirigés vers cette machine.
+(Docker Desktop sous Windows/macOS), et pour un accès depuis Internet un nom de domaine : soit un sous-domaine gratuit
+[DuckDNS](https://www.duckdns.org/) dont les ports **80 et 443** sont redirigés vers cette machine, soit un domaine géré par
+**Cloudflare** (alors seul le port 443 est nécessaire, voir « Domaine chez Cloudflare » plus bas).
 
 1. **Créez l'application Discord** — [étape 1](#1-créer-lapplication-bot-discord) ci-dessous : jeton du bot,
    « Server Members Intent » activé, puis (étape 4) secret OAuth2 et redirection
@@ -44,10 +45,27 @@ gratuit [DuckDNS](https://www.duckdns.org/) convient) dont les ports **80 et 443
 
 Ce que l'assistant met en place : le serveur (image construite depuis ce dossier, utilisateur sans privilèges,
 redémarrage automatique), **Caddy** pour le HTTPS (certificat Let's Encrypt obtenu et renouvelé tout seul) et,
-si vous le souhaitez, un conteneur **DuckDNS** qui garde votre sous-domaine à jour. Trois modes : Internet avec
-HTTPS (défaut), réseau local sans HTTPS (test), ou votre propre reverse proxy (le serveur écoute alors sur
-`127.0.0.1:5005`). Tout tient dans `.env` (modèle commenté : `.env.example`) — vous pouvez aussi le remplir à
-la main et lancer `docker compose up -d`.
+si vous le souhaitez, un conteneur **DuckDNS** (ou **Cloudflare DDNS**) qui garde votre nom de domaine à jour.
+Quatre modes : Internet avec HTTPS (défaut), Internet avec HTTPS via un domaine Cloudflare, réseau local sans HTTPS
+(test), ou votre propre reverse proxy (le serveur écoute alors sur `127.0.0.1:5005`). Tout tient dans `.env` (modèle
+commenté : `.env.example`) — vous pouvez aussi le remplir à la main et lancer `docker compose up -d`.
+
+### Domaine chez Cloudflare (sans port 80)
+
+Si votre domaine est géré par Cloudflare, choisissez le mode 2 de l'assistant. Le certificat Let's Encrypt est alors
+prouvé par un enregistrement DNS créé via l'API Cloudflare : **aucun port 80 à ouvrir**, et la machine n'a même pas besoin
+d'être joignable au moment de l'émission. Il faut :
+
+1. **Un jeton API limité à votre domaine** : Cloudflare > Mon profil > Jetons API > Créer un jeton > modèle « Modifier le
+   DNS de la zone » ; ajoutez la permission *Zone > Zone > Lire* ; « Ressources de la zone » : *Inclure > Zone
+   spécifique* > votre domaine. Copiez le jeton (il n'est affiché qu'une fois) : l'assistant vous le demande, il est
+   stocké dans `.env` et n'est utilisé que pour créer les enregistrements DNS temporaires de la validation.
+2. **Un enregistrement DNS** pour le nom choisi (ex : `waseboard`) : type A vers l'adresse de la machine, « DNS uniquement »
+   (nuage gris). Ou laissez l'assistant activer **Cloudflare DDNS**, qui le crée et le met à jour avec votre IP publique.
+3. **Le port 443** (TCP) redirigé vers la machine. Pour cohabiter avec un serveur web qui occupe déjà le 443, choisissez
+   un autre port (`WASEBOARD_HTTPS_PORT`) : l'adresse donnée aux clients est alors `https://votre-domaine:NUMERO`.
+
+L'image Caddy de ce mode est construite sur place (compilation du module Cloudflare, quelques minutes la première fois).
 
 **Au quotidien**
 

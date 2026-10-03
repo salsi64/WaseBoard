@@ -6,3 +6,5 @@ server/docker-compose.yml text eol=lf
 server/.env.example text eol=lf
 server/.dockerignore text eol=lf
 server/deploy/* text eol=lf
+server/Dockerfile.* text eol=lf
+server/Caddyfile.* text eol=lf

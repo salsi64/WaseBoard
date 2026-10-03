@@ -5,6 +5,8 @@
 #   waseboard  le serveur (toujours)
 #   caddy      HTTPS automatique (Let's Encrypt) devant le serveur — profil « https »
 #   duckdns    garde un sous-domaine DuckDNS à jour — profil « duckdns » (facultatif)
+#   caddy-cloudflare  HTTPS automatique avec un domaine géré par Cloudflare (validation DNS : pas de port 80) — profil « cloudflare »
+#   cloudflare-ddns   garde l'enregistrement DNS Cloudflare à jour avec l'IP publique — profil « cloudflare-ddns » (facultatif)
 # Les profils actifs sont choisis par COMPOSE_PROFILES dans .env (écrit par l'assistant).
 name: waseboard
 
@@ -36,6 +38,41 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data       # certificats : à conserver
       - caddy-config:/config
+
+  caddy-cloudflare:
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy-cloudflare
+    image: waseboard-caddy-cloudflare:local
+    profiles: ["cloudflare"]
+    restart: unless-stopped
+    depends_on:
+      - waseboard
+    environment:
+      WASEBOARD_DOMAIN: ${WASEBOARD_DOMAIN:-}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+    ports:
+      # Seul le port HTTPS est nécessaire (la validation du certificat passe par l'API DNS). 443 par défaut ; un autre
+      # numéro (WASEBOARD_HTTPS_PORT) permet de cohabiter avec un serveur web existant : les clients utilisent alors
+      # https://votre-domaine:NUMERO.
+      - "${WASEBOARD_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile.cloudflare:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # certificats : à conserver
+      - caddy-config:/config
+
+  cloudflare-ddns:
+    image: favonia/cloudflare-ddns:latest
+    profiles: ["cloudflare-ddns"]
+    restart: unless-stopped
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      DOMAINS: ${WASEBOARD_DOMAIN:-}
+      PROXIED: "false"          # le trafic va directement à votre machine (pas via le proxy Cloudflare)
+      IP6_PROVIDER: none        # IPv4 seulement
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
 
   duckdns:
     image: lscr.io/linuxserver/duckdns:latest

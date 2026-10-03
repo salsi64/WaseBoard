@@ -15,13 +15,16 @@ param(
     [string]$BotToken = $env:WASEBOARD_BOT_TOKEN,
     [string]$OAuthSecret = $env:WASEBOARD_OAUTH2_CLIENT_SECRET,
     [string]$GuildId = $env:WASEBOARD_GUILD_ID,
-    [ValidateSet('', 'https', 'local', 'proxy')][string]$Mode = $env:WASEBOARD_MODE,
+    [ValidateSet('', 'https', 'cloudflare', 'local', 'proxy')][string]$Mode = $env:WASEBOARD_MODE,
     [string]$Domain = $env:WASEBOARD_DOMAIN,
     [string]$PublicUrl = $env:WASEBOARD_PUBLIC_URL,
     [string]$DuckDnsSubdomain = $env:DUCKDNS_SUBDOMAIN,
     [string]$DuckDnsToken = $env:DUCKDNS_TOKEN,
     [string]$SharedSecret = $env:WASEBOARD_SHARED_SECRET,
     [string]$Port = $env:WASEBOARD_PORT,
+    [string]$CloudflareToken = $env:CLOUDFLARE_API_TOKEN,
+    [string]$HttpsPort = $env:WASEBOARD_HTTPS_PORT,
+    [switch]$CloudflareDdns,
     [switch]$AssumeYes
 )
 
@@ -102,13 +105,16 @@ if ($writeEnv) {
     if (-not $Mode) {
         Say ''
         Say 'Comment les utilisateurs joindront-ils ce serveur ?'
-        Say '  1) Sur Internet, avec un nom de domaine et HTTPS automatique (recommande)'
-        Say '  2) Sur mon reseau local seulement (test, sans HTTPS)'
-        Say "  3) J'ai deja mon propre reverse proxy HTTPS"
-        switch (Ask 'Votre choix :' '1') { '2' { $Mode = 'local' } '3' { $Mode = 'proxy' } default { $Mode = 'https' } }
+        Say '  1) Sur Internet, avec un nom de domaine et HTTPS automatique (ports 80 et 443 ouverts)'
+        Say '  2) Sur Internet, HTTPS automatique avec un domaine gere par Cloudflare (aucun port 80 necessaire)'
+        Say '  3) Sur mon reseau local seulement (test, sans HTTPS)'
+        Say "  4) J'ai deja mon propre reverse proxy HTTPS"
+        switch (Ask 'Votre choix :' '1') { '2' { $Mode = 'cloudflare' } '3' { $Mode = 'local' } '4' { $Mode = 'proxy' } default { $Mode = 'https' } }
     }
 
     if (-not $Port) { $Port = '5005' }
+    if (-not $HttpsPort) { $HttpsPort = '443' }
+    $cfToken = ''
     $profiles = ''; $domainOut = ''; $bind = '127.0.0.1'; $publicUrlOut = ''; $duckSub = ''; $duckToken = ''
     switch ($Mode) {
         'https' {
@@ -127,6 +133,29 @@ if ($writeEnv) {
             if ($duckSub -and $duckToken) { $profiles = 'https,duckdns' }
             Say ''
             Say "Pensez a ouvrir les ports 80 et 443 (TCP) de votre box vers cette machine : Let's Encrypt en a besoin."
+        }
+        'cloudflare' {
+            if (-not $Domain) { $Domain = Ask 'Nom de domaine gere par Cloudflare (ex : waseboard.exemple.com) :' }
+            if (-not $Domain) { Fail 'Un nom de domaine est necessaire pour le HTTPS automatique.' }
+            $domainOut = ($Domain -replace '^https?://', '') -replace '/.*$', ''
+            $cfToken = $CloudflareToken
+            if (-not $cfToken) {
+                Say 'Il faut un jeton API Cloudflare limite a votre zone : Cloudflare > Mon profil > Jetons API > Creer un jeton >'
+                Say 'modele "Modifier le DNS de la zone" (droits "Zone : Lire" et "DNS : Modifier").'
+                $cfToken = AskSecret 'Jeton API Cloudflare (la saisie reste invisible)'
+            }
+            if (-not $cfToken) { Fail 'Le jeton API Cloudflare est obligatoire pour ce mode.' }
+            $publicUrlOut = "https://$domainOut"
+            if ($HttpsPort -ne '443') { $publicUrlOut = "${publicUrlOut}:$HttpsPort" }
+            $profiles = 'cloudflare'
+            $ddns = $CloudflareDdns.IsPresent -or ($env:WASEBOARD_CLOUDFLARE_DDNS -eq '1')
+            if (-not $CloudflareDdns.IsPresent -and -not $env:WASEBOARD_CLOUDFLARE_DDNS -and -not $AssumeYes) {
+                $ddns = YesNo "Garder l'enregistrement DNS $domainOut a jour avec l'IP publique de cette machine (utile si elle change) ?" $true
+            }
+            if ($ddns) { $profiles = 'cloudflare,cloudflare-ddns' }
+            Say ''
+            Say "Ouvrez le port $HttpsPort (TCP) de votre box vers cette machine ; le port 80 n'est pas necessaire."
+            if (-not $ddns) { Say "L'enregistrement DNS $domainOut doit pointer vers l'adresse de cette machine (creez-le chez Cloudflare)." }
         }
         'local' {
             $bind = '0.0.0.0'
@@ -165,7 +194,9 @@ if ($writeEnv) {
         "WASEBOARD_BIND=$bind",
         "WASEBOARD_PORT=$Port",
         "DUCKDNS_SUBDOMAIN=$duckSub",
-        "DUCKDNS_TOKEN=$duckToken"
+        "DUCKDNS_TOKEN=$duckToken",
+        "CLOUDFLARE_API_TOKEN=$cfToken",
+        "WASEBOARD_HTTPS_PORT=$HttpsPort"
     )
     # UTF-8 SANS BOM et fins de ligne LF : un BOM corromprait le nom de la premiere variable pour Docker Compose.
     [System.IO.File]::WriteAllText((Join-Path $PSScriptRoot '.env'), (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))

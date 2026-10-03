@@ -5,8 +5,9 @@
 #
 # Mode sans questions : fournissez les valeurs par variables d'environnement (mêmes noms que dans .env) —
 #   WASEBOARD_BOT_TOKEN, WASEBOARD_OAUTH2_CLIENT_SECRET, WASEBOARD_GUILD_ID (facultatif),
-#   WASEBOARD_MODE (https | local | proxy), WASEBOARD_DOMAIN (https), WASEBOARD_PUBLIC_URL (local | proxy),
-#   DUCKDNS_SUBDOMAIN + DUCKDNS_TOKEN (https, facultatif), WASEBOARD_PORT (port de la machine, 5005 par défaut),
+#   WASEBOARD_MODE (https | cloudflare | local | proxy), WASEBOARD_DOMAIN (https | cloudflare), WASEBOARD_PUBLIC_URL (local | proxy),
+#   DUCKDNS_SUBDOMAIN + DUCKDNS_TOKEN (https, facultatif), CLOUDFLARE_API_TOKEN + WASEBOARD_HTTPS_PORT +
+#   WASEBOARD_CLOUDFLARE_DDNS=1 (cloudflare), WASEBOARD_PORT (port de la machine, 5005 par défaut),
 #   WASEBOARD_ASSUME_YES=1.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -71,18 +72,20 @@ if [ "$write_env" = 1 ]; then
     if [ -z "$mode" ]; then
         say ""
         say "Comment les utilisateurs joindront-ils ce serveur ?"
-        say "  1) Sur Internet, avec un nom de domaine et HTTPS automatique (recommandé)"
-        say "  2) Sur mon réseau local seulement (test, sans HTTPS)"
-        say "  3) J'ai déjà mon propre reverse proxy HTTPS"
+        say "  1) Sur Internet, avec un nom de domaine et HTTPS automatique (ports 80 et 443 ouverts)"
+        say "  2) Sur Internet, HTTPS automatique avec un domaine géré par Cloudflare (aucun port 80 nécessaire)"
+        say "  3) Sur mon réseau local seulement (test, sans HTTPS)"
+        say "  4) J'ai déjà mon propre reverse proxy HTTPS"
         case "$(ask "Votre choix :" "1")" in
-            2) mode=local ;;
-            3) mode=proxy ;;
+            2) mode=cloudflare ;;
+            3) mode=local ;;
+            4) mode=proxy ;;
             *) mode=https ;;
         esac
     fi
 
     port="${WASEBOARD_PORT:-5005}"
-    profiles=""; domain=""; bind="127.0.0.1"; public_url=""; duck_sub=""; duck_token=""
+    profiles=""; domain=""; bind="127.0.0.1"; public_url=""; duck_sub=""; duck_token=""; cf_token=""; https_port="${WASEBOARD_HTTPS_PORT:-443}"
     case "$mode" in
         https)
             domain="${WASEBOARD_DOMAIN:-}"
@@ -102,6 +105,28 @@ if [ "$write_env" = 1 ]; then
             say ""
             say "Pensez à ouvrir les ports 80 et 443 (TCP) de votre box vers cette machine : Let's Encrypt en a besoin."
             ;;
+        cloudflare)
+            domain="${WASEBOARD_DOMAIN:-}"
+            [ -n "$domain" ] || domain="$(ask "Nom de domaine géré par Cloudflare (ex : waseboard.exemple.com) :")"
+            [ -n "$domain" ] || die "Un nom de domaine est nécessaire pour le HTTPS automatique."
+            domain="${domain#https://}"; domain="${domain%%/*}"
+            cf_token="${CLOUDFLARE_API_TOKEN:-}"
+            if [ -z "$cf_token" ]; then
+                say "Il faut un jeton API Cloudflare limité à votre zone : Cloudflare > Mon profil > Jetons API > Créer un jeton >"
+                say "modèle « Modifier le DNS de la zone » (droits « Zone : Lire » et « DNS : Modifier »)."
+                cf_token="$(ask_secret "Jeton API Cloudflare (la saisie reste invisible) :")"
+            fi
+            [ -n "$cf_token" ] || die "Le jeton API Cloudflare est obligatoire pour ce mode."
+            public_url="https://$domain"; [ "$https_port" = "443" ] || public_url="$public_url:$https_port"
+            profiles="cloudflare"
+            ddns=0
+            if [ -n "${WASEBOARD_CLOUDFLARE_DDNS:-}" ]; then [ "${WASEBOARD_CLOUDFLARE_DDNS}" = "1" ] && ddns=1
+            elif ! assume_yes && yes_no "Garder l'enregistrement DNS « $domain » à jour avec l'IP publique de cette machine (utile si elle change) ?" O; then ddns=1; fi
+            [ "$ddns" = 1 ] && profiles="cloudflare,cloudflare-ddns"
+            say ""
+            say "Ouvrez le port $https_port (TCP) de votre box vers cette machine ; le port 80 n'est pas nécessaire."
+            [ "$ddns" = 1 ] || say "L'enregistrement DNS « $domain » doit pointer vers l'adresse de cette machine (créez-le chez Cloudflare)."
+            ;;
         local)
             bind="0.0.0.0"
             public_url="${WASEBOARD_PUBLIC_URL:-}"
@@ -117,7 +142,7 @@ if [ "$write_env" = 1 ]; then
             say ""
             say "Votre reverse proxy doit transmettre vers http://127.0.0.1:$port (limite d'upload conseillée : 64 Mo)."
             ;;
-        *) die "Mode inconnu : $mode (attendu : https, local ou proxy)." ;;
+        *) die "Mode inconnu : $mode (attendu : https, cloudflare, local ou proxy)." ;;
     esac
 
     secret="${WASEBOARD_SHARED_SECRET:-}"
@@ -140,6 +165,8 @@ if [ "$write_env" = 1 ]; then
         echo "WASEBOARD_PORT=$port"
         echo "DUCKDNS_SUBDOMAIN=$duck_sub"
         echo "DUCKDNS_TOKEN=$duck_token"
+        echo "CLOUDFLARE_API_TOKEN=$cf_token"
+        echo "WASEBOARD_HTTPS_PORT=$https_port"
     } > .env
     chmod 600 .env
     say ""
