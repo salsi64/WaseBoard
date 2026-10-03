@@ -1,0 +1,39 @@
+name: Serveur — tests
+
+on:
+  push:
+    paths:
+      - "server/**"
+      - ".github/workflows/server-tests.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/server-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ffmpeg + libopus0 : nécessaires à diagnostics.check_tools() (voir tests/README.md) ; sans eux ces
+      # vérifications précises tourneraient en ❌ au lieu de ✅, pour un mauvais motif.
+      - name: Installer ffmpeg et libopus0
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg libopus0
+
+      - name: Installer les dépendances Python
+        run: pip install -r requirements.txt
+
+      - name: Vérifier la syntaxe (compilation seule, rapide)
+        run: python -m py_compile server.py diagnostics.py wb_config.py
+
+      - name: Lancer la suite de tests
+        run: ./tests/run_all.sh

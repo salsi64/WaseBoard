@@ -23,7 +23,7 @@
                 </StackPanel>
                 <Button Content="OK" Padding="20,6" HorizontalAlignment="Right" Click="Ok_Click"
                         IsDefault="True" IsCancel="True"
-                        Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                        Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
             </StackPanel>
         </Grid>
     </Border>

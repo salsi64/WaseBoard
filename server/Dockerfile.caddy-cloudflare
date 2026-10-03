@@ -1,0 +1,7 @@
+# Caddy avec le module DNS Cloudflare : le certificat HTTPS est prouvé par un enregistrement DNS (API Cloudflare),
+# sans avoir à ouvrir le port 80 ni à être joignable depuis Internet au moment de l'émission.
+FROM caddy:2-builder AS builder
+RUN xcaddy build --with github.com/caddy-dns/cloudflare
+
+FROM caddy:2
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy

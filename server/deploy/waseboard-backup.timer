@@ -1,0 +1,12 @@
+# /etc/systemd/system/waseboard-backup.timer — sauvegarde quotidienne (voir waseboard-backup.service).
+[Unit]
+Description=Sauvegarde quotidienne des données WaseBoard
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=15min
+# Si la machine était éteinte à l'heure prévue, la sauvegarde part au démarrage suivant.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -13,7 +13,9 @@ namespace WaseBoard
     {
         private static readonly ConcurrentDictionary<string, BitmapImage> _cache = new();
 
-        public static BitmapImage? GetOrLoad(string url)
+        /// <param name="decodePixelWidth">Largeur de décodage (0 = taille d'origine) : pour une petite icône tirée d'une
+        /// grande image (emojis de 256 px affichés à ~20 px), évite de garder l'image entière en mémoire.</param>
+        public static BitmapImage? GetOrLoad(string url, int decodePixelWidth = 0)
         {
             if (string.IsNullOrWhiteSpace(url)) return null;
             if (_cache.TryGetValue(url, out var cached)) return cached;
@@ -23,6 +25,7 @@ namespace WaseBoard
                 var image = new BitmapImage();
                 image.BeginInit();
                 image.UriSource = new Uri(url, UriKind.Absolute);
+                if (decodePixelWidth > 0) image.DecodePixelWidth = decodePixelWidth;
                 image.CacheOption = BitmapCacheOption.OnDemand;
                 image.EndInit();
                 _cache[url] = image;

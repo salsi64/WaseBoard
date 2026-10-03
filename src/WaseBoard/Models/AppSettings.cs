@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace WaseBoard.Models
 {
@@ -9,10 +10,31 @@ namespace WaseBoard.Models
         /// aucune adresse par défaut n'est fournie avec l'application.</summary>
         public string ServerUrl { get; set; } = "";
 
-        /// <summary>Jeton d'accès partagé avec le serveur (doit correspondre à shared_secret côté serveur).</summary>
+        /// <summary>Jeton d'accès partagé avec le serveur (doit correspondre à shared_secret côté
+        /// serveur). En mémoire uniquement — la valeur persistée (chiffrée) est EncryptedServerToken,
+        /// voir SoundLibraryService.Load()/SaveSettings().</summary>
+        [JsonIgnore]
         public string? ServerToken { get; set; }
 
-        /// <summary>Identité Discord de l'utilisateur (choisie une fois dans les Paramètres), pour le highlight/avatar partagés et la résolution automatique du salon Discord ciblé.</summary>
+        /// <summary>Forme chiffrée (DPAPI) de ServerToken, seule persistée dans settings.json.</summary>
+        public string? EncryptedServerToken { get; set; }
+
+        /// <summary>Ancien champ en clair (avant chiffrement) — lu une seule fois pour migrer les
+        /// installations existantes vers EncryptedServerToken, jamais réécrit après.</summary>
+        [JsonPropertyName("ServerToken")]
+        public string? LegacyServerTokenPlaintext { get; set; }
+
+        /// <summary>Jeton de session WaseBoard (identité Discord vérifiée par OAuth2). En mémoire
+        /// uniquement — la valeur persistée (chiffrée) est EncryptedDiscordSessionToken.</summary>
+        [JsonIgnore]
+        public string? DiscordSessionToken { get; set; }
+
+        /// <summary>Forme chiffrée (DPAPI) de DiscordSessionToken, seule persistée dans settings.json.</summary>
+        public string? EncryptedDiscordSessionToken { get; set; }
+
+        /// <summary>Identité Discord affichée (pseudo/avatar), renseignée par la connexion OAuth2 —
+        /// purement informatif, plus jamais envoyé au serveur (l'identité réelle vient du jeton de
+        /// session ci-dessus).</summary>
         public string? DiscordUserId { get; set; }
         public string? DiscordUsername { get; set; }
         public string? DiscordAvatarUrl { get; set; }
@@ -41,9 +63,10 @@ namespace WaseBoard.Models
         /// <summary>Clés des sections repliées sur la page principale.</summary>
         public List<string> CollapsedSections { get; set; } = new();
 
-        /// <summary>Tri appliqué à la section "Tous les sons" : "Custom" (ordre d'affichage actuel,
+        /// <summary>Tri appliqué à chaque section de guilde : "Custom" (ordre d'affichage actuel,
         /// glisser-déposer manuel), "NameAsc" ou "NameDesc".</summary>
         public string AllSoundsSortMode { get; set; } = "Custom";
+
 
         /// <summary>Couleur de fond personnalisée de l'application (hex, ex: "#1E1E2E"). Null = thème par défaut.</summary>
         public string? BackgroundColorHex { get; set; }
@@ -54,11 +77,20 @@ namespace WaseBoard.Models
         /// <summary>Si vrai, la palette clair/sombre suit automatiquement le thème Windows (ignore BackgroundColorHex).</summary>
         public bool FollowSystemTheme { get; set; } = true;
 
-        /// <summary>Si vrai, la couleur d'accent suit automatiquement la couleur d'accent Windows.</summary>
+        /// <summary>Si vrai, la couleur d'accent suit automatiquement la couleur d'accent Windows
+        /// (au lieu de l'accent de la palette choisie).</summary>
         public bool FollowSystemAccent { get; set; } = true;
 
+        /// <summary>Palette de l'interface (voir PalettePresets). Null = réglages antérieurs aux palettes :
+        /// migrés une fois au chargement (SoundLibraryService.MigrateAppearance).</summary>
+        public string? PaletteId { get; set; }
+
+        /// <summary>Affiche la mini-waveform sur les boutons de son. Désactivée : boutons plus compacts
+        /// (une seule ligne), l'avatar de qui joue passe alors à droite de la ligne du nom.</summary>
+        public bool ShowWaveforms { get; set; } = true;
+
         /// <summary>Vrai dès que l'assistant de premier lancement a été fermé une fois (Terminer ou Passer) —
-        /// évite de le rouvrir à chaque démarrage tant que le jeton/l'ID Discord ne sont pas remplis.</summary>
+        /// évite de le rouvrir à chaque démarrage tant que le jeton/la connexion Discord ne sont pas remplis.</summary>
         public bool HasSeenOnboarding { get; set; }
     }
 }

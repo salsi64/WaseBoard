@@ -16,17 +16,10 @@ namespace WaseBoard
     {
         private static readonly TimeSpan AnimationDuration = TimeSpan.FromMilliseconds(380);
 
-        /// <summary>
-        /// Cellules à largeur fixe en thème moderne : les pilules ont une largeur organique qui
-        /// varie avec leur contenu, ce qui décalerait les boutons suivants dès qu'un seul change
-        /// (ex: avatar de qui joue le son). Le contenu peut grandir sans affecter ses voisins,
-        /// l'excédent étant rogné (ClipToBounds). Classique reste NaN (déjà à largeur fixe).
-        /// </summary>
-        protected override Size MeasureOverride(Size availableSize)
-        {
-            ItemWidth = ThemeState.IsModern ? 195 : double.NaN;
-            return base.MeasureOverride(availableSize);
-        }
+        // Pas de largeur de cellule imposée : les pilules (thème moderne) prennent la largeur de leur nom
+        // (96 → 210 px, voir ModernSoundButtonTemplate) et ne changent plus de taille pendant la lecture
+        // (l'avatar de qui joue remplace la pastille d'icône au lieu de s'ajouter), donc rien ne décale
+        // leurs voisines. Les cartes classiques ont déjà une largeur fixe.
 
         protected override Size ArrangeOverride(Size finalSize)
         {

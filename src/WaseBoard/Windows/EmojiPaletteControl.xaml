@@ -1,0 +1,8 @@
+<UserControl x:Class="WaseBoard.Windows.EmojiPaletteControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Grille d'emojis partagée par le sélecteur d'emoji et la fenêtre de découpe (une seule liste à tenir à jour). -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <WrapPanel x:Name="EmojiPalette"/>
+    </ScrollViewer>
+</UserControl>

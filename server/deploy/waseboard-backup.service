@@ -1,0 +1,12 @@
+# /etc/systemd/system/waseboard-backup.service — sauvegarde des données WaseBoard (lancée par le minuteur).
+# Remplacez VOTRE_USER (et les chemins) puis : sudo systemctl daemon-reload && sudo systemctl enable --now waseboard-backup.timer
+[Unit]
+Description=Sauvegarde des données WaseBoard
+
+[Service]
+Type=oneshot
+User=VOTRE_USER
+ExecStart=/home/VOTRE_USER/waseboard-server/deploy/backup.sh -d /home/VOTRE_USER/waseboard-server -o /home/VOTRE_USER/waseboard-backups -k 7
+# Ne gêne pas la lecture des sons : priorité processeur et disque minimales.
+Nice=15
+IOSchedulingClass=idle

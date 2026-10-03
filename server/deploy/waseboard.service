@@ -1,0 +1,40 @@
+# /etc/systemd/system/waseboard.service — serveur WaseBoard, avec durcissement.
+# Remplacez VOTRE_USER (et les chemins) puis : sudo systemctl daemon-reload && sudo systemctl enable --now waseboard
+[Unit]
+Description=Serveur WaseBoard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=VOTRE_USER
+WorkingDirectory=/home/VOTRE_USER/waseboard-server
+ExecStart=/home/VOTRE_USER/waseboard-server/venv/bin/python3 server.py
+Restart=on-failure
+RestartSec=5
+# Laisse au bot le temps de quitter proprement ses salons vocaux à l'arrêt.
+TimeoutStopSec=30
+
+# --- Durcissement : le serveur ne peut écrire que dans son propre dossier, ni élever ses droits ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+# Sans cette ligne, systemd rend tout /home inscriptible dès qu'un ReadWritePaths s'y trouve (vérifié sous systemd 255) :
+# le serveur pourrait alors écrire n'importe où dans votre dossier personnel.
+ProtectHome=read-only
+ReadWritePaths=/home/VOTRE_USER/waseboard-server
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# --- Garde-fous de ressources : un emballement ne doit pas emporter la machine. À ajuster à votre matériel. ---
+# MemoryMax : le serveur seul consomme quelques centaines de Mo ; chaque son joué ajoute un ffmpeg (≈ 50 Mo).
+MemoryMax=2G
+# TasksMax : processus/threads (ffmpeg compris).
+TasksMax=512
+
+[Install]
+WantedBy=multi-user.target

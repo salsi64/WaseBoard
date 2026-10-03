@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace WaseBoard
 {
     /// <summary>
@@ -8,5 +10,28 @@ namespace WaseBoard
     public static class ThemeState
     {
         public static bool IsModern { get; set; }
+
+        /// <summary>Partie observable de l'état (liée depuis les gabarits des boutons de son).</summary>
+        public static ThemeOptions Options { get; } = new();
+    }
+
+    /// <summary>Options d'affichage modifiables à chaud : les boutons de son se mettent à jour sans être reconstruits.</summary>
+    public sealed class ThemeOptions : INotifyPropertyChanged
+    {
+        private bool _showWaveforms = true;
+
+        /// <summary>Mini-waveform visible sur les boutons de son (faux = boutons compacts).</summary>
+        public bool ShowWaveforms
+        {
+            get => _showWaveforms;
+            set
+            {
+                if (_showWaveforms == value) return;
+                _showWaveforms = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ShowWaveforms)));
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
     }
 }

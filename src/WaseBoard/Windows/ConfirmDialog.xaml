@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:chrome="clr-namespace:WaseBoard.Windows.Chrome"
         Title="Confirmer"
-        FontFamily="Segoe UI Emoji, Segoe UI" Height="170" Width="380"
+        FontFamily="Segoe UI Emoji, Segoe UI" SizeToContent="Height" Width="380"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource BgBrush}"
         chrome:WindowChromeBehavior.Enable="True"
@@ -22,7 +22,7 @@
                     <Button Content="Non" Padding="16,6" Margin="0,0,8,0" Click="No_Click" IsCancel="True"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
                     <Button Content="Oui" Padding="16,6" Click="Yes_Click" IsDefault="True"
-                            Background="{DynamicResource AccentBrush}" Foreground="White" BorderThickness="0"/>
+                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
                 </StackPanel>
             </StackPanel>
         </Grid>

@@ -1,0 +1,390 @@
+<Window x:Class="WaseBoard.Windows.AdminPanelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:chrome="clr-namespace:WaseBoard.Windows.Chrome"
+        Title="Administration"
+        FontFamily="Segoe UI Emoji, Segoe UI" Height="600" Width="860"
+        MinHeight="480" MinWidth="720"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BgBrush}"
+        chrome:WindowChromeBehavior.Enable="True">
+    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource BgBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="36"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <chrome:TitleBarControl Grid.Row="0" TitleText="Administration" ShowMinMax="True"/>
+
+        <!-- Serveur géré + message d'état (chargement / erreur / confirmation) -->
+        <DockPanel Grid.Row="1" Margin="16,8,16,4">
+            <TextBlock Text="Serveur Discord :" VerticalAlignment="Center" Margin="0,0,10,0"
+                       Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+            <ComboBox x:Name="GuildCombo" Width="260" Height="34" SelectionChanged="GuildCombo_SelectionChanged">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal" Margin="2,2">
+                            <Ellipse Width="20" Height="20" Margin="0,0,8,0">
+                                <Ellipse.Fill>
+                                    <ImageBrush ImageSource="{Binding IconUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                            <TextBlock Text="{Binding GuildName}" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock x:Name="StatusText" Margin="14,0,0,0" VerticalAlignment="Center" FontSize="12"
+                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextBrush}"/>
+        </DockPanel>
+
+        <Grid Grid.Row="2" Margin="0,4,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="150"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Margin="12,8,4,8">
+                <Button x:Name="NavSoundsButton" Content="Sons" Tag="Sounds" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavTrashButton" Content="Corbeille" Tag="Trash" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavSettingsButton" Content="Réglages" Tag="Settings" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavStatsButton" Content="Statistiques" Tag="Stats" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavAuditButton" Content="Journal" Tag="Audit" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavInviteButton" Content="Invitation" Tag="Invite" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+            </StackPanel>
+
+            <Border Grid.Column="1" Background="{DynamicResource PanelBrush}" CornerRadius="8" Margin="4,8,12,12">
+            <Grid Margin="18,16,18,16">
+
+                <!-- Page : Sons de la guilde -->
+                <Grid x:Name="PageSounds">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBox x:Name="SoundFilterBox" Width="190" Height="28" DockPanel.Dock="Right"
+                                 ToolTip="Filtrer par nom ou par auteur" TextChanged="SoundFilterBox_TextChanged"/>
+                        <StackPanel>
+                            <TextBlock Text="Sons du serveur" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
+                            <TextBlock x:Name="SoundsSummaryText" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </DockPanel>
+                    <Grid Grid.Row="1" Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="110"/>
+                            <ColumnDefinition Width="104"/>
+                            <ColumnDefinition Width="62"/>
+                            <ColumnDefinition Width="46"/>
+                            <ColumnDefinition Width="104"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="1" Text="Nom" Opacity="0.6" FontSize="11" Foreground="{DynamicResource TextBrush}"/>
+                        <TextBlock Grid.Column="2" Text="Auteur" Opacity="0.6" FontSize="11" Foreground="{DynamicResource TextBrush}"/>
+                        <TextBlock Grid.Column="3" Text="Ajouté le" Opacity="0.6" FontSize="11" Foreground="{DynamicResource TextBrush}"/>
+                        <TextBlock Grid.Column="4" Text="Taille" Opacity="0.6" FontSize="11" Foreground="{DynamicResource TextBrush}"/>
+                        <TextBlock Grid.Column="5" Text="Lectures" Opacity="0.6" FontSize="11" Foreground="{DynamicResource TextBrush}"/>
+                    </Grid>
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="SoundsList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,2" Height="34">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="32"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="104"/>
+                                            <ColumnDefinition Width="62"/>
+                                            <ColumnDefinition Width="46"/>
+                                            <ColumnDefinition Width="104"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Emoji}" FontSize="16" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Name}" Foreground="{DynamicResource TextBrush}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Author}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding AuthorTooltip}" Foreground="{DynamicResource TextBrush}" Opacity="0.85"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding Date}" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" Opacity="0.85" FontSize="12"/>
+                                        <TextBlock Grid.Column="4" Text="{Binding SizeText}" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" Opacity="0.85" FontSize="12"/>
+                                        <TextBlock Grid.Column="5" Text="{Binding PlaysText}" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" Opacity="0.85" FontSize="12"/>
+                                        <StackPanel Grid.Column="6" Orientation="Horizontal" HorizontalAlignment="Right">
+                                            <Button Content="✏" Width="30" Height="28" Margin="0,0,3,0" Tag="{Binding}" Click="RenameSound_Click"
+                                                    ToolTip="Renommer" Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
+                                            <Button Content="🗑" Width="30" Height="28" Margin="0,0,3,0" Tag="{Binding}" Click="DeleteSound_Click"
+                                                    ToolTip="Supprimer (envoyé à la corbeille)" Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
+                                            <Button Content="🚫" Width="30" Height="28" Tag="{Binding}" Click="BlockAuthor_Click"
+                                                    IsEnabled="{Binding CanBlock}" ToolTip="{Binding BlockTooltip}"
+                                                    Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- Page : Corbeille -->
+                <Grid x:Name="PageTrash" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock Text="Corbeille" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
+                        <TextBlock x:Name="TrashSummaryText" FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="TrashList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,2" Height="34">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="32"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="150"/>
+                                            <ColumnDefinition Width="104"/>
+                                            <ColumnDefinition Width="86"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Emoji}" FontSize="16" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Name}" Foreground="{DynamicResource TextBrush}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding DeletedByText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource TextBrush}" Opacity="0.85" FontSize="12"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding DeletedAtText}" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextBrush}" Opacity="0.85" FontSize="12"/>
+                                        <Button Grid.Column="4" Content="Restaurer" Height="28" Padding="8,0" Tag="{Binding}" Click="RestoreSound_Click"
+                                                ToolTip="{Binding DaysLeftText}" Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                                BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- Page : Réglages -->
+                <ScrollViewer x:Name="PageSettings" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,0,6,0">
+                        <TextBlock Text="Réglages du serveur" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Rôle administrateur supplémentaire" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
+                        <TextBlock Text="Les membres de ce rôle Discord peuvent administrer WaseBoard ici, en plus du propriétaire et des personnes ayant la permission Administrateur."
+                                   FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                        <!-- ItemTemplate (pas DisplayMemberPath) : le style de ComboBox de l'app n'applique pas
+                             DisplayMemberPath à la valeur affichée une fois fermé. -->
+                        <ComboBox x:Name="AdminRoleCombo" Height="34" Width="260" HorizontalAlignment="Left" Margin="0,0,0,16">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+
+                        <CheckBox x:Name="UploadAdminsOnlyCheck" Content="Réserver l'ajout de sons aux administrateurs"
+                                  Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16"/>
+
+                        <TextBlock Text="Limites (0 = aucune limite)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Nombre maximum de sons sur ce serveur" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+                            <TextBox x:Name="MaxSoundsBox" Grid.Column="1" Height="28"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Taille maximum d'un fichier (Mo)" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+                            <TextBox x:Name="MaxFileMbBox" Grid.Column="1" Height="28"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Durée maximum d'un son (secondes)" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+                            <TextBox x:Name="MaxDurationBox" Grid.Column="1" Height="28"/>
+                        </Grid>
+                        <Grid x:Name="MaxTotalRow" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Espace disque maximum de tous les sons (Mo)" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+                            <TextBox x:Name="MaxTotalMbBox" Grid.Column="1" Height="28"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="90"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Anti-spam : sons par minute et par membre" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+                            <TextBox x:Name="PlayRateBox" Grid.Column="1" Height="28"/>
+                        </Grid>
+                        <TextBlock Text="Les administrateurs ne sont pas concernés par l'anti-spam. La limite de durée nécessite ffprobe sur le serveur."
+                                   FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="QuotaUsageText" FontSize="11" Opacity="0.85" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"
+                                   Visibility="Collapsed"/>
+                        <TextBlock x:Name="CeilingsText" FontSize="11" Opacity="0.85" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16"
+                                   Visibility="Collapsed"/>
+
+                        <Button Content="Enregistrer les réglages" Height="34" HorizontalAlignment="Left" Padding="16,0" Margin="0,0,0,22"
+                                Click="SaveSettings_Click" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+
+                        <TextBlock Text="Membres bloqués" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
+                        <TextBlock Text="Ces membres ne peuvent plus ajouter de sons ici (ils gardent tout le reste). Pour bloquer quelqu'un, utilisez le bouton 🚫 dans la liste des sons."
+                                   FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
+                        <TextBlock x:Name="NoBlockedText" Text="Personne n'est bloqué." FontSize="12" Opacity="0.7" Foreground="{DynamicResource TextBrush}"/>
+                        <ItemsControl x:Name="BlockedList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,0,0,4">
+                                        <Button DockPanel.Dock="Right" Content="Débloquer" Height="28" Padding="10,0" Tag="{Binding}" Click="Unblock_Click"
+                                                Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                                BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                                        <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Page : Statistiques -->
+                <ScrollViewer x:Name="PageStats" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="0,0,6,0">
+                        <DockPanel Margin="0,0,0,12">
+                            <ComboBox x:Name="StatsPeriodCombo" DockPanel.Dock="Right" Width="130" Height="30" SelectionChanged="StatsPeriodCombo_SelectionChanged">
+                                <ComboBoxItem Content="7 derniers jours" Tag="7"/>
+                                <ComboBoxItem Content="30 derniers jours" Tag="30" IsSelected="True"/>
+                                <ComboBoxItem Content="90 derniers jours" Tag="90"/>
+                            </ComboBox>
+                            <StackPanel>
+                                <TextBlock Text="Statistiques d'usage" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
+                                <TextBlock x:Name="StatsTotalText" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </DockPanel>
+
+                        <TextBlock Text="Lectures par jour" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                        <ItemsControl x:Name="DayBars" Height="110" Margin="0,0,0,4">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Rows="1"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Height="{Binding BarHeight}" VerticalAlignment="Bottom" Margin="1,0" CornerRadius="2,2,0,0"
+                                            Background="{DynamicResource AccentBrush}" ToolTip="{Binding Tooltip}"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <DockPanel Margin="0,0,0,18">
+                            <TextBlock x:Name="DayAxisEndText" DockPanel.Dock="Right" FontSize="10" Opacity="0.6" Foreground="{DynamicResource TextBrush}"/>
+                            <TextBlock x:Name="DayAxisStartText" FontSize="10" Opacity="0.6" Foreground="{DynamicResource TextBrush}"/>
+                        </DockPanel>
+
+                        <TextBlock Text="Sons les plus joués" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                        <TextBlock x:Name="NoTopSoundsText" Text="Aucune lecture sur la période." FontSize="12" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,18"/>
+                        <ItemsControl x:Name="TopSoundsList" Margin="0,0,0,18">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,4" Height="24">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="28"/>
+                                            <ColumnDefinition Width="170"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="40"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Emoji}" FontSize="14" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                   ToolTip="{Binding Name}" Foreground="{DynamicResource TextBrush}"/>
+                                        <Border Grid.Column="2" Height="10" CornerRadius="5" HorizontalAlignment="Left" Width="{Binding BarWidth}"
+                                                Background="{DynamicResource AccentBrush}"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding Count}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Membres les plus actifs" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                        <ItemsControl x:Name="TopUsersList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,4" Height="24">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="28"/>
+                                            <ColumnDefinition Width="170"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="40"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Width="18" Height="18" CornerRadius="9" HorizontalAlignment="Left" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1">
+                                            <Border.Background>
+                                                <ImageBrush ImageSource="{Binding AvatarUrl, Converter={StaticResource UriToBitmapImageConverter}}" Stretch="UniformToFill"/>
+                                            </Border.Background>
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextBrush}"/>
+                                        <Border Grid.Column="2" Height="10" CornerRadius="5" HorizontalAlignment="Left" Width="{Binding BarWidth}"
+                                                Background="{DynamicResource AccentBrush}" Opacity="0.7"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding Count}" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextBrush}" FontSize="12"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Page : Journal d'actions -->
+                <Grid x:Name="PageAudit" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock Text="Journal d'actions" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
+                        <TextBlock x:Name="AuditSummaryText" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="AuditList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="112"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding When}" FontSize="12" Opacity="0.65" Foreground="{DynamicResource TextBrush}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Description}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource TextBrush}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- Page : Invitation -->
+                <StackPanel x:Name="PageInvite" Visibility="Collapsed">
+                    <TextBlock Text="Inviter des membres" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Le lien de connexion remplit automatiquement l'adresse du serveur et le jeton d'accès dans WaseBoard : il suffit de le cliquer, puis de se connecter avec Discord."
+                               FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14"/>
+                    <Button x:Name="CopyInviteButton" Content="Copier le lien d'invitation" Height="34" HorizontalAlignment="Left" Padding="16,0" Margin="0,0,0,18"
+                            Click="CopyInvite_Click" Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                    <TextBlock Text="Dans Discord" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                    <TextBlock Text="Tapez /configurer-invitation dans le salon de votre choix : un bouton « Recevoir mon lien WaseBoard » y est posté, et chaque membre qui voit ce salon peut y cliquer pour obtenir son lien. Qui le voit se règle avec les permissions habituelles du salon."
+                               FontSize="11" Opacity="0.7" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
+                </StackPanel>
+            </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+    </Border>
+</Window>

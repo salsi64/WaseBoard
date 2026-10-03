@@ -11,7 +11,7 @@ namespace WaseBoard.Services
     /// <summary>
     /// Vérifie la dernière release GitHub publique du dépôt et la compare à la version de
     /// l'assembly courante. Ne lève jamais : un échec réseau se traduit par un résultat avec
-    /// Error rempli (même esprit que SoundLibraryService.GetServerStatusAsync/VerifyUserIdAsync).
+    /// Error rempli (même esprit que SoundLibraryService.GetServerStatusAsync).
     /// </summary>
     public static class UpdateCheckService
     {

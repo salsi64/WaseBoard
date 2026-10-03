@@ -1,7 +1,8 @@
 using System.Diagnostics;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using WaseBoard.Models;
 using WaseBoard.Services;
@@ -9,10 +10,10 @@ using WaseBoard.Services;
 namespace WaseBoard.Windows
 {
     /// <summary>
-    /// Assistant de premier lancement (3 étapes : bienvenue → serveur → identité Discord),
-    /// remplace le nudge affiché au démarrage. Réutilise directement SoundLibraryService (mêmes
-    /// méthodes que SettingsWindow : GetServerStatusAsync, VerifyUserIdAsync) plutôt que de
-    /// dupliquer la logique de test/vérification.
+    /// Assistant de premier lancement (3 étapes : bienvenue → serveur → connexion Discord),
+    /// remplace le nudge affiché au démarrage. Réutilise directement SoundLibraryService (même
+    /// méthode que SettingsWindow : GetServerStatusAsync) plutôt que de dupliquer la logique
+    /// de test de connexion.
     /// </summary>
     public partial class OnboardingWindow : Window
     {
@@ -20,14 +21,15 @@ namespace WaseBoard.Windows
         private readonly SoundLibraryService _library;
         private readonly StackPanel[] _steps;
         private int _currentStep;
-        private string? _verifiedDiscordId;
+        private DiscordOAuthService.LoginResult? _loginResult;
 
         private const int DiscordStepIndex = 2;
 
         /// <summary>
         /// startAtDiscordStep : vrai quand l'assistant a déjà été vu (Bienvenue/Serveur déjà
-        /// remplis lors d'un lancement précédent) mais que l'ID Discord, désormais obligatoire,
-        /// manque encore — évite de refaire revoir les deux premières étapes à chaque lancement.
+        /// remplis lors d'un lancement précédent) mais que la connexion Discord, désormais
+        /// obligatoire, manque encore — évite de refaire revoir les deux premières étapes à
+        /// chaque lancement.
         /// </summary>
         public OnboardingWindow(AppSettings settings, SoundLibraryService library, bool startAtDiscordStep = false)
         {
@@ -39,7 +41,6 @@ namespace WaseBoard.Windows
 
             ServerUrlBox.Text = _settings.ServerUrl;
             ServerTokenBox.Text = _settings.ServerToken;
-            DiscordIdBox.Text = _settings.DiscordUserId;
 
             UpdateStepUi();
         }
@@ -53,22 +54,11 @@ namespace WaseBoard.Windows
             NextButton.Content = _currentStep == _steps.Length - 1 ? "Terminer" : "Suivant";
             StepIndicatorText.Text = $"Étape {_currentStep + 1} sur {_steps.Length}";
 
-            // L'ID Discord est obligatoire : impossible de "Passer" une fois sur cette étape, et
-            // "Terminer" reste désactivé tant qu'aucun ID numérique n'est saisi.
+            // La connexion Discord est obligatoire : impossible de "Passer" une fois sur cette
+            // étape, et "Terminer" reste désactivé tant que la connexion n'a pas réussi.
             var onDiscordStep = _currentStep == DiscordStepIndex;
             SkipButton.Visibility = onDiscordStep ? Visibility.Collapsed : Visibility.Visible;
-            if (onDiscordStep) UpdateDiscordNextEnabled();
-            else NextButton.IsEnabled = true;
-        }
-
-        private void UpdateDiscordNextEnabled()
-        {
-            NextButton.IsEnabled = DiscordIdBox.Text.Any(char.IsDigit);
-        }
-
-        private void DiscordIdBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (_currentStep == DiscordStepIndex) UpdateDiscordNextEnabled();
+            NextButton.IsEnabled = !onDiscordStep || (_loginResult?.Success == true);
         }
 
         private void Back_Click(object sender, RoutedEventArgs e)
@@ -80,9 +70,9 @@ namespace WaseBoard.Windows
 
         /// <summary>
         /// Applique l'URL/le jeton saisis à _settings immédiatement (pas seulement à la toute
-        /// dernière étape) : la vérification de l'ID Discord (étape suivante) authentifie ses
-        /// appels avec _settings.ServerToken, donc si le jeton n'est committé qu'à la fin, cette
-        /// vérification échoue systématiquement (401) même avec un jeton correct.
+        /// dernière étape) : la connexion Discord (étape suivante) authentifie ses appels avec
+        /// _settings.ServerToken, donc si le jeton n'est committé qu'à la fin, cette connexion
+        /// échoue systématiquement (401) même avec un jeton correct.
         /// </summary>
         private void CommitServerFields()
         {
@@ -102,8 +92,13 @@ namespace WaseBoard.Windows
             }
 
             CommitServerFields();
-            var digitsOnly = _verifiedDiscordId ?? new string(DiscordIdBox.Text.Where(char.IsDigit).ToArray());
-            if (digitsOnly.Length > 0) _settings.DiscordUserId = digitsOnly;
+            if (_loginResult is { Success: true })
+            {
+                _settings.DiscordSessionToken = _loginResult.SessionToken;
+                _settings.DiscordUserId = _loginResult.UserId;
+                _settings.DiscordUsername = _loginResult.Username;
+                _settings.DiscordAvatarUrl = _loginResult.AvatarUrl;
+            }
 
             DialogResult = true;
             Close();
@@ -147,28 +142,43 @@ namespace WaseBoard.Windows
             };
         }
 
-        private async void VerifyButton_Click(object sender, RoutedEventArgs e)
+        private async void ConnectDiscordButton_Click(object sender, RoutedEventArgs e)
         {
-            var digitsOnly = new string(DiscordIdBox.Text.Where(char.IsDigit).ToArray());
-            if (digitsOnly.Length == 0)
-            {
-                DiscordResultText.Text = "Entrez d'abord un ID Discord (uniquement des chiffres).";
-                return;
-            }
+            ConnectDiscordButton.IsEnabled = false;
+            DiscordResultBorder.Visibility = Visibility.Collapsed;
+            DiscordResultText.Text = "Connexion en cours — suivez les instructions dans votre navigateur...";
+            DiscordResultBorder.Visibility = Visibility.Visible;
+            DiscordAvatarBorder.Visibility = Visibility.Collapsed;
 
-            VerifyButton.IsEnabled = false;
-            var (found, username, _, guildName, error) = await _library.VerifyUserIdAsync(digitsOnly);
-            VerifyButton.IsEnabled = true;
+            var oauth = new DiscordOAuthService(_library);
+            _loginResult = await oauth.LoginAsync();
+            ConnectDiscordButton.IsEnabled = true;
 
-            if (found)
+            if (_loginResult.Success)
             {
-                _verifiedDiscordId = digitsOnly;
-                DiscordResultText.Text = $"✅ Trouvé : {username} (sur {guildName})";
+                ConnectDiscordButton.Content = "Changer de compte";
+                DiscordResultText.Text = $"✅ Connecté en tant que {_loginResult.Username}";
+                if (!string.IsNullOrEmpty(_loginResult.AvatarUrl))
+                {
+                    try
+                    {
+                        var image = new BitmapImage();
+                        image.BeginInit();
+                        image.UriSource = new System.Uri(_loginResult.AvatarUrl, System.UriKind.Absolute);
+                        image.CacheOption = BitmapCacheOption.OnLoad;
+                        image.EndInit();
+                        DiscordAvatarBrush.ImageSource = image;
+                        DiscordAvatarBorder.Visibility = Visibility.Visible;
+                    }
+                    catch { DiscordAvatarBorder.Visibility = Visibility.Collapsed; }
+                }
             }
             else
             {
-                DiscordResultText.Text = "❌ " + (error ?? "ID introuvable.");
+                DiscordResultText.Text = "❌ " + (_loginResult.Error ?? "Connexion échouée.");
             }
+
+            if (_currentStep == DiscordStepIndex) UpdateStepUi();
         }
     }
 }

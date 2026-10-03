@@ -1,0 +1,9 @@
+# Reverse proxy HTTPS : le certificat Let's Encrypt est obtenu et renouvelé automatiquement pour WASEBOARD_DOMAIN
+# (le domaine doit pointer vers cette machine, ports 80 et 443 joignables depuis Internet).
+{$WASEBOARD_DOMAIN} {
+	# même limite d'upload que le serveur
+	request_body {
+		max_size 64MB
+	}
+	reverse_proxy waseboard:5005
+}

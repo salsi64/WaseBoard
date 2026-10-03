@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,6 +12,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
@@ -25,7 +27,6 @@ namespace WaseBoard
     public partial class MainWindow : Window
     {
         private const string FavoritesKey = "__favorites__";
-        private const string AllSoundsKey = "__all_sounds__";
 
         private readonly SoundLibraryService _library = new();
 
@@ -82,7 +83,7 @@ namespace WaseBoard
             /// <summary>Vrai pour les catégories personnelles et partagées (pas Favoris/Tous les sons) : affiche les flèches ↑/↓.</summary>
             public bool IsReorderable { get; set; }
 
-            /// <summary>Vrai uniquement pour "Tous les sons" : affiche le sélecteur de tri dans l'en-tête.</summary>
+            /// <summary>Vrai pour les sections de guilde : affiche le sélecteur de tri dans l'en-tête.</summary>
             public bool IsAllSounds { get; set; }
         }
 
@@ -92,6 +93,10 @@ namespace WaseBoard
         public MainWindow()
         {
             InitializeComponent();
+            Title = AppIdentity.Name;
+            ChromeTitleBar.TitleText = AppIdentity.Name;
+            SidebarHeaderTitle.Text = "🎛️ " + AppIdentity.Name;
+            TitleText.Text = "🎛️ " + AppIdentity.Name;
 
             // La lecture LOCALE (aperçu uniquement) pilote IsPreviewing, distinct de IsPlaying
             // qui reflète l'activité PARTAGÉE (sondée depuis le serveur, voir PollActivityAsync).
@@ -145,16 +150,26 @@ namespace WaseBoard
             _settingsReady = true;
             ApplyColorScheme();
 
+            // Lien waseboard:// reçu en argument de lancement (voir App.OnStartup) — appliqué
+            // AVANT le bloc d'onboarding juste en dessous, qui s'ouvrira normalement si c'est un
+            // premier lancement et affichera alors les champs déjà pré-remplis.
+            if (App.PendingDeepLink is not null)
+                await ApplyDeepLinkAsync(App.PendingDeepLink, isRuntimeTrigger: false);
+
+            var hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+            hwndSource?.AddHook(DeepLinkHwndHook);
+
             MainVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
             SidebarVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
             UpdateMainVolumeLabel();
 
-            // L'ID Discord est désormais obligatoire (à partir de cette version) : tant qu'il est
-            // vide, l'assistant se rouvre à CHAQUE lancement, pas seulement au premier — mais
+            // La connexion Discord est désormais obligatoire (OAuth2) : tant qu'elle est absente,
+            // l'assistant se rouvre à CHAQUE lancement, pas seulement au premier — mais
             // directement sur l'étape Discord si les étapes Bienvenue/Serveur ont déjà été vues.
+            // Couvre aussi le cas d'une session invalidée en cours de route (voir SessionInvalidated).
             var needsFirstRun = !_library.Settings.HasSeenOnboarding;
-            var needsDiscordId = string.IsNullOrWhiteSpace(_library.Settings.DiscordUserId);
-            if (needsFirstRun || needsDiscordId)
+            var needsLogin = string.IsNullOrWhiteSpace(_library.Settings.DiscordSessionToken);
+            if (needsFirstRun || needsLogin)
             {
                 var onboarding = new OnboardingWindow(_library.Settings, _library,
                     startAtDiscordStep: !needsFirstRun) { Owner = this };
@@ -163,11 +178,12 @@ namespace WaseBoard
                 _library.SaveSettings();
             }
 
+            _library.SessionInvalidated += OnSessionInvalidated;
+
             _hotkeys = new GlobalHotkeyManager(this);
             ApplyTheme();
             await RefreshCatalogAsync();
             await RefreshSharedCategoriesAsync();
-            await CacheMyUsernameAsync();
             await RefreshVoiceStatusAsync();
 
             // Intervalle court (300ms, au lieu d'1s auparavant) : avec un sondage plus lent, un
@@ -210,7 +226,12 @@ namespace WaseBoard
             try
             {
                 var color = (Color)ColorConverter.ConvertFromString(_library.Settings.BackgroundColorHex);
-                Application.Current.Resources["BgBrush"] = new SolidColorBrush(color);
+                var res = Application.Current.Resources;
+                res["BgBrush"] = new SolidColorBrush(color);
+                // Panneaux et pistes dérivés du fond choisi, pour rester cohérents avec lui
+                // (sinon ils garderaient les couleurs de la palette, d'une autre teinte).
+                res["PanelBrush"] = new SolidColorBrush(PalettePresets.Lighten(color, 0.06));
+                res["TrackBrush"] = new SolidColorBrush(PalettePresets.Lighten(color, 0.14));
             }
             catch { /* couleur invalide enregistrée : on garde le thème par défaut */ }
         }
@@ -227,46 +248,35 @@ namespace WaseBoard
         }
 
         /// <summary>
-        /// Applique la palette clair/sombre + accent, à chaud (brushes DynamicResource) : suit le
-        /// thème/accent Windows si activé dans les Paramètres, sinon conserve le comportement
-        /// historique (palette sombre fixe + couleur de fond personnalisée éventuelle).
+        /// Applique la palette choisie (Paramètres > Apparence), à chaud (brushes DynamicResource) :
+        /// clair/sombre suit Windows si « suivre le thème » est coché, l'accent suit Windows si
+        /// « suivre l'accent » est coché, et une couleur de fond personnalisée remplace le fond de la
+        /// palette quand le thème système n'est pas suivi.
         /// </summary>
         private void ApplyColorScheme()
         {
             var settings = _library.Settings;
-            var accentFallback = Color.FromRgb(0x7C, 0x5C, 0xFF);
+            var preset = PalettePresets.Get(settings.PaletteId);
 
-            if (settings.FollowSystemTheme)
-            {
-                var snapshot = RegistryThemeWatcher.ReadCurrent();
-                _lastSystemTheme = snapshot;
-                ApplyPalette(snapshot.IsLightTheme, settings.FollowSystemAccent ? snapshot.AccentColor : accentFallback);
-            }
-            else
-            {
-                ApplyPalette(isLight: false, accentFallback);
-                ApplyBackgroundColor();
-            }
+            var snapshot = settings.FollowSystemTheme || settings.FollowSystemAccent ? RegistryThemeWatcher.ReadCurrent() : null;
+            _lastSystemTheme = snapshot;
+
+            var isLight = settings.FollowSystemTheme && snapshot is { IsLightTheme: true };
+            var accent = settings.FollowSystemAccent && snapshot is not null ? snapshot.AccentColor : preset.Accent;
+            ApplyPalette(preset, isLight, accent);
+
+            if (!settings.FollowSystemTheme) ApplyBackgroundColor();
         }
 
-        private static void ApplyPalette(bool isLight, Color accent)
+        private static void ApplyPalette(PalettePreset preset, bool isLight, Color accent)
         {
             var res = Application.Current.Resources;
-            if (isLight)
-            {
-                res["BgBrush"] = new SolidColorBrush(Color.FromRgb(0xF5, 0xF5, 0xFA));
-                res["PanelBrush"] = new SolidColorBrush(Colors.White);
-                res["TextBrush"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x2E));
-                res["TrackBrush"] = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xEA));
-            }
-            else
-            {
-                res["BgBrush"] = new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x2E));
-                res["PanelBrush"] = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x3C));
-                res["TextBrush"] = new SolidColorBrush(Color.FromRgb(0xF2, 0xF2, 0xF7));
-                res["TrackBrush"] = new SolidColorBrush(Color.FromRgb(0x3A, 0x3A, 0x50));
-            }
+            res["BgBrush"] = new SolidColorBrush(isLight ? PalettePresets.LightBg : preset.Bg);
+            res["PanelBrush"] = new SolidColorBrush(isLight ? PalettePresets.LightPanel : preset.Panel);
+            res["TextBrush"] = new SolidColorBrush(isLight ? PalettePresets.LightText : preset.Text);
+            res["TrackBrush"] = new SolidColorBrush(isLight ? PalettePresets.LightTrack : preset.Track);
             res["AccentBrush"] = new SolidColorBrush(accent);
+            res["OnAccentBrush"] = new SolidColorBrush(PalettePresets.OnAccent(accent));
         }
 
         /// <summary>Bascule thème classique/moderne. Paramètres/volume de la barre d'outils sont
@@ -275,6 +285,7 @@ namespace WaseBoard
         {
             var isModern = _library.Settings.UiTheme == "Modern";
             ThemeState.IsModern = isModern;
+            ThemeState.Options.ShowWaveforms = _library.Settings.ShowWaveforms;
 
             Sidebar.Visibility = isModern ? Visibility.Visible : Visibility.Collapsed;
             SidebarColumn.Width = new GridLength(isModern ? (_sidebarCollapsed ? 60 : 230) : 0);
@@ -282,23 +293,182 @@ namespace WaseBoard
             SettingsButton.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
             MainVolumePanel.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
 
+            // Thème moderne : « En ce moment » et le statut serveur vivent dans la barre latérale, la
+            // barre du haut (qui ne servait qu'à ça) disparaît et rend ses 40 px aux sons.
+            TopStrip.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
+            PlaceStatusPanel(isModern);
+            ApplyToolbarDensity();
+
             // Les boutons de son utilisent un ItemTemplateSelector qui lit ThemeState.IsModern :
             // il faut reconstruire les sections pour que le changement de gabarit soit pris en compte.
             RefreshSections();
         }
 
-        /// <summary>Résout votre pseudo/avatar Discord une fois au démarrage (mise en cache locale, pas un indicateur de présence).</summary>
-        private async Task CacheMyUsernameAsync()
+        /// <summary>Rattache le statut serveur (point + « Connecté — N sons ») à la barre latérale en
+        /// thème moderne, ou à la barre du haut en classique : un seul jeu d'éléments, déplacé, plutôt
+        /// que deux copies à tenir synchronisées.</summary>
+        private void PlaceStatusPanel(bool isModern)
         {
-            if (string.IsNullOrEmpty(_library.Settings.DiscordUserId)) return;
-
-            var (found, username, avatarUrl, _, _) = await _library.VerifyUserIdAsync(_library.Settings.DiscordUserId);
-            if (found)
+            Panel target = isModern ? SidebarStatusHost : StripStatusHost;
+            if (!ReferenceEquals(StatusPanel.Parent, target))
             {
-                _library.Settings.DiscordUsername = username;
-                _library.Settings.DiscordAvatarUrl = avatarUrl;
-                _library.SaveSettings();
+                (StatusPanel.Parent as Panel)?.Children.Remove(StatusPanel);
+                target.Children.Add(StatusPanel);
             }
+            StatusPanel.HorizontalAlignment = isModern ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        }
+
+        private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => ApplyToolbarDensity();
+
+        /// <summary>Quand la fenêtre est étroite, raccourcit les libellés de la barre d'outils (icônes seules) pour que
+        /// la recherche garde au moins 150 px et que rien ne se chevauche. Seuils = largeur nécessaire avec libellés
+        /// complets (le thème classique porte en plus le titre, le volume et Paramètres dans cette barre).</summary>
+        private void ApplyToolbarDensity()
+        {
+            if (JoinVoiceLabel is null) return; // encore en cours d'InitializeComponent
+
+            var sidebarWidth = ThemeState.IsModern ? SidebarColumn.Width.Value : 0;
+            var available = ActualWidth - sidebarWidth - 24;
+            var compact = available < (ThemeState.IsModern ? 700 : 1020);
+
+            var labels = compact ? Visibility.Collapsed : Visibility.Visible;
+            JoinVoiceLabel.Visibility = labels;
+            StopAllLabel.Visibility = labels;
+            AddCategoryLabel.Visibility = labels;
+            AddSoundLabel.Text = compact ? " Son" : " Ajouter un son";
+            // Le titre de l'application est déjà dans la barre de titre de la fenêtre : on le retire en premier.
+            TitleText.Visibility = !ThemeState.IsModern && !compact ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private bool _reloginPromptShowing;
+
+        /// <summary>Déclenché une seule fois par invalidation réelle de session (voir
+        /// SoundLibraryService.SendAsync) — ouvre Paramètres directement sur la page Discord
+        /// pour reconnecter, en évitant les invites en double si plusieurs appels échouent
+        /// avant que l'utilisateur ait eu le temps de réagir.</summary>
+        private void OnSessionInvalidated()
+        {
+            if (_reloginPromptShowing) return;
+            _reloginPromptShowing = true;
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    ToastService.Show("Votre connexion Discord a expiré — reconnectez-vous dans Paramètres.", ToastKind.Warning);
+                    var window = new SettingsWindow(_library.Settings, _library, initialPage: "Discord") { Owner = this };
+                    window.ShowDialog();
+                }
+                finally
+                {
+                    _reloginPromptShowing = false;
+                }
+            });
+        }
+
+        // ---------- Lien de connexion waseboard:// ----------
+
+        private const int WM_COPYDATA = 0x004A;
+        // Doit correspondre à App.DeepLinkMessageTag — sert juste à reconnaître nos propres
+        // messages WM_COPYDATA parmi d'éventuels autres envoyés à cette fenêtre.
+        private const int DeepLinkMessageTag = 0x5742;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct COPYDATASTRUCT
+        {
+            public IntPtr dwData;
+            public int cbData;
+            public IntPtr lpData;
+        }
+
+        /// <summary>Reçoit le lien envoyé par une seconde tentative de lancement (voir
+        /// App.OnStartup/SendDeepLinkTo) pendant que cette instance est déjà ouverte.</summary>
+        private IntPtr DeepLinkHwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_COPYDATA)
+            {
+                var cds = Marshal.PtrToStructure<COPYDATASTRUCT>(lParam);
+                if (cds.dwData == (IntPtr)DeepLinkMessageTag)
+                {
+                    var uri = Marshal.PtrToStringUni(cds.lpData);
+                    if (!string.IsNullOrEmpty(uri))
+                        _ = ApplyDeepLinkAsync(uri, isRuntimeTrigger: true);
+                    handled = true;
+                }
+            }
+            return IntPtr.Zero;
+        }
+
+        /// <summary>Applique un lien waseboard://connect?url=...&amp;token=... — pré-remplit
+        /// silencieusement si l'app n'était pas encore configurée (l'onboarding qui suit sert de
+        /// confirmation visuelle), ou demande une confirmation explicite sinon (un tel lien peut
+        /// en théorie être déclenché par n'importe quelle page/appli sur la machine).</summary>
+        private async Task ApplyDeepLinkAsync(string uri, bool isRuntimeTrigger)
+        {
+            // Une autre fenêtre modale (Paramètres, sélecteur de guilde à l'upload, découpe
+            // audio...) est déjà ouverte : ne pas empiler une confirmation par-dessus, ce serait
+            // visuellement confus et pourrait se perdre derrière la fenêtre active. On prévient
+            // et on abandonne — l'utilisateur peut recliquer le lien une fois libre.
+            if (Application.Current.Windows.Cast<Window>().Any(w => w != this && w.IsVisible))
+            {
+                ToastService.Show(
+                    "Lien de connexion WaseBoard reçu — terminez d'abord l'action en cours, puis recliquez le lien.",
+                    ToastKind.Warning);
+                return;
+            }
+
+            string? url = null, token = null;
+            try
+            {
+                var parsed = new Uri(uri);
+                foreach (var pair in parsed.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var kv = pair.Split('=', 2);
+                    if (kv.Length != 2) continue;
+                    if (kv[0] == "url") url = Uri.UnescapeDataString(kv[1]);
+                    else if (kv[0] == "token") token = Uri.UnescapeDataString(kv[1]);
+                }
+            }
+            catch { /* lien malformé : ignoré, pas une raison de planter */ }
+
+            if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
+            {
+                ToastService.Show("Lien de connexion WaseBoard invalide ou incomplet.", ToastKind.Warning);
+                return;
+            }
+
+            var isFreshInstall = string.IsNullOrEmpty(_library.Settings.ServerUrl) || !_library.Settings.HasSeenOnboarding;
+            if (!isFreshInstall)
+            {
+                var confirmed = ConfirmDialog.Show(this,
+                    $"Se connecter à un nouveau serveur WaseBoard ?\n\n{url}\n\nVos réglages de connexion actuels seront remplacés.");
+                if (!confirmed) return;
+
+                // Les fichiers en cache appartiennent à l'ancien serveur — plus valides une fois
+                // qu'on en change (et un ID de son pourrait en théorie se recouper entre deux
+                // instances différentes).
+                _library.ClearLocalCache();
+            }
+
+            _library.Settings.ServerUrl = url;
+            _library.Settings.ServerToken = token;
+            _library.Settings.DiscordSessionToken = null;
+            _library.Settings.DiscordUserId = null;
+            _library.Settings.DiscordUsername = null;
+            _library.Settings.DiscordAvatarUrl = null;
+            _library.SaveSettings();
+
+            if (isRuntimeTrigger)
+            {
+                var onboarding = new OnboardingWindow(_library.Settings, _library) { Owner = this };
+                onboarding.ShowDialog();
+                _library.Settings.HasSeenOnboarding = true;
+                _library.SaveSettings();
+                await RefreshCatalogAsync();
+                await RefreshSharedCategoriesAsync();
+                await RefreshVoiceStatusAsync();
+            }
+            // Sinon (reçu avant que Window_Loaded ait fini) : le bloc d'onboarding normal juste
+            // après s'en charge déjà, pas besoin de dupliquer la logique ici.
         }
 
         /// <summary>
@@ -309,25 +479,29 @@ namespace WaseBoard
         /// </summary>
         private async Task RefreshVoiceStatusAsync()
         {
-            if (string.IsNullOrEmpty(_library.Settings.DiscordUserId))
+            if (string.IsNullOrEmpty(_library.Settings.DiscordSessionToken))
             {
-                SidebarConnectionText.Text = "🔴 Identité Discord non configurée";
+                SidebarConnectionText.Text = "🔴 Non connecté à Discord";
+                SidebarConnectionText.ToolTip = null;
                 VoiceChannelMembers.Clear();
                 return;
             }
 
-            var (connected, channel, guildName, channelMembers, error) = await _library.GetLiveVoiceStatusAsync();
+            var (connected, channel, _, guildName, channelMembers, error) = await _library.GetLiveVoiceStatusAsync();
             var who = _library.Settings.DiscordUsername ?? "vous";
 
+            // Une seule ligne dans la barre latérale (le détail complet est dans l'infobulle).
             if (error is not null)
             {
-                SidebarConnectionText.Text = $"⚠️ Statut indisponible : {error}";
+                SidebarConnectionText.Text = "⚠️ Statut indisponible";
+                SidebarConnectionText.ToolTip = error;
             }
             else
             {
-                SidebarConnectionText.Text = connected
-                    ? $"🟢 {who} — en vocal sur {guildName}\n({channel})"
-                    : $"⚪ {who} — le bot n'est pas dans votre salon vocal";
+                SidebarConnectionText.Text = connected ? $"🟢 {guildName} · {channel}" : "⚪ Bot absent de votre vocal";
+                SidebarConnectionText.ToolTip = connected
+                    ? $"{who} — en vocal sur {guildName} ({channel})"
+                    : $"{who} — le bot n'est pas dans votre salon vocal : cliquez sur « Vocal » pour qu'il vous rejoigne.";
             }
 
             var currentIds = VoiceChannelMembers.Select(m => m.UserId).ToHashSet();
@@ -369,6 +543,9 @@ namespace WaseBoard
         }
 
         private void NavHome_Click(object sender, RoutedEventArgs e) => SectionsScrollViewer.ScrollToTop();
+
+        /// <summary>« ★ Favoris » : la section Favoris est toujours la première affichée.</summary>
+        private void NavFavorites_Click(object sender, RoutedEventArgs e) => ScrollToSectionIndex(0);
 
         private void NavItem_Click(object sender, RoutedEventArgs e)
         {
@@ -439,9 +616,8 @@ namespace WaseBoard
 
             var visibility = _sidebarCollapsed ? Visibility.Collapsed : Visibility.Visible;
             SidebarHeaderText.Visibility = visibility;
-            SidebarHomeButton.Visibility = visibility;
-            SidebarNavScroll.Visibility = visibility;
-            SidebarFooter.Visibility = visibility;
+            SidebarBody.Visibility = visibility;
+            ApplyToolbarDensity();
         }
 
         private async Task RefreshCatalogAsync()
@@ -483,9 +659,14 @@ namespace WaseBoard
                 {
                     var localPath = await _library.GetOrDownloadCachedFileAsync(item);
                     if (localPath is null) return;
-                    var peaks = await Task.Run(() =>
+                    var mini = await Task.Run(() =>
                         AudioTrimService.GetOrComputeMiniWaveform(item.Id, localPath, _library.CacheFolder));
-                    if (peaks is not null) item.WaveformPeaks = peaks;
+                    if (mini is not null)
+                    {
+                        // La durée du fichier COMPLET situe la portion gardée d'un son découpé sur sa waveform.
+                        item.DurationMs = mini.DurationMs;
+                        item.WaveformPeaks = mini.Peaks;
+                    }
                 }
                 finally { throttle.Release(); }
             });
@@ -535,7 +716,6 @@ namespace WaseBoard
         private async Task PollActivityAsync()
         {
             var (activity, online) = await _library.GetActivityAsync();
-
             foreach (var item in Sounds)
             {
                 if (activity.TryGetValue(item.Id, out var users))
@@ -608,7 +788,7 @@ namespace WaseBoard
             RefreshSections();
         }
 
-        /// <summary>Reconstruit les sections affichées (★ Favoris, catégories perso/partagées, Tous les sons), en appliquant la recherche en cours.</summary>
+        /// <summary>Reconstruit les sections affichées (★ Favoris, catégories personnelles, une par guilde Discord), en appliquant la recherche en cours.</summary>
         private void RefreshSections()
         {
             IEnumerable<SoundItem> Filtered(IEnumerable<SoundItem> src) =>
@@ -649,54 +829,82 @@ namespace WaseBoard
                 var shared = _sharedCategories.FirstOrDefault(s => s.GuildId == key);
                 if (shared is null) continue;
 
+                // Section native de la guilde : union des sons dont c'est la guilde d'origine
+                // ET de ceux partagés manuellement dans sa catégorie (shared_categories.json) —
+                // remplace l'ancienne vue "partagés uniquement", cohérent avec le filtrage serveur.
                 var idSet = new HashSet<string>(shared.SoundIds);
+                var guildSounds = Sounds.Where(s => s.GuildId == shared.GuildId || idSet.Contains(s.Id));
                 sections.Add(new SectionViewModel
                 {
                     Name = "🌐 " + shared.GuildName,
                     CategoryKey = shared.GuildId,
-                    Sounds = new ObservableCollection<SoundItem>(Filtered(Sounds.Where(s => idSet.Contains(s.Id)))),
+                    Sounds = new ObservableCollection<SoundItem>(SortAllSounds(Filtered(guildSounds))),
                     IsManageable = false, // catégorie automatique : pas de renommage/suppression manuel
                     IsShared = true,
                     IsReorderable = true,
+                    IsAllSounds = true, // affiche le sélecteur de tri dans l'en-tête
                     IconUrl = shared.IconUrl,
                     IsExpanded = !_library.Settings.CollapsedSections.Contains(shared.GuildId)
                 });
             }
-
-            sections.Add(new SectionViewModel
-            {
-                Name = "Tous les sons",
-                CategoryKey = AllSoundsKey,
-                Sounds = new ObservableCollection<SoundItem>(SortAllSounds(Filtered(Sounds))),
-                IsManageable = false,
-                IsAllSounds = true,
-                IsExpanded = true // toujours ouverte
-            });
 
             _currentSections = sections;
             SectionsItemsControl.ItemsSource = sections;
 
             // Navigation de la barre latérale : une entrée par section réellement affichée. Pour
             // les catégories partagées, l'icône du serveur Discord remplace l'emoji 🌐 générique.
-            SidebarNavItemsControl.ItemsSource = sections
+            // Favoris a son propre bouton (à côté d'Accueil) : seules les catégories et les serveurs ont des groupes.
+            var navItems = sections
                 .Select((s, i) =>
                 {
                     var iconUrl = s.IsShared ? _sharedCategories.FirstOrDefault(sc => sc.GuildId == s.CategoryKey)?.IconUrl : null;
-                    return new NavItem
+                    return (Section: s, Item: new NavItem
                     {
                         Label = iconUrl is not null ? StripSharedPrefix(s.Name) : s.Name,
                         IconUrl = iconUrl,
                         Index = i,
                         CategoryKey = s.CategoryKey,
                         IsReorderable = s.IsReorderable
-                    };
+                    });
                 })
+                .Where(t => t.Section.CategoryKey != FavoritesKey)
                 .ToList();
+
+            var categories = navItems.Where(t => !t.Section.IsShared).Select(t => t.Item).ToList();
+            var servers = navItems.Where(t => t.Section.IsShared).Select(t => t.Item).ToList();
+            SidebarCategoriesList.ItemsSource = categories;
+            SidebarServersList.ItemsSource = servers;
+
+            // Un groupe vide n'apparaît pas ; l'état replié/déplié est mémorisé (CollapsedSections, comme les sections).
+            _updatingNavGroups = true;
+            NavCategoriesCount.Text = categories.Count.ToString();
+            NavServersCount.Text = servers.Count.ToString();
+            NavCategoriesGroup.Visibility = categories.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            NavServersGroup.Visibility = servers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            NavCategoriesToggle.IsChecked = !_library.Settings.CollapsedSections.Contains(NavCategoriesGroupKey);
+            NavServersToggle.IsChecked = !_library.Settings.CollapsedSections.Contains(NavServersGroupKey);
+            _updatingNavGroups = false;
         }
 
-        /// <summary>Tri appliqué uniquement à "Tous les sons" (la seule section vouée à devenir
-        /// vraiment longue) : "Custom" garde l'ordre d'affichage actuel (glisser-déposer manuel,
-        /// celui de Sounds), les autres trient par nom. Choix mémorisé (Settings.AllSoundsSortMode).</summary>
+        private const string NavCategoriesGroupKey = "__nav_categories__";
+        private const string NavServersGroupKey = "__nav_servers__";
+        private bool _updatingNavGroups;
+
+        private void NavGroupToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            // _settingsReady : ce gestionnaire se déclenche aussi pendant InitializeComponent(), avant le chargement des réglages.
+            if (!_settingsReady || _updatingNavGroups || sender is not ToggleButton toggle) return;
+
+            var key = ReferenceEquals(toggle, NavCategoriesToggle) ? NavCategoriesGroupKey : NavServersGroupKey;
+            var collapsed = _library.Settings.CollapsedSections;
+            if (toggle.IsChecked == true) collapsed.Remove(key);
+            else if (!collapsed.Contains(key)) collapsed.Add(key);
+            _library.SaveSettings();
+        }
+
+        /// <summary>Tri appliqué à chaque section de guilde (les seules vouées à devenir vraiment
+        /// longues) : "Custom" garde l'ordre d'affichage actuel (glisser-déposer manuel, celui de
+        /// Sounds), les autres trient par nom. Choix mémorisé (Settings.AllSoundsSortMode).</summary>
         private static IEnumerable<SoundItem> SortAllSounds(IEnumerable<SoundItem> sounds, string sortMode) => sortMode switch
         {
             "NameAsc" => sounds.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase),
@@ -769,6 +977,45 @@ namespace WaseBoard
 
         private async Task AddSoundFiles(IEnumerable<string> filePaths)
         {
+            string? guildId;
+            if (_sharedCategories.Count == 0)
+            {
+                ToastService.Show(
+                    "Impossible d'ajouter un son : vous ne semblez membre d'aucun serveur Discord où WaseBoard est installé.",
+                    ToastKind.Error);
+                return;
+            }
+
+            // Seuls les serveurs où l'upload est permis (pas réservé aux admins, pas bloqué) sont proposés.
+            var uploadableGuilds = _sharedCategories.Where(s => s.CanUpload).ToList();
+            if (uploadableGuilds.Count == 0)
+            {
+                ToastService.Show(
+                    "Vous ne pouvez ajouter de sons sur aucun de vos serveurs : l'ajout y est réservé aux administrateurs, ou votre accès a été retiré.",
+                    ToastKind.Warning);
+                return;
+            }
+            else if (uploadableGuilds.Count == 1)
+            {
+                guildId = uploadableGuilds[0].GuildId;
+            }
+            else
+            {
+                // Présélectionne le serveur où l'utilisateur est actuellement connecté en vocal
+                // (le cas le plus probable), les autres restant choisissables dans la liste.
+                var (_, _, currentGuildId, _, _, _) = await _library.GetLiveVoiceStatusAsync();
+                var guildPicker = new GuildPickerWindow(uploadableGuilds, currentGuildId) { Owner = this };
+                if (guildPicker.ShowDialog() != true || guildPicker.ResultGuildId is null) return;
+                guildId = guildPicker.ResultGuildId;
+            }
+
+            // Détection de doublons scopée à la guilde ciblée : un son identique existant dans une
+            // autre guilde (que l'utilisateur ne partage pas forcément avec tout le monde) ne doit
+            // pas être signalé comme doublon ici.
+            var targetGuildSharedIds = new HashSet<string>(
+                _sharedCategories.FirstOrDefault(s => s.GuildId == guildId)?.SoundIds ?? new List<string>());
+            var soundsInTargetGuild = Sounds.Where(s => s.GuildId == guildId || targetGuildSharedIds.Contains(s.Id)).ToList();
+
             var rejected = new List<string>();
 
             foreach (var file in filePaths)
@@ -783,60 +1030,39 @@ namespace WaseBoard
                 var suggestedName = Path.GetFileNameWithoutExtension(file);
                 var trimWindow = new TrimWindow(file, suggestedName) { Owner = this };
 
-                if (trimWindow.ShowDialog() != true || trimWindow.ResultFilePath is null)
+                if (trimWindow.ShowDialog() != true)
                     continue;
 
-                void CleanupTempFile()
-                {
-                    if (trimWindow.ResultIsTemporaryFile && File.Exists(trimWindow.ResultFilePath))
-                    {
-                        try { File.Delete(trimWindow.ResultFilePath); } catch { /* fichier temporaire, non bloquant */ }
-                    }
-                }
-
-                // Détection de doublons : hash du fichier final contre le catalogue existant ; à
-                // défaut, un même nom reste un signal plus faible, remonté différemment.
-                var contentHash = SoundLibraryService.ComputeFileHash(trimWindow.ResultFilePath);
-                var hashMatch = Sounds.FirstOrDefault(s => s.ContentHash is not null && s.ContentHash == contentHash);
+                // Détection de doublons : hash du fichier SOURCE (le serveur garde le son complet, la découpe n'est
+                // qu'un repère) contre le catalogue existant ; à défaut, un même nom reste un signal plus faible.
+                var contentHash = SoundLibraryService.ComputeFileHash(file);
+                var hashMatch = soundsInTargetGuild.FirstOrDefault(s => s.ContentHash is not null && s.ContentHash == contentHash);
                 var nameMatch = hashMatch is null
-                    ? Sounds.FirstOrDefault(s => string.Equals(s.Name, trimWindow.ResultName, StringComparison.OrdinalIgnoreCase))
+                    ? soundsInTargetGuild.FirstOrDefault(s => string.Equals(s.Name, trimWindow.ResultName, StringComparison.OrdinalIgnoreCase))
                     : null;
 
                 if (hashMatch is not null)
                 {
                     var proceed = ConfirmDialog.Show(this,
-                        $"Ce fichier est identique à « {hashMatch.Name} », déjà présent dans le catalogue. L'ajouter quand même ?");
-                    if (!proceed) { CleanupTempFile(); continue; }
+                        $"Ce fichier est identique à « {hashMatch.Name} », déjà présent dans le catalogue.\n" +
+                        "Pour une autre portion du même son, vous pouvez aussi recouper l'existant (clic droit › Redécouper).\nL'ajouter quand même ?");
+                    if (!proceed) continue;
                 }
                 else if (nameMatch is not null)
                 {
                     var proceed = ConfirmDialog.Show(this,
                         $"Un son nommé « {nameMatch.Name} » existe déjà (contenu différent). L'ajouter quand même ?");
-                    if (!proceed) { CleanupTempFile(); continue; }
+                    if (!proceed) continue;
                 }
 
-                var uploaded = await _library.UploadSoundAsync(trimWindow.ResultFilePath, trimWindow.ResultName);
-                CleanupTempFile();
+                // Fichier original + portion gardée + emoji, en un seul appel (plus de 2ᵉ fenêtre d'emoji après l'envoi).
+                var uploaded = await _library.UploadSoundAsync(file, trimWindow.ResultName, guildId,
+                    trimWindow.ResultTrimStartMs, trimWindow.ResultTrimEndMs, trimWindow.ResultEmoji);
 
                 if (uploaded is not null)
                 {
                     Sounds.Add(uploaded);
                     RegisterHotkeyFor(uploaded);
-
-                    // Emoji obligatoire à l'ajout, partagé entre tous les utilisateurs : ne peut
-                    // s'appliquer qu'une fois le son réellement uploadé (id connu) — impossible de
-                    // le demander avant l'envoi au serveur.
-                    var picker = new EmojiPickerWindow(null, required: true) { Owner = this };
-                    if (picker.ShowDialog() == true && !string.IsNullOrEmpty(picker.Result))
-                    {
-                        var emojiOk = await _library.SetEmojiAsync(uploaded, picker.Result);
-                        if (!emojiOk)
-                        {
-                            ToastService.Show(
-                                "Échec de l'assignation de l'emoji." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                                ToastKind.Warning);
-                        }
-                    }
                 }
                 else
                 {
@@ -889,12 +1115,15 @@ namespace WaseBoard
                 catItem.Click += (_, _) => { _library.AddSoundToCategory(categoryName, item); RefreshSections(); };
                 categoryMenu.Items.Add(catItem);
             }
-            foreach (var shared in _sharedCategories)
+            // Une catégorie partagée n'accepte que les sons de leur auteur, ou n'importe lesquels si
+            // vous êtes admin de ce serveur : les autres entrées ne sont simplement pas proposées.
+            foreach (var shared in _sharedCategories.Where(s => CanShareTo(s, item)))
             {
                 var catItem = new MenuItem { Header = "🌐 " + shared.GuildName };
                 catItem.Click += async (_, _) =>
                 {
-                    await _library.SetSharedCategorySoundAsync(shared.GuildId, item, true);
+                    if (!await _library.SetSharedCategorySoundAsync(shared.GuildId, item, true))
+                        ToastService.Show("Ajout à la catégorie impossible. " + _library.LastErrorDetail, ToastKind.Warning);
                     await RefreshSharedCategoriesAsync();
                 };
                 categoryMenu.Items.Add(catItem);
@@ -956,6 +1185,9 @@ namespace WaseBoard
                 }
             };
 
+            var retrimItem = new MenuItem { Header = item.IsTrimmed ? "✂ Redécouper…" : "✂ Découper…" };
+            retrimItem.Click += async (_, _) => await EditSoundAsync(item);
+
             var hotkeyItem = new MenuItem { Header = string.IsNullOrEmpty(item.Hotkey) ? "Définir un raccourci..." : $"Modifier le raccourci ({item.Hotkey})" };
             hotkeyItem.Click += (_, _) => AssignHotkey(item);
 
@@ -969,7 +1201,8 @@ namespace WaseBoard
             var deleteItem = new MenuItem { Header = "Supprimer" };
             deleteItem.Click += async (_, _) =>
             {
-                var confirm = ConfirmDialog.Show(this, $"Supprimer « {item.Name} » du catalogue partagé ?");
+                var confirm = ConfirmDialog.Show(this,
+                    $"Supprimer « {item.Name} » du catalogue partagé ?\nUn administrateur du serveur pourra le restaurer depuis la corbeille.");
                 if (!confirm) return;
 
                 var ok = await _library.DeleteSoundAsync(item);
@@ -981,7 +1214,12 @@ namespace WaseBoard
                     ResyncHotkeys();
                     RefreshSections();
                 }
-                else ToastService.Show("Suppression échouée.", ToastKind.Warning);
+                else
+                {
+                    ToastService.Show(
+                        "Suppression échouée." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                        ToastKind.Warning);
+                }
             };
 
             menu.Items.Add(favoriteItem);
@@ -991,7 +1229,13 @@ namespace WaseBoard
             // retrouvée en remontant l'arbre visuel jusqu'au conteneur de la section — un même
             // son étant potentiellement affiché dans plusieurs sections à la fois.
             var section = FindEnclosingSection(button);
-            if (section is not null && section.CategoryKey != AllSoundsKey && section.CategoryKey != FavoritesKey)
+            // Pas de "Retirer" pour un son dans sa guilde d'origine : ce n'est pas un ajout
+            // manuel à retirer (voir Supprimer, plus bas, pour l'effacer réellement). Dans une
+            // catégorie partagée, seuls l'auteur du son ou un admin du serveur peuvent le retirer.
+            var isNativeToGuildSection = section is not null && section.IsShared && item.GuildId == section.CategoryKey;
+            var canRemoveFromSection = section is not null
+                && (!section.IsShared || CanShareTo(_sharedCategories.FirstOrDefault(s => s.GuildId == section.CategoryKey), item));
+            if (section is not null && !isNativeToGuildSection && canRemoveFromSection && section.CategoryKey != FavoritesKey)
             {
                 var label = section.IsShared
                     ? $"Retirer de « {StripSharedPrefix(section.Name)} » (partagée)"
@@ -1002,7 +1246,8 @@ namespace WaseBoard
                 {
                     if (section.IsShared)
                     {
-                        await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, false);
+                        if (!await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, false))
+                            ToastService.Show("Retrait de la catégorie impossible. " + _library.LastErrorDetail, ToastKind.Warning);
                         await RefreshSharedCategoriesAsync();
                     }
                     else
@@ -1014,15 +1259,66 @@ namespace WaseBoard
                 menu.Items.Add(removeFromSectionItem);
             }
 
-            menu.Items.Add(emojiItem);
-            menu.Items.Add(removeEmojiItem);
-            menu.Items.Add(renameItem);
+            // Emoji, nom et suppression sont des données PARTAGÉES du catalogue : réservés à
+            // l'auteur du son et aux admins de sa guilde (le serveur le re-vérifie de toute façon).
+            if (item.CanEdit)
+            {
+                menu.Items.Add(emojiItem);
+                menu.Items.Add(removeEmojiItem);
+                menu.Items.Add(renameItem);
+                menu.Items.Add(retrimItem);
+            }
             menu.Items.Add(hotkeyItem);
             menu.Items.Add(removeHotkeyItem);
-            menu.Items.Add(new Separator());
-            menu.Items.Add(deleteItem);
+            if (item.CanEdit)
+            {
+                menu.Items.Add(new Separator());
+                menu.Items.Add(deleteItem);
+            }
             menu.IsOpen = true;
         }
+
+        /// <summary>« Redécouper… » : rouvre la fenêtre de découpe sur le son COMPLET (gardé par le serveur) avec la portion
+        /// actuelle déjà placée ; nom et emoji sont modifiables au passage. Un seul appel au serveur pour tout enregistrer.</summary>
+        private async Task EditSoundAsync(SoundItem item)
+        {
+            var localPath = await _library.GetOrDownloadCachedFileAsync(item);
+            if (localPath is null)
+            {
+                ToastService.Show(
+                    "Impossible de charger le son complet." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    ToastKind.Warning);
+                return;
+            }
+
+            TimeSpan? start = item.TrimStartMs is { } s ? TimeSpan.FromMilliseconds(s) : null;
+            TimeSpan? end = item.TrimEndMs is { } e ? TimeSpan.FromMilliseconds(e) : null;
+            var window = new TrimWindow(localPath, item.Name, TrimWindowMode.Edit, start, end, item.Emoji) { Owner = this };
+            if (window.ShowDialog() != true) return;
+
+            var newName = window.ResultName != item.Name ? window.ResultName : null;
+            var newEmoji = window.ResultEmoji != (item.Emoji ?? "") ? window.ResultEmoji : null;
+            var trimChanged = window.ResultTrimStartMs != item.TrimStartMs || window.ResultTrimEndMs != item.TrimEndMs;
+            (int?, int?)? newTrim = trimChanged ? (window.ResultTrimStartMs, window.ResultTrimEndMs) : null;
+            if (newName is null && newEmoji is null && newTrim is null) return;
+
+            if (await _library.UpdateSoundDetailsAsync(item, newName, newEmoji, newTrim))
+            {
+                RefreshSections();
+                ToastService.Show($"« {item.Name} » mis à jour.", ToastKind.Success);
+            }
+            else
+            {
+                ToastService.Show(
+                    "Modification échouée." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    ToastKind.Warning);
+            }
+        }
+
+        /// <summary>Peut-on ajouter/retirer ce son à la catégorie partagée de ce serveur ? Oui pour son
+        /// auteur, ou pour un admin de ce serveur (même règle que le serveur, qui fait foi).</summary>
+        private static bool CanShareTo(SoundLibraryService.SharedCategoryInfo? shared, SoundItem item) =>
+            shared is not null && (shared.IsAdmin || item.IsMine);
 
         /// <summary>Retire le préfixe "🌐 " des noms de catégories partagées (ex: quand une icône Discord réelle le remplace visuellement).
         /// En chaîne plutôt qu'en char : l'emoji 🌐 occupe deux unités UTF-16 (paire de substituts) et ne tient pas dans un seul char.</summary>
@@ -1200,9 +1496,11 @@ namespace WaseBoard
 
             // Déjà membre ? Le survol a déjà tout réordonné (SoundButton_DragOver) ; reconstruire
             // casserait l'animation. Seul un nouveau classement nécessite RefreshSections().
-            var wasAlreadyMember = section.CategoryKey == AllSoundsKey || section.Sounds.Contains(draggedItem);
+            var wasAlreadyMember = section.Sounds.Contains(draggedItem);
 
-            await ApplySectionMembership(section, draggedItem);
+            // Déjà membre : aucun classement à refaire (et pas de vérification de droits à déclencher
+            // juste pour avoir réordonné un son dans sa propre catégorie).
+            if (!wasAlreadyMember) await ApplySectionMembership(section, draggedItem);
             _library.SaveSoundOrder(Sounds);
             ClearDragOverHighlight();
             e.Handled = true;
@@ -1218,10 +1516,19 @@ namespace WaseBoard
             }
             else if (section.IsShared)
             {
-                await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, true);
+                if (!CanShareTo(_sharedCategories.FirstOrDefault(s => s.GuildId == section.CategoryKey), item))
+                {
+                    ToastService.Show(
+                        "Seuls l'auteur du son ou un administrateur du serveur peuvent l'ajouter à cette catégorie.",
+                        ToastKind.Warning);
+                    return;
+                }
+
+                if (!await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, true))
+                    ToastService.Show("Ajout à la catégorie impossible. " + _library.LastErrorDetail, ToastKind.Warning);
                 _sharedCategories = await _library.FetchSharedCategoriesAsync();
             }
-            else if (section.CategoryKey != AllSoundsKey)
+            else
             {
                 _library.AddSoundToCategory(section.CategoryKey, item);
             }
@@ -1346,15 +1653,6 @@ namespace WaseBoard
         private void Section_Collapsed(object sender, RoutedEventArgs e)
         {
             if (sender is not Expander expander) return;
-
-            // "Tous les sons" reste toujours ouverte (potentiellement très longue liste, pas
-            // d'intérêt à la replier) : on annule immédiatement le repli au lieu de le persister.
-            // "Favoris", elle, est repliable comme n'importe quelle autre catégorie.
-            if (expander.Tag is string key0 && key0 == AllSoundsKey)
-            {
-                expander.IsExpanded = true;
-                return;
-            }
 
             if (expander.Tag is string key && !_library.Settings.CollapsedSections.Contains(key))
             {
@@ -1584,7 +1882,13 @@ namespace WaseBoard
 
         private async Task PlayAndPollAsync(SoundItem item)
         {
-            await _library.PlayOnServerAsync(item.Id, item.Volume);
+            var ok = await _library.PlayOnServerAsync(item.Id, item.Volume);
+            if (!ok)
+            {
+                ToastService.Show(
+                    $"Impossible de jouer « {item.Name} »." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    ToastKind.Error);
+            }
             await PollActivityAsync();
         }
 
@@ -1600,7 +1904,10 @@ namespace WaseBoard
             if (defaultDevice is null) return;
 
             var volume = item.Volume * _library.Settings.LocalPlaybackVolume;
-            _audio.PlaySound(item.Id, localPath, new[] { new AudioPlaybackService.PlaybackTarget(defaultDevice, volume) });
+            // Le fichier en cache est le son COMPLET : un son découpé ne joue que sa portion gardée, comme sur le serveur.
+            TimeSpan? trimStart = item.TrimStartMs is { } startMs ? TimeSpan.FromMilliseconds(startMs) : null;
+            TimeSpan? trimEnd = item.TrimEndMs is { } endMs ? TimeSpan.FromMilliseconds(endMs) : null;
+            _audio.PlaySound(item.Id, localPath, new[] { new AudioPlaybackService.PlaybackTarget(defaultDevice, volume) }, trimStart, trimEnd);
         }
 
         /// <summary>Coupe la lecture locale ET tous les sons actuellement mixés côté serveur (dans le salon où vous êtes).</summary>
@@ -1621,7 +1928,10 @@ namespace WaseBoard
 
         private async void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
-            var window = new SettingsWindow(_library.Settings, _library) { Owner = this };
+            // Le panel d'administration s'ouvre depuis les Paramètres, et n'y apparaît que si l'on
+            // administre au moins un serveur (le serveur re-vérifie de toute façon chaque requête).
+            var adminGuilds = _sharedCategories.Where(s => s.IsAdmin).ToList();
+            var window = new SettingsWindow(_library.Settings, _library, adminGuilds: adminGuilds, knownSounds: Sounds) { Owner = this };
             if (window.ShowDialog() == true)
             {
                 _library.SaveSettings();
@@ -1629,8 +1939,14 @@ namespace WaseBoard
                 ApplyTheme();
                 await RefreshCatalogAsync();
                 await RefreshSharedCategoriesAsync();
-                await CacheMyUsernameAsync();
                 await RefreshVoiceStatusAsync();
+            }
+            else if (window.AdminCatalogChanged)
+            {
+                // Sons renommés/supprimés/restaurés depuis le panel d'administration, sans avoir
+                // enregistré les Paramètres : le catalogue affiché doit quand même être rechargé.
+                await RefreshCatalogAsync();
+                await RefreshSharedCategoriesAsync();
             }
         }
 

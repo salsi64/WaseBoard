@@ -1,0 +1,88 @@
+# Serveur WaseBoard — lancement : `./setup.sh` (Linux/macOS) ou `.\setup.ps1` (Windows) écrit le fichier .env
+# puis démarre tout. Ensuite : `docker compose up -d` (démarrer / appliquer un changement), `docker compose logs -f waseboard`.
+#
+# Services :
+#   waseboard  le serveur (toujours)
+#   caddy      HTTPS automatique (Let's Encrypt) devant le serveur — profil « https »
+#   duckdns    garde un sous-domaine DuckDNS à jour — profil « duckdns » (facultatif)
+#   caddy-cloudflare  HTTPS automatique avec un domaine géré par Cloudflare (validation DNS : pas de port 80) — profil « cloudflare »
+#   cloudflare-ddns   garde l'enregistrement DNS Cloudflare à jour avec l'IP publique — profil « cloudflare-ddns » (facultatif)
+# Les profils actifs sont choisis par COMPOSE_PROFILES dans .env (écrit par l'assistant).
+name: waseboard
+
+services:
+  waseboard:
+    build: .
+    image: waseboard-server:local
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      # Par défaut visible seulement depuis cette machine (Caddy y accède par le réseau Docker). L'assistant met
+      # WASEBOARD_BIND=0.0.0.0 pour un usage en réseau local sans HTTPS.
+      - "${WASEBOARD_BIND:-127.0.0.1}:${WASEBOARD_PORT:-5005}:5005"
+    volumes:
+      - waseboard-data:/data
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["https"]
+    restart: unless-stopped
+    depends_on:
+      - waseboard
+    environment:
+      WASEBOARD_DOMAIN: ${WASEBOARD_DOMAIN:-}
+    ports:
+      - "80:80"    # nécessaire à Let's Encrypt (validation du domaine) et à la redirection vers HTTPS
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # certificats : à conserver
+      - caddy-config:/config
+
+  caddy-cloudflare:
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy-cloudflare
+    image: waseboard-caddy-cloudflare:local
+    profiles: ["cloudflare"]
+    restart: unless-stopped
+    depends_on:
+      - waseboard
+    environment:
+      WASEBOARD_DOMAIN: ${WASEBOARD_DOMAIN:-}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+    ports:
+      # Seul le port HTTPS est nécessaire (la validation du certificat passe par l'API DNS). 443 par défaut ; un autre
+      # numéro (WASEBOARD_HTTPS_PORT) permet de cohabiter avec un serveur web existant : les clients utilisent alors
+      # https://votre-domaine:NUMERO.
+      - "${WASEBOARD_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile.cloudflare:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # certificats : à conserver
+      - caddy-config:/config
+
+  cloudflare-ddns:
+    image: favonia/cloudflare-ddns:latest
+    profiles: ["cloudflare-ddns"]
+    restart: unless-stopped
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      DOMAINS: ${WASEBOARD_DOMAIN:-}
+      PROXIED: "false"          # le trafic va directement à votre machine (pas via le proxy Cloudflare)
+      IP6_PROVIDER: none        # IPv4 seulement
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+
+  duckdns:
+    image: lscr.io/linuxserver/duckdns:latest
+    profiles: ["duckdns"]
+    restart: unless-stopped
+    environment:
+      SUBDOMAINS: ${DUCKDNS_SUBDOMAIN:-}
+      TOKEN: ${DUCKDNS_TOKEN:-}
+
+volumes:
+  waseboard-data:
+  caddy-data:
+  caddy-config:

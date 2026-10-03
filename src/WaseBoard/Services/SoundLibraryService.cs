@@ -14,7 +14,7 @@ namespace WaseBoard.Services
 {
     /// <summary>Client HTTP du serveur WaseBoard (catalogue, upload, lecture, activité partagée)
     /// et gestion des préférences locales (favoris, catégories, ordre, raccourcis, volumes).</summary>
-    public class SoundLibraryService
+    public partial class SoundLibraryService
     {
         private readonly string _appDataFolder;
         private readonly string _cacheFolder;
@@ -42,6 +42,57 @@ namespace WaseBoard.Services
             /// <summary>Emoji du son, partagé entre tous les utilisateurs (contrairement à
             /// favoris/catégories/volume/raccourcis, qui restent des préférences locales).</summary>
             public string? emoji { get; set; }
+
+            /// <summary>Guilde Discord d'origine (celle où ce son a été uploadé).</summary>
+            public string? guild_id { get; set; }
+
+            /// <summary>Id Discord de l'auteur ; absent sur les sons uploadés avant les rôles.</summary>
+            public string? uploaded_by { get; set; }
+
+            /// <summary>Calculés par le serveur pour la session qui demande le catalogue.</summary>
+            public bool is_mine { get; set; }
+            public bool can_edit { get; set; }
+
+            /// <summary>Portion gardée d'un son découpé (ms) : le fichier stocké est le son complet.
+            /// Absents = son entier (et tous les sons ajoutés avant les découpes non destructives).</summary>
+            public int? trim_start_ms { get; set; }
+            public int? trim_end_ms { get; set; }
+        }
+
+        private static SoundItem ToSoundItem(CatalogEntry entry) => new()
+        {
+            Id = entry.id,
+            Name = entry.name,
+            Extension = entry.extension,
+            ContentHash = entry.hash,
+            Emoji = string.IsNullOrEmpty(entry.emoji) ? null : entry.emoji,
+            GuildId = entry.guild_id,
+            UploadedBy = entry.uploaded_by,
+            IsMine = entry.is_mine,
+            CanEdit = entry.can_edit,
+            TrimStartMs = entry.trim_start_ms,
+            TrimEndMs = entry.trim_end_ms
+        };
+
+        /// <summary>Message d'erreur lisible d'une réponse serveur : le champ "error" du corps JSON s'il
+        /// existe (les refus de droits y expliquent le motif), sinon le texte de repli.</summary>
+        private static async Task<string> ReadServerErrorAsync(HttpResponseMessage response, string fallback)
+        {
+            try
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(body);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("error", out var error)
+                    && error.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(error.GetString()))
+                    return error.GetString()!;
+            }
+            catch
+            {
+                // Corps absent ou non JSON : on garde le texte de repli.
+            }
+            return fallback;
         }
 
         private class CatalogResponse
@@ -53,7 +104,7 @@ namespace WaseBoard.Services
         {
             _appDataFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "WaseBoard");
+                AppIdentity.DataFolderName);
             _cacheFolder = Path.Combine(_appDataFolder, "Cache");
             _settingsFilePath = Path.Combine(_appDataFolder, "settings.json");
 
@@ -62,7 +113,35 @@ namespace WaseBoard.Services
 
         // ---------- Réglages locaux ----------
 
+        // Faux tant que Load() n'a pas lu settings.json : SaveSettings() refuse alors d'écrire. Sans ce garde-fou,
+        // n'importe quel gestionnaire d'évènement déclenché pendant InitializeComponent() (case cochée par défaut,
+        // curseur...) qui sauvegarderait ÉCRASERAIT les vrais réglages par des valeurs par défaut — adresse du
+        // serveur, jetons, catégories, favoris perdus.
+        private bool _settingsLoaded;
+
         public void Load()
+        {
+            LoadFromDisk();
+            _settingsLoaded = true;
+            MigrateAppearance();
+        }
+
+        /// <summary>Première ouverture depuis l'arrivée des palettes (PaletteId absent) : adopte la palette
+        /// par défaut et désactive « suivre l'accent Windows » — par défaut à vrai jusque-là, il aurait
+        /// masqué l'accent de la nouvelle palette. Reste modifiable ensuite dans Paramètres > Apparence.</summary>
+        private void MigrateAppearance()
+        {
+            if (Settings.PaletteId is not null) return;
+            Settings.PaletteId = PalettePresets.DefaultId;
+            Settings.FollowSystemAccent = false;
+            // L'ancien écran d'Apparence enregistrait toujours le fond violet par défaut, même sans
+            // personnalisation : ce n'est pas un vrai choix, et il masquerait la nouvelle palette.
+            if (string.Equals(Settings.BackgroundColorHex, "#1E1E2E", StringComparison.OrdinalIgnoreCase))
+                Settings.BackgroundColorHex = null;
+            SaveSettings();
+        }
+
+        private void LoadFromDisk()
         {
             if (File.Exists(_settingsFilePath))
             {
@@ -70,6 +149,7 @@ namespace WaseBoard.Services
                 {
                     var json = File.ReadAllText(_settingsFilePath);
                     Settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                    ApplySecretsAfterLoad();
                     return;
                 }
                 catch
@@ -85,12 +165,54 @@ namespace WaseBoard.Services
             {
                 var backupJson = File.ReadAllText(backupPath);
                 Settings = JsonSerializer.Deserialize<AppSettings>(backupJson) ?? new AppSettings();
+                ApplySecretsAfterLoad();
             }
             catch { /* sauvegarde également illisible : on repart de réglages par défaut */ }
         }
 
+        /// <summary>Déchiffre les secrets persistés (DPAPI) dans les champs en mémoire, et migre
+        /// une éventuelle installation existante dont ServerToken était encore en clair — lu une
+        /// fois depuis l'ancien champ, puis immédiatement re-sauvegardé chiffré, sans quoi le
+        /// renommage du champ JSON aurait silencieusement perdu ce jeton pour tout le monde.</summary>
+        private void ApplySecretsAfterLoad()
+        {
+            var migrated = false;
+            if (string.IsNullOrEmpty(Settings.EncryptedServerToken) && !string.IsNullOrEmpty(Settings.LegacyServerTokenPlaintext))
+            {
+                Settings.ServerToken = Settings.LegacyServerTokenPlaintext;
+                migrated = true;
+            }
+            else
+            {
+                Settings.ServerToken = SecretProtector.Unprotect(Settings.EncryptedServerToken);
+            }
+            Settings.LegacyServerTokenPlaintext = null;
+
+            Settings.DiscordSessionToken = SecretProtector.Unprotect(Settings.EncryptedDiscordSessionToken);
+
+            if (migrated) SaveSettings();
+        }
+
+        /// <summary>Vide le cache local de fichiers audio téléchargés — à appeler quand on change
+        /// de serveur (ex: lien waseboard://connect vers une autre instance) : les fichiers mis en
+        /// cache appartiennent à l'ancien serveur et n'ont plus lieu d'être conservés (par ailleurs,
+        /// deux instances différentes pourraient en théorie réutiliser le même ID de son).</summary>
+        public void ClearLocalCache()
+        {
+            try
+            {
+                foreach (var file in Directory.GetFiles(_cacheFolder))
+                {
+                    try { File.Delete(file); } catch { /* best-effort, fichier verrouillé ou déjà supprimé */ }
+                }
+            }
+            catch { /* dossier inaccessible : rien de grave, juste de l'espace disque non libéré */ }
+        }
+
         public void SaveSettings()
         {
+            if (!_settingsLoaded) return; // réglages pas encore lus : écrire maintenant détruirait ceux du disque (voir _settingsLoaded)
+
             // Sauvegarde de secours (un seul niveau) avant d'écraser : en cas de perte de données
             // (ex: deux instances de l'app ouvertes en même temps, la dernière à sauvegarder
             // écrasant l'autre), settings.json.bak garde toujours l'état juste avant la dernière
@@ -100,6 +222,9 @@ namespace WaseBoard.Services
                 try { File.Copy(_settingsFilePath, _settingsFilePath + ".bak", overwrite: true); }
                 catch { /* best-effort, ne doit jamais empêcher l'enregistrement normal */ }
             }
+
+            Settings.EncryptedServerToken = SecretProtector.Protect(Settings.ServerToken);
+            Settings.EncryptedDiscordSessionToken = SecretProtector.Protect(Settings.DiscordSessionToken);
 
             var json = JsonSerializer.Serialize(Settings, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_settingsFilePath, json);
@@ -249,10 +374,10 @@ namespace WaseBoard.Services
                 var payload = JsonSerializer.Serialize(new { name = newName });
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-                using var response = await _http.SendAsync(request);
+                using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Renommage échoué ({(int)response.StatusCode}).";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Renommage échoué ({(int)response.StatusCode}).");
                     return false;
                 }
 
@@ -279,14 +404,51 @@ namespace WaseBoard.Services
                 var payload = JsonSerializer.Serialize(new { emoji = trimmed ?? "" });
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-                using var response = await _http.SendAsync(request);
+                using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Changement d'emoji échoué ({(int)response.StatusCode}).";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Changement d'emoji échoué ({(int)response.StatusCode}).");
                     return false;
                 }
 
                 item.Emoji = trimmed;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastErrorDetail = ex.Message;
+                return false;
+            }
+        }
+
+        /// <summary>Modifie en un seul appel le nom, l'emoji et/ou la portion gardée d'un son (fenêtre « Redécouper »).
+        /// `trim` : null = ne pas toucher à la découpe ; (null, null) = retirer la découpe (le son entier est toujours
+        /// là côté serveur) ; (début, fin) = nouvelle portion. Met à jour le SoundItem en cas de succès.</summary>
+        public async Task<bool> UpdateSoundDetailsAsync(SoundItem item, string? name, string? emoji,
+            (int? StartMs, int? EndMs)? trim)
+        {
+            LastErrorDetail = null;
+            var payload = new Dictionary<string, object?>();
+            if (name is not null) payload["name"] = name;
+            if (emoji is not null) payload["emoji"] = emoji;
+            if (trim is { } t) { payload["trim_start_ms"] = t.StartMs; payload["trim_end_ms"] = t.EndMs; }
+            if (payload.Count == 0) return true;
+
+            try
+            {
+                using var request = CreateRequest(HttpMethod.Patch, $"/sounds/{item.Id}");
+                request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+                using var response = await SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Modification échouée ({(int)response.StatusCode}).");
+                    return false;
+                }
+
+                if (name is not null) item.Name = name;
+                if (emoji is not null) item.Emoji = string.IsNullOrWhiteSpace(emoji) ? null : emoji.Trim();
+                if (trim is { } applied) { item.TrimStartMs = applied.StartMs; item.TrimEndMs = applied.EndMs; }
                 return true;
             }
             catch (Exception ex)
@@ -305,16 +467,64 @@ namespace WaseBoard.Services
             var request = new HttpRequestMessage(method, BaseUrl + path);
             if (!string.IsNullOrEmpty(Settings.ServerToken))
                 request.Headers.Add("X-WaseBoard-Token", Settings.ServerToken);
+            if (!string.IsNullOrEmpty(Settings.DiscordSessionToken))
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", Settings.DiscordSessionToken);
             return request;
+        }
+
+        /// <summary>Levé une seule fois quand une session Discord est détectée invalide/révoquée
+        /// (401 "invalid_session"/"revoked") — jamais pour "missing_session", qui signifie
+        /// simplement "pas encore connecté" et n'a rien d'anormal.</summary>
+        public event Action? SessionInvalidated;
+
+        /// <summary>Point de passage unique pour tous les appels serveur : détecte une session
+        /// Discord devenue invalide et l'efface IMMÉDIATEMENT en mémoire, pour que les appels
+        /// suivants (y compris ceux déjà programmés par les sondages 300ms/3s) cessent d'envoyer
+        /// un Bearer connu-invalide au lieu de re-déclencher l'évènement en boucle.</summary>
+        private readonly object _sessionInvalidationLock = new();
+
+        private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request)
+        {
+            var response = await _http.SendAsync(request);
+            if (response.StatusCode == HttpStatusCode.Unauthorized && Settings.DiscordSessionToken is not null)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                if (body.Contains("invalid_session") || body.Contains("revoked"))
+                {
+                    // Plusieurs requêtes quasi simultanées (sondages 300ms/3s) peuvent toutes
+                    // recevoir ce 401 avant que l'une d'elles ait fini d'effacer la session —
+                    // le verrou garantit qu'une seule déclenche réellement l'évènement/la sauvegarde.
+                    var shouldNotify = false;
+                    lock (_sessionInvalidationLock)
+                    {
+                        if (Settings.DiscordSessionToken is not null)
+                        {
+                            Settings.DiscordSessionToken = null;
+                            shouldNotify = true;
+                        }
+                    }
+                    if (shouldNotify)
+                    {
+                        SaveSettings();
+                        SessionInvalidated?.Invoke();
+                    }
+                }
+            }
+            return response;
         }
 
         public async Task<List<SoundItem>> FetchCatalogAsync()
         {
             LastErrorDetail = null;
+            if (string.IsNullOrEmpty(Settings.DiscordSessionToken))
+            {
+                LastErrorDetail = "Non connecté à Discord.";
+                return new List<SoundItem>();
+            }
             try
             {
                 using var request = CreateRequest(HttpMethod.Get, "/sounds");
-                using var response = await _http.SendAsync(request);
+                using var response = await SendAsync(request);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -325,16 +535,13 @@ namespace WaseBoard.Services
                 var json = await response.Content.ReadAsStringAsync();
                 var catalog = JsonSerializer.Deserialize<CatalogResponse>(json) ?? new CatalogResponse();
 
-                var items = catalog.sounds.Select(entry => new SoundItem
+                var items = catalog.sounds.Select(entry =>
                 {
-                    Id = entry.id,
-                    Name = entry.name,
-                    Extension = entry.extension,
-                    ContentHash = entry.hash,
-                    IsFavorite = Settings.FavoriteSoundIds.Contains(entry.id),
-                    Hotkey = Settings.SoundHotkeys.TryGetValue(entry.id, out var hk) ? hk : null,
-                    Volume = Settings.SoundVolumes.TryGetValue(entry.id, out var vol) ? vol : 1.0f,
-                    Emoji = string.IsNullOrEmpty(entry.emoji) ? null : entry.emoji
+                    var item = ToSoundItem(entry);
+                    item.IsFavorite = Settings.FavoriteSoundIds.Contains(entry.id);
+                    item.Hotkey = Settings.SoundHotkeys.TryGetValue(entry.id, out var hk) ? hk : null;
+                    item.Volume = Settings.SoundVolumes.TryGetValue(entry.id, out var vol) ? vol : 1.0f;
+                    return item;
                 }).ToList();
 
                 return ApplyCustomOrder(items);
@@ -354,7 +561,7 @@ namespace WaseBoard.Services
             try
             {
                 using var request = CreateRequest(HttpMethod.Get, $"/sounds/{item.Id}/file");
-                using var response = await _http.SendAsync(request);
+                using var response = await SendAsync(request);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -394,7 +601,10 @@ namespace WaseBoard.Services
             return Convert.ToHexString(sha256.ComputeHash(stream)).ToLowerInvariant();
         }
 
-        public async Task<SoundItem?> UploadSoundAsync(string localFilePath, string name)
+        /// <summary>Envoie le fichier ORIGINAL (le serveur le garde complet) avec, si besoin, la portion gardée
+        /// (trimStartMs/trimEndMs : les deux ou aucun) et l'emoji choisi — un seul appel.</summary>
+        public async Task<SoundItem?> UploadSoundAsync(string localFilePath, string name, string guildId,
+            int? trimStartMs = null, int? trimEndMs = null, string? emoji = null)
         {
             LastErrorDetail = null;
             try
@@ -406,20 +616,26 @@ namespace WaseBoard.Services
 
                 form.Add(new StringContent(name, Encoding.UTF8), "name");
                 form.Add(fileContent, "file", Path.GetFileName(localFilePath));
+                form.Add(new StringContent(guildId, Encoding.UTF8), "guild_id");
+                if (trimStartMs is { } trimStart && trimEndMs is { } trimEnd)
+                {
+                    form.Add(new StringContent(trimStart.ToString(), Encoding.UTF8), "trim_start_ms");
+                    form.Add(new StringContent(trimEnd.ToString(), Encoding.UTF8), "trim_end_ms");
+                }
+                if (!string.IsNullOrWhiteSpace(emoji))
+                    form.Add(new StringContent(emoji.Trim(), Encoding.UTF8), "emoji");
                 request.Content = form;
 
-                using var response = await _http.SendAsync(request);
+                using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Envoi échoué ({(int)response.StatusCode}) : {await response.Content.ReadAsStringAsync()}";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Envoi échoué ({(int)response.StatusCode}).");
                     return null;
                 }
 
                 var json = await response.Content.ReadAsStringAsync();
                 var entry = JsonSerializer.Deserialize<CatalogEntry>(json);
-                if (entry is null) return null;
-
-                return new SoundItem { Id = entry.id, Name = entry.name, Extension = entry.extension, ContentHash = entry.hash, Emoji = entry.emoji };
+                return entry is null ? null : ToSoundItem(entry);
             }
             catch (Exception ex)
             {
@@ -434,7 +650,13 @@ namespace WaseBoard.Services
             try
             {
                 using var request = CreateRequest(HttpMethod.Delete, $"/sounds/{item.Id}");
-                using var response = await _http.SendAsync(request);
+                using var response = await SendAsync(request);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Suppression échouée ({(int)response.StatusCode}).");
+                    return false;
+                }
 
                 var cachePath = Path.Combine(_cacheFolder, item.Id + item.Extension);
                 if (File.Exists(cachePath)) File.Delete(cachePath);
@@ -446,11 +668,6 @@ namespace WaseBoard.Services
                 foreach (var list in Settings.Categories.Values) list.Remove(item.Id);
                 SaveSettings();
 
-                if (!response.IsSuccessStatusCode)
-                {
-                    LastErrorDetail = $"Suppression échouée ({(int)response.StatusCode}).";
-                    return false;
-                }
                 return true;
             }
             catch (Exception ex)
@@ -467,13 +684,13 @@ namespace WaseBoard.Services
             try
             {
                 using var request = CreateRequest(HttpMethod.Post, "/play");
-                var payload = JsonSerializer.Serialize(new { id = soundId, volume, user_id = Settings.DiscordUserId });
+                var payload = JsonSerializer.Serialize(new { id = soundId, volume });
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-                using var response = await _http.SendAsync(request);
+                using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Le serveur a répondu {(int)response.StatusCode} : {await response.Content.ReadAsStringAsync()}";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
                     return false;
                 }
                 return true;
@@ -492,13 +709,11 @@ namespace WaseBoard.Services
             try
             {
                 using var request = CreateRequest(HttpMethod.Post, "/stop");
-                var payload = JsonSerializer.Serialize(new { user_id = Settings.DiscordUserId });
-                request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-                using var response = await _http.SendAsync(request);
+                using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Le serveur a répondu {(int)response.StatusCode} : {await response.Content.ReadAsStringAsync()}";
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
                     return false;
                 }
                 return true;
@@ -531,9 +746,8 @@ namespace WaseBoard.Services
             LastErrorDetail = null;
             try
             {
-                var query = string.IsNullOrEmpty(Settings.DiscordUserId) ? "" : $"?user_id={Uri.EscapeDataString(Settings.DiscordUserId)}";
-                using var request = CreateRequest(HttpMethod.Get, "/status" + query);
-                using var response = await _http.SendAsync(request);
+                using var request = CreateRequest(HttpMethod.Get, "/status");
+                using var response = await SendAsync(request);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized)
                     return (ServerStatusResult.Unauthorized, null);
@@ -564,18 +778,18 @@ namespace WaseBoard.Services
         /// "connecté" que si l'utilisateur est RÉELLEMENT présent dans ce salon vocal en ce moment —
         /// utilisé pour l'indicateur de la barre latérale, qui ne doit jamais mentir.
         /// </summary>
-        public async Task<(bool Connected, string? Channel, string? GuildName, List<UserActivity> ChannelMembers, string? Error)> GetLiveVoiceStatusAsync()
+        public async Task<(bool Connected, string? Channel, string? GuildId, string? GuildName, List<UserActivity> ChannelMembers, string? Error)> GetLiveVoiceStatusAsync()
         {
-            if (string.IsNullOrEmpty(Settings.DiscordUserId)) return (false, null, null, new(), null);
+            if (string.IsNullOrEmpty(Settings.DiscordSessionToken)) return (false, null, null, null, new(), null);
 
             try
             {
-                using var request = CreateRequest(HttpMethod.Get, $"/status?strict=1&user_id={Uri.EscapeDataString(Settings.DiscordUserId)}");
-                using var response = await _http.SendAsync(request);
+                using var request = CreateRequest(HttpMethod.Get, "/status?strict=1");
+                using var response = await SendAsync(request);
                 var raw = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
-                    return (false, null, null, new(), $"Le serveur a répondu {(int)response.StatusCode}.");
+                    return (false, null, null, null, new(), $"Le serveur a répondu {(int)response.StatusCode}.");
 
                 JsonDocument doc;
                 try { doc = JsonDocument.Parse(raw); }
@@ -584,13 +798,14 @@ namespace WaseBoard.Services
                     // Réponse qui n'est pas du JSON (ex: page d'erreur 404 générique d'aiohttp) :
                     // presque toujours le signe que le serveur tourne encore avec une ancienne
                     // version de server.py, sans cette route/ce champ.
-                    return (false, null, null, new(),
+                    return (false, null, null, null, new(),
                         "Réponse inattendue du serveur — server.py a-t-il bien été redéployé avec la dernière version ?");
                 }
                 using (doc)
                 {
                     var connected = doc.RootElement.TryGetProperty("connected", out var c) && c.GetBoolean();
                     string? channel = doc.RootElement.TryGetProperty("channel", out var ch) && ch.ValueKind == JsonValueKind.String ? ch.GetString() : null;
+                    string? guildId = doc.RootElement.TryGetProperty("guild_id", out var gi) && gi.ValueKind == JsonValueKind.String ? gi.GetString() : null;
                     string? guildName = doc.RootElement.TryGetProperty("guild_name", out var g) && g.ValueKind == JsonValueKind.String ? g.GetString() : null;
 
                     var members = new List<UserActivity>();
@@ -603,28 +818,26 @@ namespace WaseBoard.Services
                                 AvatarUrl = m.GetProperty("avatar_url").GetString() ?? ""
                             });
 
-                    return (connected, channel, guildName, members, null);
+                    return (connected, channel, guildId, guildName, members, null);
                 }
             }
             catch (Exception ex)
             {
-                return (false, null, null, new(), ex.Message);
+                return (false, null, null, null, new(), ex.Message);
             }
         }
 
         /// <summary>Demande au bot de rejoindre le salon vocal où vous vous trouvez actuellement, sans passer par /join dans Discord.</summary>
         public async Task<(bool Success, string? GuildName, string? ChannelName, string? Error)> JoinMyChannelAsync()
         {
-            if (string.IsNullOrEmpty(Settings.DiscordUserId))
-                return (false, null, null, "Identité Discord non configurée dans les Paramètres.");
+            if (string.IsNullOrEmpty(Settings.DiscordSessionToken))
+                return (false, null, null, "Non connecté à Discord.");
 
             try
             {
                 using var request = CreateRequest(HttpMethod.Post, "/join-my-channel");
-                var payload = JsonSerializer.Serialize(new { user_id = Settings.DiscordUserId });
-                request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-                using var response = await _http.SendAsync(request);
+                using var response = await SendAsync(request);
                 var raw = await response.Content.ReadAsStringAsync();
 
                 JsonDocument doc;
@@ -656,37 +869,59 @@ namespace WaseBoard.Services
             }
         }
 
-        /// <summary>Vérifie qu'un ID Discord correspond bien à un membre connu du bot, et retourne son nom/avatar si oui.</summary>
-        public async Task<(bool Found, string? Username, string? AvatarUrl, string? GuildName, string? Error)> VerifyUserIdAsync(string userId)
+        /// <summary>Récupère l'identifiant client OAuth2 Discord de cette instance serveur —
+        /// propre à chaque déploiement auto-hébergé, nécessaire pour construire l'URL d'autorisation.</summary>
+        public async Task<string?> FetchOAuthClientIdAsync()
         {
             try
             {
-                using var request = CreateRequest(HttpMethod.Get, $"/verify-user?user_id={Uri.EscapeDataString(userId)}");
-                using var response = await _http.SendAsync(request);
-                if (!response.IsSuccessStatusCode)
-                    return (false, null, null, null, $"Le serveur a répondu {(int)response.StatusCode}.");
+                using var request = CreateRequest(HttpMethod.Get, "/oauth/client-id");
+                using var response = await SendAsync(request);
+                if (!response.IsSuccessStatusCode) return null;
 
                 var json = await response.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
-                var found = doc.RootElement.TryGetProperty("found", out var f) && f.GetBoolean();
+                return doc.RootElement.TryGetProperty("client_id", out var c) ? c.GetString() : null;
+            }
+            catch (Exception ex)
+            {
+                LastErrorDetail = ex.Message;
+                return null;
+            }
+        }
 
-                if (!found)
+        /// <summary>Échange un code d'autorisation Discord (obtenu via le navigateur système) contre
+        /// une session WaseBoard — voir DiscordOAuthService pour le flux complet.</summary>
+        public async Task<(bool Success, string? SessionToken, string? UserId, string? Username, string? AvatarUrl, string? Error)> ExchangeOAuthCodeAsync(string code, string redirectUri)
+        {
+            try
+            {
+                using var request = CreateRequest(HttpMethod.Post, "/oauth/exchange");
+                var payload = JsonSerializer.Serialize(new { code, redirect_uri = redirectUri });
+                request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+
+                using var response = await SendAsync(request);
+                var raw = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(raw);
+
+                if (!response.IsSuccessStatusCode)
                 {
-                    var error = doc.RootElement.TryGetProperty("error", out var e) ? e.GetString() : null;
-                    return (false, null, null, null, error);
+                    var error = doc.RootElement.TryGetProperty("error", out var e) ? e.GetString() : $"Le serveur a répondu {(int)response.StatusCode}.";
+                    return (false, null, null, null, null, error);
                 }
 
                 return (
                     true,
+                    doc.RootElement.GetProperty("session_token").GetString(),
+                    doc.RootElement.GetProperty("user_id").GetString(),
                     doc.RootElement.GetProperty("username").GetString(),
-                    doc.RootElement.GetProperty("avatar_url").GetString(),
-                    doc.RootElement.GetProperty("guild_name").GetString(),
+                    doc.RootElement.TryGetProperty("avatar_url", out var a) && a.ValueKind == JsonValueKind.String ? a.GetString() : null,
                     null
                 );
             }
             catch (Exception ex)
             {
-                return (false, null, null, null, ex.Message);
+                return (false, null, null, null, null, ex.Message);
             }
         }
 
@@ -699,9 +934,8 @@ namespace WaseBoard.Services
         {
             try
             {
-                var query = string.IsNullOrEmpty(Settings.DiscordUserId) ? "" : $"?user_id={Uri.EscapeDataString(Settings.DiscordUserId)}";
-                using var request = CreateRequest(HttpMethod.Get, "/activity" + query);
-                using var response = await _http.SendAsync(request);
+                using var request = CreateRequest(HttpMethod.Get, "/activity");
+                using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode) return (new(), new());
 
                 var json = await response.Content.ReadAsStringAsync();
@@ -747,6 +981,13 @@ namespace WaseBoard.Services
             public string GuildName { get; set; } = "";
             public string? IconUrl { get; set; }
             public List<string> SoundIds { get; set; } = new();
+
+            /// <summary>Vous administrez ce serveur (propriétaire, permission Administrateur ou rôle désigné) —
+            /// calculé par le serveur ; sert à afficher les actions d'admin, le serveur re-vérifie chaque requête.</summary>
+            public bool IsAdmin { get; set; }
+
+            /// <summary>Vous pouvez y uploader des sons (pas restreint aux admins, pas bloqué).</summary>
+            public bool CanUpload { get; set; } = true;
         }
 
         /// <summary>
@@ -757,12 +998,12 @@ namespace WaseBoard.Services
         /// </summary>
         public async Task<List<SharedCategoryInfo>> FetchSharedCategoriesAsync()
         {
-            if (string.IsNullOrEmpty(Settings.DiscordUserId)) return new();
+            if (string.IsNullOrEmpty(Settings.DiscordSessionToken)) return new();
 
             try
             {
-                using var request = CreateRequest(HttpMethod.Get, $"/my-guilds?user_id={Uri.EscapeDataString(Settings.DiscordUserId)}");
-                using var response = await _http.SendAsync(request);
+                using var request = CreateRequest(HttpMethod.Get, "/my-guilds");
+                using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode) return new();
 
                 var json = await response.Content.ReadAsStringAsync();
@@ -771,15 +1012,22 @@ namespace WaseBoard.Services
                     .Select(g => (
                         Id: g.GetProperty("id").GetString() ?? "",
                         Name: g.GetProperty("name").GetString() ?? "",
-                        IconUrl: g.TryGetProperty("icon_url", out var icon) && icon.ValueKind == JsonValueKind.String ? icon.GetString() : null
+                        IconUrl: g.TryGetProperty("icon_url", out var icon) && icon.ValueKind == JsonValueKind.String ? icon.GetString() : null,
+                        IsAdmin: g.TryGetProperty("is_admin", out var admin) && admin.ValueKind == JsonValueKind.True,
+                        // Un serveur plus ancien (sans les rôles) n'envoie pas "can_upload" : permissif par défaut.
+                        CanUpload: !g.TryGetProperty("can_upload", out var canUpload) || canUpload.ValueKind != JsonValueKind.False
                     ))
                     .ToList();
 
                 var result = new List<SharedCategoryInfo>();
-                foreach (var (guildId, guildName, iconUrl) in guilds)
+                foreach (var (guildId, guildName, iconUrl, isAdmin, canUploadHere) in guilds)
                 {
                     var soundIds = await FetchSharedCategorySoundIdsAsync(guildId);
-                    result.Add(new SharedCategoryInfo { GuildId = guildId, GuildName = guildName, IconUrl = iconUrl, SoundIds = soundIds });
+                    result.Add(new SharedCategoryInfo
+                    {
+                        GuildId = guildId, GuildName = guildName, IconUrl = iconUrl, SoundIds = soundIds,
+                        IsAdmin = isAdmin, CanUpload = canUploadHere
+                    });
                 }
                 return result;
             }
@@ -791,7 +1039,7 @@ namespace WaseBoard.Services
             try
             {
                 using var request = CreateRequest(HttpMethod.Get, $"/shared-categories?guild_id={Uri.EscapeDataString(guildId)}");
-                using var response = await _http.SendAsync(request);
+                using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode) return new();
 
                 var json = await response.Content.ReadAsStringAsync();
@@ -804,13 +1052,15 @@ namespace WaseBoard.Services
         /// <summary>Ajoute ou retire un son de la catégorie partagée automatique d'un serveur Discord.</summary>
         public async Task<bool> SetSharedCategorySoundAsync(string guildId, SoundItem item, bool add)
         {
+            LastErrorDetail = null;
             try
             {
                 using var request = CreateRequest(HttpMethod.Post, "/shared-categories/sounds");
                 var payload = JsonSerializer.Serialize(new { guild_id = guildId, sound_id = item.Id, action = add ? "add" : "remove" });
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
-                using var response = await _http.SendAsync(request);
-                if (!response.IsSuccessStatusCode) LastErrorDetail = $"Le serveur a répondu {(int)response.StatusCode}.";
+                using var response = await SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                    LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex) { LastErrorDetail = ex.Message; return false; }

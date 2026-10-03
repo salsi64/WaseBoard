@@ -58,5 +58,13 @@ Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\{#MyAppExeName}"
 
+[Registry]
+; Protocole waseboard:// : un lien cliquable (envoyé par un admin, ou via le bouton Discord
+; /configurer-invitation) peut pré-remplir l'adresse/le jeton serveur dans l'onboarding —
+; voir App.xaml.cs. HKCU (pas HKLM) car PrivilegesRequired=lowest, pas de droits admin.
+Root: HKCU; Subkey: "Software\Classes\waseboard"; ValueType: string; ValueName: ""; ValueData: "URL:WaseBoard Protocol"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\waseboard"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\waseboard\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
+
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Lancer {#MyAppName}"; Flags: nowait postinstall skipifsilent

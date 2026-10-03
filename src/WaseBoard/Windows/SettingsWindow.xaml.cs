@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
 using System.Windows;
@@ -15,37 +17,75 @@ namespace WaseBoard.Windows
         private readonly AppSettings _settings;
         private readonly SoundLibraryService _library;
         private string? _selectedBgColorHex;
+        private string _selectedPaletteId = PalettePresets.DefaultId;
         private string _selectedTheme = "Classic";
         private string? _latestReleaseUrl;
 
-        public SettingsWindow(AppSettings settings, SoundLibraryService library)
+        // Les boutons "Tester"/"Vérifier"/"Rechercher une mise à jour" lancent un appel réseau
+        // (async void) puis touchent l'UI une fois la réponse reçue ; si l'utilisateur ferme cette
+        // fenêtre pendant l'attente (ex: réponse lente, ou serveur injoignable), la continuation
+        // reprend sur une fenêtre déjà fermée — AlertDialog.Show(this, ...) plante alors
+        // ("Owner sur une fenêtre fermée"). Ce drapeau permet d'abandonner proprement.
+        private bool _isClosed;
+
+        // Serveurs dont l'utilisateur est admin (vide = pas d'entrée Administration) et sons connus,
+        // transmis au panel d'administration qui s'ouvre depuis cette fenêtre.
+        private readonly List<SoundLibraryService.SharedCategoryInfo> _adminGuilds;
+        private readonly List<SoundItem> _knownSounds;
+
+        /// <summary>Vrai si le panel d'administration a modifié le catalogue (renommage, suppression,
+        /// restauration) : l'appelant doit alors recharger les sons, même si les Paramètres n'ont pas été enregistrés.</summary>
+        public bool AdminCatalogChanged { get; private set; }
+
+        public SettingsWindow(AppSettings settings, SoundLibraryService library, string initialPage = "Server",
+            IEnumerable<SoundLibraryService.SharedCategoryInfo>? adminGuilds = null, IEnumerable<SoundItem>? knownSounds = null)
         {
             InitializeComponent();
             _settings = settings;
             _library = library;
+            _adminGuilds = adminGuilds?.ToList() ?? new();
+            _knownSounds = knownSounds?.ToList() ?? new();
+            Closed += (_, _) => _isClosed = true;
+
+            if (_adminGuilds.Count > 0)
+            {
+                NavAdminButton.Visibility = Visibility.Visible;
+                AdminSummaryText.Text = _adminGuilds.Count == 1
+                    ? $"Vous administrez {_adminGuilds[0].GuildName}."
+                    : $"Vous administrez {_adminGuilds.Count} serveurs : " + string.Join(", ", _adminGuilds.Select(g => g.GuildName)) + ".";
+            }
 
             ServerUrlBox.Text = _settings.ServerUrl;
             ServerTokenBox.Text = _settings.ServerToken;
-            ManualUserIdBox.Text = _settings.DiscordUserId;
+
+            if (!string.IsNullOrEmpty(_settings.DiscordSessionToken))
+            {
+                ConnectDiscordButton.Content = "Changer de compte";
+                ShowVerifyResult(true, $"✅ Connecté en tant que {_settings.DiscordUsername}", _settings.DiscordAvatarUrl);
+            }
 
             LocalVolumeSlider.Value = _settings.LocalPlaybackVolume;
             UpdateVolumeLabel(LocalVolumeLabel, _settings.LocalPlaybackVolume);
 
-            _selectedBgColorHex = _settings.BackgroundColorHex ?? "#1E1E2E";
-            CustomColorBox.Text = _selectedBgColorHex;
+            _selectedBgColorHex = _settings.BackgroundColorHex;
+            CustomColorBox.Text = _selectedBgColorHex ?? "";
             UpdateColorPreview();
+
+            _selectedPaletteId = _settings.PaletteId ?? PalettePresets.DefaultId;
+            BuildPaletteCards();
 
             _selectedTheme = _settings.UiTheme;
             UpdateThemeButtons();
 
             FollowSystemThemeCheckBox.IsChecked = _settings.FollowSystemTheme;
             FollowSystemAccentCheckBox.IsChecked = _settings.FollowSystemAccent;
+            ShowWaveformsCheckBox.IsChecked = _settings.ShowWaveforms;
             UpdateManualColorSectionEnabled();
 
             var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
             CurrentVersionText.Text = $"Version actuelle : {currentVersion?.ToString(3) ?? "?"}";
 
-            SelectPage("Server");
+            SelectPage(initialPage);
         }
 
         // ---------- Navigation latérale ----------
@@ -66,6 +106,7 @@ namespace WaseBoard.Windows
                 ("Appearance", PageAppearance, NavAppearanceButton),
                 ("Volume", PageVolume, NavVolumeButton),
                 ("Updates", PageUpdates, NavUpdatesButton),
+                ("Admin", PageAdmin, NavAdminButton),
             };
 
             var accent = (Brush)FindResource("AccentBrush");
@@ -74,8 +115,17 @@ namespace WaseBoard.Windows
                 var isSelected = pageKey == key;
                 page.Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed;
                 nav.Background = isSelected ? accent : Brushes.Transparent;
-                nav.Foreground = isSelected ? Brushes.White : (Brush)FindResource("TextBrush");
+                nav.Foreground = (Brush)FindResource(isSelected ? "OnAccentBrush" : "TextBrush");
             }
+        }
+
+        private void OpenAdminPanelButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_adminGuilds.Count == 0) return;
+
+            var panel = new AdminPanelWindow(_library, _adminGuilds, _knownSounds) { Owner = this };
+            panel.ShowDialog();
+            if (panel.CatalogChanged) AdminCatalogChanged = true;
         }
 
         private void FollowSystemTheme_Changed(object sender, RoutedEventArgs e) => UpdateManualColorSectionEnabled();
@@ -110,19 +160,78 @@ namespace WaseBoard.Windows
             ModernThemeButton.Background = _selectedTheme == "Modern" ? accent : transparent;
         }
 
-        private void ColorSwatch_Click(object sender, MouseButtonEventArgs e)
+        /// <summary>Une carte par palette (fond, panneau, accent et nom dans ses propres couleurs), construite
+        /// en code : la liste vient de PalettePresets, pas d'un XAML à tenir à jour.</summary>
+        private void BuildPaletteCards()
         {
-            if (sender is FrameworkElement { Tag: string hex })
+            PaletteList.Children.Clear();
+            foreach (var preset in PalettePresets.All)
             {
-                _selectedBgColorHex = hex;
-                CustomColorBox.Text = hex;
-                UpdateColorPreview();
+                var card = new Border
+                {
+                    Width = 104, Height = 62, Margin = new Thickness(0, 0, 8, 8), CornerRadius = new CornerRadius(9),
+                    Background = new SolidColorBrush(preset.Bg), BorderThickness = new Thickness(2),
+                    Cursor = Cursors.Hand, Tag = preset.Id, ToolTip = preset.Name
+                };
+                var bar = new Border
+                {
+                    Height = 20, CornerRadius = new CornerRadius(10), Background = new SolidColorBrush(preset.Panel),
+                    VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(8, 8, 8, 0),
+                    Child = new System.Windows.Shapes.Ellipse
+                    {
+                        Width = 10, Height = 10, Fill = new SolidColorBrush(preset.Accent),
+                        HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(6, 0, 0, 0)
+                    }
+                };
+                var name = new TextBlock
+                {
+                    Text = preset.Name, FontSize = 11, FontWeight = FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(preset.Text), VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(10, 0, 0, 7)
+                };
+                var content = new Grid();
+                content.Children.Add(bar);
+                content.Children.Add(name);
+                card.Child = content;
+                card.MouseLeftButtonDown += PaletteCard_Click;
+                PaletteList.Children.Add(card);
             }
+            UpdatePaletteSelection();
+        }
+
+        private void PaletteCard_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: string id }) return;
+            _selectedPaletteId = id;
+            // Choisir une palette remplace un éventuel fond personnalisé : sinon le choix semblerait sans effet.
+            _selectedBgColorHex = null;
+            CustomColorBox.Text = "";
+            UpdateColorPreview();
+            UpdatePaletteSelection();
+        }
+
+        private void UpdatePaletteSelection()
+        {
+            foreach (var child in PaletteList.Children.OfType<Border>())
+            {
+                var preset = PalettePresets.Get(child.Tag as string);
+                child.BorderBrush = child.Tag as string == _selectedPaletteId
+                    ? new SolidColorBrush(preset.Accent)
+                    : (Brush)FindResource("TrackBrush");
+            }
+        }
+
+        private void ClearCustomColor_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedBgColorHex = null;
+            CustomColorBox.Text = "";
+            UpdateColorPreview();
         }
 
         private void ApplyCustomColor_Click(object sender, RoutedEventArgs e)
         {
             var text = CustomColorBox.Text.Trim();
+            if (text.Length == 0) { ClearCustomColor_Click(sender, e); return; }
             if (!text.StartsWith("#")) text = "#" + text;
 
             try
@@ -133,13 +242,18 @@ namespace WaseBoard.Windows
             }
             catch
             {
-                AlertDialog.Show(this, "Couleur invalide. Utilisez un code hexadécimal, ex: #1E1E2E",
+                AlertDialog.Show(this, "Couleur invalide. Utilisez un code hexadécimal, ex: #101820",
                     "WaseBoard", AlertKind.Warning);
             }
         }
 
         private void UpdateColorPreview()
         {
+            if (string.IsNullOrEmpty(_selectedBgColorHex))
+            {
+                ColorPreview.Background = Brushes.Transparent;
+                return;
+            }
             try
             {
                 ColorPreview.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(_selectedBgColorHex));
@@ -164,6 +278,7 @@ namespace WaseBoard.Windows
 
             TestConnectionButton.IsEnabled = false;
             var (result, channel) = await _library.GetServerStatusAsync();
+            if (_isClosed) return;
             TestConnectionButton.IsEnabled = true;
 
             var message = result switch
@@ -186,37 +301,66 @@ namespace WaseBoard.Windows
             _settings.ServerToken = previousToken;
         }
 
-        private async void VerifyUserIdButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>Construit un lien waseboard://connect à partir des champs actuellement
+        /// affichés (pas besoin d'avoir cliqué "Enregistrer") et le copie dans le presse-papier,
+        /// pour inviter quelqu'un sans qu'il ait à saisir l'adresse/le jeton lui-même.</summary>
+        private void CopyInviteLinkButton_Click(object sender, RoutedEventArgs e)
         {
-            var digitsOnly = new string(ManualUserIdBox.Text.Where(char.IsDigit).ToArray());
-            if (digitsOnly.Length == 0)
+            var url = ServerUrlBox.Text.Trim();
+            var token = ServerTokenBox.Text;
+            if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
             {
-                ShowVerifyResult(false, "Entrez d'abord un ID Discord (uniquement des chiffres).", null);
+                AlertDialog.Show(this, "Renseignez d'abord l'adresse du serveur et le jeton d'accès.", "WaseBoard", AlertKind.Warning);
                 return;
             }
 
+            var link = $"waseboard://connect?url={Uri.EscapeDataString(url)}&token={Uri.EscapeDataString(token)}";
+            Clipboard.SetText(link);
+
+            var original = CopyInviteLinkButton.Content;
+            CopyInviteLinkButton.Content = "✅ Copié !";
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = System.TimeSpan.FromSeconds(2) };
+            timer.Tick += (_, _) => { CopyInviteLinkButton.Content = original; timer.Stop(); };
+            timer.Start();
+        }
+
+        private async void ConnectDiscordButton_Click(object sender, RoutedEventArgs e)
+        {
             // Applique temporairement l'URL/le jeton actuellement saisis (comme "Tester la
-            // connexion") : sinon, tant que "Enregistrer" n'a pas été cliqué, cette vérification
-            // utilise l'ancien jeton enregistré (potentiellement vide) et échoue en 401 même avec
-            // un jeton correct fraîchement tapé.
+            // connexion") : sinon, tant que "Enregistrer" n'a pas été cliqué, la connexion
+            // utilise l'ancien jeton enregistré (potentiellement vide) et échoue en 401 même
+            // avec un jeton correct fraîchement tapé.
             var previousUrl = _settings.ServerUrl;
             var previousToken = _settings.ServerToken;
             _settings.ServerUrl = string.IsNullOrWhiteSpace(ServerUrlBox.Text) ? previousUrl : ServerUrlBox.Text.Trim();
             _settings.ServerToken = ServerTokenBox.Text;
 
-            VerifyUserIdButton.IsEnabled = false;
-            VerifyResultBorder.Visibility = Visibility.Collapsed;
+            ConnectDiscordButton.IsEnabled = false;
+            ShowVerifyResult(true, "Connexion en cours — suivez les instructions dans votre navigateur...", null);
 
-            var (found, username, avatarUrl, guildName, error) = await _library.VerifyUserIdAsync(digitsOnly);
+            var oauth = new DiscordOAuthService(_library);
+            var result = await oauth.LoginAsync();
+            if (_isClosed) return;
 
-            VerifyUserIdButton.IsEnabled = true;
+            ConnectDiscordButton.IsEnabled = true;
             _settings.ServerUrl = previousUrl;
             _settings.ServerToken = previousToken;
 
-            if (found)
-                ShowVerifyResult(true, $"✅ Trouvé : {username} (sur {guildName})", avatarUrl);
+            if (result.Success)
+            {
+                _settings.DiscordSessionToken = result.SessionToken;
+                _settings.DiscordUserId = result.UserId;
+                _settings.DiscordUsername = result.Username;
+                _settings.DiscordAvatarUrl = result.AvatarUrl;
+                _library.SaveSettings();
+
+                ConnectDiscordButton.Content = "Changer de compte";
+                ShowVerifyResult(true, $"✅ Connecté en tant que {result.Username}", result.AvatarUrl);
+            }
             else
-                ShowVerifyResult(false, "❌ " + (error ?? "ID introuvable."), null);
+            {
+                ShowVerifyResult(false, "❌ " + (result.Error ?? "Connexion échouée."), null);
+            }
         }
 
         private void ShowVerifyResult(bool success, string message, string? avatarUrl)
@@ -255,6 +399,7 @@ namespace WaseBoard.Windows
             UpdateResultText.Text = "Recherche en cours...";
 
             var result = await UpdateCheckService.CheckForUpdateAsync(currentVersion);
+            if (_isClosed) return;
 
             CheckUpdateButton.IsEnabled = true;
 
@@ -287,31 +432,11 @@ namespace WaseBoard.Windows
             _settings.ServerToken = ServerTokenBox.Text;
             _settings.LocalPlaybackVolume = (float)LocalVolumeSlider.Value;
             _settings.BackgroundColorHex = _selectedBgColorHex;
+            _settings.PaletteId = _selectedPaletteId;
             _settings.UiTheme = _selectedTheme;
             _settings.FollowSystemTheme = FollowSystemThemeCheckBox.IsChecked == true;
             _settings.FollowSystemAccent = FollowSystemAccentCheckBox.IsChecked == true;
-
-            // On ne garde que les chiffres du champ collé : un copier-coller depuis Discord ou un
-            // gestionnaire de presse-papiers peut ajouter des espaces ou des caractères invisibles
-            // que .Trim() seul ne retire pas, ce qui faisait échouer la validation silencieusement.
-            var digitsOnly = new string(ManualUserIdBox.Text.Where(char.IsDigit).ToArray());
-
-            if (digitsOnly.Length > 0)
-            {
-                _settings.DiscordUserId = digitsOnly;
-                _settings.DiscordUsername = null;
-                _settings.DiscordAvatarUrl = null;
-            }
-            else if (!string.IsNullOrWhiteSpace(ManualUserIdBox.Text))
-            {
-                AlertDialog.Show(this, "L'ID Discord doit être un nombre (ex: 123456789012345678).",
-                    "WaseBoard", AlertKind.Warning);
-                return;
-            }
-            else
-            {
-                _settings.DiscordUserId = null;
-            }
+            _settings.ShowWaveforms = ShowWaveformsCheckBox.IsChecked == true;
 
             DialogResult = true;
             Close();

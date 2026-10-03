@@ -1,0 +1,46 @@
+name: Serveur — publier l'image Docker
+
+# Publie ghcr.io/<compte>/waseboard-server pour qui préfère la télécharger plutôt que la compiler
+# (quelques minutes gagnées à l'installation). N'affecte pas setup.sh/setup.ps1, qui compilent
+# toujours localement par défaut (voir server/README.md, « Image déjà construite »).
+#
+# Première publication : il faut ensuite rendre le paquet public à la main (sinon `docker pull` sans
+# authentification échoue) — GitHub > votre profil > Packages > waseboard-server > Package settings >
+# Change visibility > Public.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "server/Dockerfile"
+      - "server/requirements.txt"
+      - "server/*.py"
+      - ".github/workflows/docker-publish.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: server
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/waseboard-server:latest
+            ghcr.io/${{ github.repository_owner }}/waseboard-server:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
