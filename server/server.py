@@ -109,6 +109,13 @@ ACTIVITY_TTL_SECONDS = 30.0
 # plus considéré comme "application ouverte".
 ONLINE_TTL_SECONDS = 12.0
 
+# find_memberships (quelles guildes voit cet utilisateur) retombe sur guild.fetch_member — un
+# vrai appel REST Discord — dès que le membre n'est pas dans le cache de la passerelle. Sans ce
+# cache, des clics rapprochés (ex: plusieurs clics de suite sur un son) déclenchaient chacun ce
+# fallback, et la limitation de débit de Discord sur cette route faisait croître l'attente à
+# chaque appel (jusqu'à plus d'une seconde en rafale) — perçu comme une latence au clic.
+MEMBERSHIP_CACHE_TTL = 30.0
+
 
 class DiscordAuthRevoked(Exception):
     """Discord a répondu invalid_grant à un échange/rafraîchissement de token OAuth2 —
@@ -982,6 +989,9 @@ class WaseBoardServer(commands.Bot):
         self.active_plays: dict[str, dict[str, dict]] = {}
         # Présence : user_id -> {"username", "avatar_url", "last_seen"} (application ouverte)
         self.online_users: dict[str, dict] = {}
+        # Résolution des guildes d'un utilisateur (find_memberships) : user_id -> (horodatage, résultat).
+        # Voir MEMBERSHIP_CACHE_TTL.
+        self._membership_cache: dict[int, tuple[float, list]] = {}
         self._activity_lock = threading.Lock()
         self._web_runner: Optional[web.AppRunner] = None
 
@@ -1234,7 +1244,13 @@ class WaseBoardServer(commands.Bot):
     async def find_memberships(self, user_id: int) -> list[tuple[discord.Guild, discord.Member]]:
         """Retrouve TOUS les serveurs Discord dont cet utilisateur est membre (avec son membre
         sur chacun, pour les contrôles de rôle) — chacun aura automatiquement sa propre
-        catégorie partagée, indépendamment de toute présence vocale."""
+        catégorie partagée, indépendamment de toute présence vocale. Résultat mis en cache
+        (MEMBERSHIP_CACHE_TTL) : voir la constante pour pourquoi."""
+        cached = self._membership_cache.get(user_id)
+        now = time.monotonic()
+        if cached is not None and now - cached[0] < MEMBERSHIP_CACHE_TTL:
+            return cached[1]
+
         found: list[tuple[discord.Guild, discord.Member]] = []
         for guild in self.guilds:
             member = guild.get_member(user_id)
@@ -1245,6 +1261,12 @@ class WaseBoardServer(commands.Bot):
                     member = None
             if member is not None:
                 found.append((guild, member))
+
+        self._membership_cache[user_id] = (now, found)
+        if len(self._membership_cache) > 500:  # garde-fou bas coût contre une croissance illimitée
+            expired = [uid for uid, (ts, _) in self._membership_cache.items() if now - ts >= MEMBERSHIP_CACHE_TTL]
+            for uid in expired:
+                del self._membership_cache[uid]
         return found
 
     async def find_all_guilds_for_user(self, user_id: int) -> list[discord.Guild]:
