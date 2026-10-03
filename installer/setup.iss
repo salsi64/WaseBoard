@@ -4,7 +4,7 @@
 ;   dotnet publish src/WaseBoard/WaseBoard.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 
 #define MyAppName "WaseBoard"
-#define MyAppVersion "2.5.0"
+#define MyAppVersion "3.0.0"
 ; ↑ Pensez à incrémenter ce numéro à chaque nouvelle version distribuée à vos utilisateurs
 ; (pas obligatoire pour que la mise à jour fonctionne — c'est l'AppId ci-dessous qui compte —
 ; mais ça permet de distinguer les versions dans le nom du fichier et dans Windows).
