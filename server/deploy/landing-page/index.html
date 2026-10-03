@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaseBoard</title>
+<style>
+  :root {
+    --bg: #0F1624;
+    --panel: #182236;
+    --accent: #38BDF8;
+    --on-accent: #0B1220;
+    --text: #EAF0FA;
+    --text-dim: #B8C4D9;
+    --track: #26324A;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", -apple-system, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+  header .emoji {
+    font-size: 48px;
+  }
+  h1 {
+    font-size: 32px;
+    margin: 8px 0 4px;
+  }
+  .tagline {
+    color: var(--text-dim);
+    font-size: 15px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .card {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    margin-top: 0;
+    font-size: 18px;
+  }
+  .card p, .card li {
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+  ol, ul {
+    padding-left: 20px;
+    margin-bottom: 0;
+  }
+  li { margin-bottom: 8px; }
+  li:last-child { margin-bottom: 0; }
+  a.button {
+    display: inline-block;
+    text-decoration: none;
+    padding: 12px 22px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  a.button.primary { background: var(--accent); color: var(--on-accent); }
+  a.button.secondary { background: var(--panel); color: var(--text); border: 1px solid var(--track); }
+  a.button:hover { opacity: 0.85; }
+  a.link { color: var(--accent); }
+  code {
+    background: var(--track);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  .actions {
+    text-align: center;
+    margin: 28px 0;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .note {
+    font-size: 12px;
+    color: var(--text-dim);
+    opacity: 0.8;
+    text-align: center;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="emoji">🎛️</div>
+      <h1>WaseBoard</h1>
+      <div class="tagline">Soundboard partagé pour Discord — cliquez un son, il joue à la fois sur vos enceintes et dans le vocal, pour tout le monde, sans jamais passer par votre micro.</div>
+    </header>
+
+    <div class="actions">
+      <a class="button primary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger le client Windows</a>
+      <a class="button secondary" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord WaseBoard</a>
+    </div>
+
+    <div class="card">
+      <h2>Comment ça marche</h2>
+      <p>Cette page est le point d'accès d'une instance de <strong>WaseBoard</strong> : une application Windows (le client, que vous installez) qui se connecte à un serveur hébergeant le catalogue de sons partagé et un bot Discord. Quand vous cliquez un son, il joue en même temps sur vos propres enceintes et par le bot dans votre salon vocal.</p>
+    </div>
+
+    <div class="card">
+      <h2>Rejoindre un serveur existant</h2>
+      <p>Si quelqu'un vous a invité sur son serveur WaseBoard :</p>
+      <ol>
+        <li>Installer le client (bouton ci-dessus).</li>
+        <li>Ouvrir le lien de connexion reçu sur Discord (bouton « Ouvrir WaseBoard ») — l'application se configure toute seule. Sans lien, l'adresse du serveur se saisit à la main dans les Paramètres.</li>
+        <li>Se connecter avec votre compte Discord quand l'application le demande : ça sert uniquement à afficher votre avatar et à retrouver votre salon vocal, rien d'autre à saisir.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>Héberger votre propre serveur</h2>
+      <p>WaseBoard est open-source et fait pour être auto-hébergé : chaque groupe héberge sa propre instance, il n'y a pas de serveur central fourni avec le projet.</p>
+      <p>Le plus simple : <code>git clone</code> le dépôt, puis lancer l'assistant Docker (<code>./setup.sh</code> ou <code>.\setup.ps1</code>) — il vous guide pour créer l'application bot Discord, vérifie la configuration et démarre tout, en une quinzaine de minutes.</p>
+      <p>Guide complet (installation Docker ou manuelle, HTTPS, sécurité, dépannage) : <a class="link" href="https://github.com/salsi64/WaseBoard/blob/master/server/README.md">server/README.md</a> sur le dépôt GitHub.</p>
+    </div>
+
+    <div class="note">
+      WaseBoard — projet open-source. Code source et documentation complète sur
+      <a class="link" href="https://github.com/salsi64/WaseBoard">GitHub</a>.
+    </div>
+  </div>
+</body>
+</html>

@@ -110,11 +110,46 @@ namespace WaseBoard.Services
             return new(result.Success, result.SessionToken, result.UserId, result.Username, result.AvatarUrl, result.Error);
         }
 
+        // Mêmes couleurs que la palette par défaut de l'appli (PalettePresets.NightBlue) et que la page
+        // /connect du serveur (server.py, _CONNECT_PAGE_STYLE) : un fond blanc en pleine nuit serait
+        // franchement désagréable pour qui vient de passer par le thème sombre de Discord et de l'appli.
+        private const string PageStyle =
+            "body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f1624;color:#eaf0fa;margin:0;" +
+            "display:flex;min-height:100vh;align-items:center;justify-content:center}" +
+            "main{max-width:380px;padding:32px;text-align:center}" +
+            "h1{font-size:20px;margin:0 0 10px}p{line-height:1.5;color:#b8c4d9;margin:0 0 24px}" +
+            ".links{display:flex;flex-direction:column;gap:10px}" +
+            "a.link{display:block;background:#182236;color:#eaf0fa;text-decoration:none;padding:10px 16px;" +
+            "border-radius:8px;font-size:13px;border:1px solid #26324a}" +
+            "a.link:hover{border-color:#38bdf8}";
+
+        // Site et communauté du projet, pas spécifiques à ce serveur WaseBoard — utile même si la
+        // personne qui vous a invité n'a pas (encore) tout configuré.
+        private const string FooterLinks =
+            """
+            <div class="links">
+                <a class="link" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord WaseBoard</a>
+                <a class="link" href="https://waseboard.salsi.bid/">🌐 Le site</a>
+                <a class="link" href="https://github.com/salsi64/WaseBoard">🐙 Code source (GitHub)</a>
+            </div>
+            """;
+
         private static async Task RespondToBrowserAsync(HttpListenerContext ctx, bool ok)
         {
-            var html = ok
-                ? "<html><body style=\"font-family:sans-serif;padding:2em\">Connexion réussie — vous pouvez fermer cet onglet et revenir dans WaseBoard.</body></html>"
-                : "<html><body style=\"font-family:sans-serif;padding:2em\">Échec de la connexion — vous pouvez fermer cet onglet et réessayer dans WaseBoard.</body></html>";
+            var message = ok
+                ? "Connexion réussie — vous pouvez fermer cet onglet et revenir dans WaseBoard."
+                : "Échec de la connexion — vous pouvez fermer cet onglet et réessayer dans WaseBoard.";
+            var html =
+                $"""
+                <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>WaseBoard</title>
+                <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+                <style>{PageStyle}</style></head><body><main>
+                <div style="font-size:36px;margin-bottom:8px">🎛️</div>
+                <h1>WaseBoard</h1>
+                <p>{message}</p>
+                {FooterLinks}
+                </main></body></html>
+                """;
             var bytes = Encoding.UTF8.GetBytes(html);
             ctx.Response.ContentType = "text/html; charset=utf-8";
             ctx.Response.ContentLength64 = bytes.Length;
