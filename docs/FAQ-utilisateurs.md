@@ -99,3 +99,9 @@ admins), trois boutons sont disponibles sans rien installer de plus que Discord 
 | ❓ **Aide** | rappelle l'essentiel de ce guide, en message privé (visible de vous seul) |
 
 Commandes équivalentes à taper dans Discord : `/join`, `/leave` (déconnecte complètement le bot).
+
+## Besoin d'aide ?
+
+Demandez à un admin de votre serveur, ou passez sur le
+[Discord WaseBoard](https://discord.gg/HAGTNGFyQd) — la communauté du projet, pas liée à un serveur
+en particulier.

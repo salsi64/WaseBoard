@@ -4,7 +4,8 @@ Soundboard partagé pour Discord : cliquez un son, il joue à la fois sur vos en
 votre salon vocal, pour tout le monde — sans jamais passer par votre micro (donc pas filtré par
 les suppressions de bruit type Krisp).
 
-**[⬇ Télécharger le client Windows](https://github.com/salsi64/WaseBoard/releases/latest)**
+**[⬇ Télécharger le client Windows](https://github.com/salsi64/WaseBoard/releases/latest)** ·
+**[💬 Rejoindre le Discord WaseBoard](https://discord.gg/HAGTNGFyQd)**
 
 ## Comment ça marche
 
@@ -17,10 +18,13 @@ les joue dans le vocal.
 Si quelqu'un dans votre groupe a déjà un serveur WaseBoard (le bot est déjà présent sur votre
 Discord) :
 
-1. [Téléchargez et installez le client](https://github.com/salsi64/WaseBoard/releases/latest).
-2. Demandez à cette personne l'**adresse du serveur** et le **jeton d'accès**, à saisir au
-   premier lancement (ou plus tard dans les Paramètres).
-3. Cliquez sur le bouton: Rejoindre mon vocal.   
+1. Cliquez sur le bouton de connexion reçu sur Discord (📬 **Recevoir mon lien WaseBoard**, posté
+   par un admin) : WaseBoard s'installe et se configure tout seul. Sans ce bouton, [téléchargez et
+   installez le client](https://github.com/salsi64/WaseBoard/releases/latest), puis saisissez
+   l'adresse du serveur et le jeton d'accès donnés par cette personne, dans les Paramètres.
+2. Connectez-vous avec votre compte Discord quand l'application le demande — ça sert uniquement à
+   afficher votre avatar et à retrouver votre salon vocal, rien d'autre à saisir.
+3. Rejoignez un salon vocal, cliquez 🔊 **Rejoindre mon vocal** dans WaseBoard.
 4. Cliquez un son — c'est prêt.
 
 Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
@@ -38,20 +42,25 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 - **Raccourcis clavier globaux**, thème clair/sombre et interface classique ou moderne
   (barre latérale), au choix. La forme d'onde des boutons est optionnelle : masquée, les boutons
   tiennent sur une seule ligne et l'avatar de la personne qui joue reste affiché à droite du nom.
-- **Identification automatique** : votre compte Discord suffit, WaseBoard retrouve tout seul
-  votre salon vocal — rien à choisir manuellement.
+- **Identification automatique** (connexion Discord) : votre compte suffit, WaseBoard retrouve
+  tout seul votre salon vocal — rien à choisir manuellement.
+- **Plusieurs serveurs Discord** sur une même instance, catalogues isolés par serveur ; les sons
+  d'un serveur où vous êtes aussi membre restent jouables partout où vous allez.
+- **Panel d'administration** par serveur (rôles, corbeille avec restauration, statistiques,
+  journal d'actions, quotas, anti-spam) et un **panneau de boutons Discord** (`/panneau`) pour
+  rejoindre le vocal ou couper les sons sans quitter Discord.
 - Formats supportés : mp3, wav, ogg (Vorbis et Opus), flac, m4a, wma.
 
 ## Héberger
 
-Personne dans votre groupe n'a encore de serveur ? Suivez
-[`server/README.md`](server/README.md) (bot Discord, mise en place, HTTPS) — gratuit,
-~15 minutes.
+Personne dans votre groupe n'a encore de serveur ? Un assistant Docker s'occupe de tout (bot
+Discord, HTTPS automatique) — gratuit, ~15 minutes. Suivez
+[`server/README.md`](server/README.md).
 
 ## Pistes d'amélioration
 
 - Import/export de sélections de sons.
-- Historique des sons les plus joués.
+- Client multi-serveurs (se connecter à plusieurs instances WaseBoard indépendantes à la fois).
 - Installeur plus léger (mode "framework-dependent", au prix de nécessiter le
   [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) sur chaque poste).
 

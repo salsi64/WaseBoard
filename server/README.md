@@ -490,3 +490,5 @@ changement d'adresse publique, fermeture des anciens accès, sauvegardes automat
   `curl https://VOTRE_DOMAINE/status -H "X-WaseBoard-Token: VOTRE_SECRET"`.
 - **"Address already in use"** : changez `http_port` dans `config.json`, ou arrêtez l'ancien
   processus (`sudo lsof -i :5005`).
+- **Toujours bloqué ?** [Rejoignez le Discord WaseBoard](https://discord.gg/HAGTNGFyQd) et demandez —
+  ou [ouvrez une issue](https://github.com/salsi64/WaseBoard/issues) sur le dépôt.
