@@ -8,3 +8,4 @@ server/.dockerignore text eol=lf
 server/deploy/* text eol=lf
 server/Dockerfile.* text eol=lf
 server/Caddyfile.* text eol=lf
+server/tests/*.sh text eol=lf
