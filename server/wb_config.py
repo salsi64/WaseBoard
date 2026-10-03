@@ -37,10 +37,12 @@ def _json_object(value) -> dict:
 
 
 # Réglages de guilde auxquels l'hébergeur peut imposer des valeurs par défaut ou des plafonds (0 = illimité).
-GUILD_LIMIT_KEYS = ("max_sounds", "max_file_mb", "max_duration_s", "max_total_mb", "play_rate_per_min")
+# max_sources_per_guild en fait partie (PAS un plafond d'instance global) : chaque guilde peut avoir son propre
+# plafond de sons simultanés, ou aucun — voir DEFAULT_GUILD_SETTINGS/default_guild_limits dans server.py.
+GUILD_LIMIT_KEYS = ("max_sounds", "max_file_mb", "max_duration_s", "max_total_mb", "play_rate_per_min",
+                    "max_sources_per_guild")
 # Plafonds de ressources de l'instance (0 = désactivé) : voir « Capacité » dans le README.
-RESOURCE_CAP_KEYS = ("max_guilds", "max_concurrent_voice", "max_sources_per_guild", "max_ffmpeg_processes",
-                     "http_rate_limit_per_min")
+RESOURCE_CAP_KEYS = ("max_guilds", "max_concurrent_voice", "max_ffmpeg_processes", "http_rate_limit_per_min")
 
 
 # clé de config.json -> (variable d'environnement, conversion)
@@ -57,7 +59,6 @@ ENV_OVERRIDES: dict[str, tuple[str, Callable]] = {
     "trash_retention_days": ("WASEBOARD_TRASH_RETENTION_DAYS", int),
     "max_guilds": ("WASEBOARD_MAX_GUILDS", int),
     "max_concurrent_voice": ("WASEBOARD_MAX_CONCURRENT_VOICE", int),
-    "max_sources_per_guild": ("WASEBOARD_MAX_SOURCES_PER_GUILD", int),
     "max_ffmpeg_processes": ("WASEBOARD_MAX_FFMPEG_PROCESSES", int),
     "http_rate_limit_per_min": ("WASEBOARD_HTTP_RATE_LIMIT_PER_MIN", int),
     "default_guild_limits": ("WASEBOARD_DEFAULT_GUILD_LIMITS", _json_object),
