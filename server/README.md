@@ -50,6 +50,24 @@ Quatre modes : Internet avec HTTPS (défaut), Internet avec HTTPS via un domaine
 (test), ou votre propre reverse proxy (le serveur écoute alors sur `127.0.0.1:5005`). Tout tient dans `.env` (modèle
 commenté : `.env.example`) — vous pouvez aussi le remplir à la main et lancer `docker compose up -d`.
 
+### Image déjà construite (sans compiler)
+
+Par défaut, `docker compose build` compile l'image sur votre machine (1-2 minutes la première fois). Une
+image prête à l'emploi est aussi publiée automatiquement à chaque mise à jour du dépôt
+(`ghcr.io/salsi64/waseboard-server`) : pour l'utiliser à la place, créez `docker-compose.override.yml` à côté de
+`docker-compose.yml` :
+
+```yaml
+services:
+  waseboard:
+    image: ghcr.io/salsi64/waseboard-server:latest
+    build: !reset null
+```
+
+puis `docker compose pull waseboard && docker compose up -d` — plus de compilation locale. Vérifiez vous-même
+le contenu de l'image avant de l'utiliser si vous préférez partir du code source (`Dockerfile` à la racine de
+`server/`) : c'est tout l'intérêt de l'auto-hébergement.
+
 ### Domaine chez Cloudflare (sans port 80)
 
 Si votre domaine est géré par Cloudflare, choisissez le mode 2 de l'assistant. Le certificat Let's Encrypt est alors
