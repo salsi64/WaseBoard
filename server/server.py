@@ -1254,17 +1254,30 @@ class WaseBoardServer(commands.Bot):
         if cached is not None and now - cached[0] < MEMBERSHIP_CACHE_TTL:
             return cached[1]
 
-        found: list[tuple[discord.Guild, discord.Member]] = []
+        member_by_guild_id: dict[int, discord.Member] = {}
+        guilds_to_fetch: list[discord.Guild] = []
         for guild in self.guilds:
             member = guild.get_member(user_id)
-            if member is None:
-                try:
-                    member = await guild.fetch_member(user_id)
-                except (discord.NotFound, discord.HTTPException):
-                    member = None
             if member is not None:
-                found.append((guild, member))
+                member_by_guild_id[guild.id] = member
+            else:
+                guilds_to_fetch.append(guild)
 
+        if guilds_to_fetch:
+            async def _safe_fetch(guild: discord.Guild):
+                try:
+                    return guild.id, await guild.fetch_member(user_id)
+                except (discord.NotFound, discord.HTTPException):
+                    return guild.id, None
+
+            # En parallèle (pas guilde par guilde) : un cache froid coûte alors le temps du PLUS
+            # LENT appel REST, pas leur somme — c'est ce qui rendait perceptible le tout premier
+            # clic (ou le premier après un moment d'inactivité, une fois le cache expiré).
+            for gid, member in await asyncio.gather(*(_safe_fetch(g) for g in guilds_to_fetch)):
+                if member is not None:
+                    member_by_guild_id[gid] = member
+
+        found = [(guild, member_by_guild_id[guild.id]) for guild in self.guilds if guild.id in member_by_guild_id]
         self._membership_cache[user_id] = (now, found)
         if len(self._membership_cache) > 500:  # garde-fou bas coût contre une croissance illimitée
             expired = [uid for uid, (ts, _) in self._membership_cache.items() if now - ts >= MEMBERSHIP_CACHE_TTL]
