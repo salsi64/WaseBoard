@@ -40,8 +40,8 @@ Il vous faut : une machine allumée en permanence avec [Docker](https://docs.doc
    Il demande le jeton du bot, le secret OAuth2 et le nom de domaine, génère le secret partagé, écrit `.env`, puis
    **vérifie la configuration** (jeton, intent, redirection OAuth2, ffmpeg...) et affiche l'**URL pour inviter le bot**
    sur votre serveur Discord. Une fois tout au vert il démarre le serveur et attend qu'il soit prêt.
-4. **Dans Discord** : `/diagnostic` (contrôle des droits du bot sur vos salons vocaux), puis `/configurer-invitation`
-   dans le salon où vos membres récupèrent leur lien (voir [étape 7](#7-distribuer-le-lien-de-connexion)).
+4. **Dans Discord** : `/diagnostic` (contrôle des droits du bot sur vos salons vocaux), puis `/bot-setup`
+   dans le salon où vos membres démarrent (voir [étape 7](#7-distribuer-le-lien-de-connexion)).
 
 Ce que l'assistant met en place : le serveur (image construite depuis ce dossier, utilisateur sans privilèges,
 redémarrage automatique), **Caddy** pour le HTTPS (certificat Let's Encrypt obtenu et renouvelé tout seul) et,
@@ -292,17 +292,27 @@ domaine (jamais une IP nue) — [DuckDNS](https://www.duckdns.org/) en fournit u
 
 ## 7. Distribuer le lien de connexion
 
-Une fois `public_url` et `shared_secret` renseignés (étape 3), tapez `/configurer-invitation`
-dans un salon Discord — ça poste un bouton persistant (survit aux redémarrages du bot). Vous pouvez
-aussi taper `/panneau` dans un salon pour y poster trois boutons utilisables par tout le monde sans
-commande : 🔊 rejoindre son vocal, ⏹️ couper les sons en cours, ❓ un rappel du fonctionnement — guide
-complet pour vos membres : [`docs/FAQ-utilisateurs.md`](../docs/FAQ-utilisateurs.md).
-Toute personne pouvant voir ce salon peut cliquer dessus pour recevoir, en message visible
-d'elle seule, un **bouton « Ouvrir WaseBoard »** : il ouvre une petite page de votre serveur
-(`<public_url>/connect/<code>`) qui lance l'application et pré-remplit automatiquement
-l'adresse et le jeton d'accès (rien à copier-coller). Cette page propose aussi le téléchargement
-de WaseBoard à qui ne l'a pas encore (`download_url` dans `config.json`, par défaut la dernière
-version publiée sur GitHub) et un lien à coller dans Windows + R en dernier recours.
+Le plus simple : une fois `public_url` et `shared_secret` renseignés (étape 3), tapez `/bot-setup`
+dans un salon Discord — ça poste **un seul panneau persistant** (survit aux redémarrages du bot)
+qui explique à vos membres comment démarrer, leur donne les actions courantes (🔊 rejoindre leur
+vocal, ❓ un rappel du fonctionnement), un bouton pour ajouter ce même bot à un autre serveur, et
+des liens (site, Discord communautaire, code source). Guide complet pour vos membres :
+[`docs/FAQ-utilisateurs.md`](../docs/FAQ-utilisateurs.md).
+
+Si vous préférez poster ces éléments séparément (plusieurs salons, par exemple), trois commandes
+plus ciblées existent aussi :
+- `/configurer-invitation` : panneau « comment démarrer » (téléchargement + connexion) avec, en
+  plus, un bouton de **connexion directe à CE serveur précis** — utile si vos membres utilisent
+  déjà WaseBoard ailleurs (une autre instance auto-hébergée) et doivent spécifiquement basculer
+  sur la vôtre.
+- `/panneau` : juste les deux boutons d'action (🔊 rejoindre le vocal, ❓ aide), sans texte
+  d'explication.
+- `/inviter-bot` : juste le bouton pour ajouter ce bot à un autre serveur.
+
+Le bouton de connexion directe (dans `/bot-setup` ou `/configurer-invitation`) répond en message
+visible de son seul auteur avec un **bouton « Ouvrir WaseBoard »** : il ouvre une petite page de
+votre serveur (`<public_url>/connect/<code>`) qui lance l'application et pré-remplit automatiquement
+l'adresse et le jeton d'accès (rien à copier-coller).
 
 Pourquoi une page et pas directement le lien `waseboard://` : Discord n'affiche pas comme
 cliquable un lien à schéma personnalisé, alors qu'un bouton https marche partout (ordinateur,
@@ -313,11 +323,10 @@ sans en-tête d'authentification) mais ne révèle rien sans code valide. Qui vo
 se règle en restreignant l'accès au salon via les permissions Discord habituelles — rien à
 configurer côté WaseBoard.
 
-Pour ajouter ce même bot à un **autre** serveur Discord (le vôtre ou celui d'un ami), tapez
-`/inviter-bot` : ça poste un bouton-lien « ➕ Ajouter WaseBoard à mon serveur » qui ouvre la page
-d'invitation Discord classique (droit « Gérer le serveur » requis sur le serveur de destination,
-vérifié par Discord lui-même). Chaque nouveau serveur démarre avec un catalogue de sons isolé et
-les éventuels plafonds par défaut de l'étape « Réglages imposés aux serveurs Discord » ci-dessous.
+Le bouton « ajouter ce bot à un autre serveur » (droit « Gérer le serveur » requis sur le serveur
+de destination, vérifié par Discord lui-même) : chaque nouveau serveur démarre avec un catalogue
+de sons isolé et les éventuels plafonds par défaut de l'étape « Réglages imposés aux serveurs
+Discord » ci-dessous.
 
 ## 8. Utilisation
 
@@ -484,9 +493,10 @@ changement d'adresse publique, fermeture des anciens accès, sauvegardes automat
   qu'un inconnu sur internet puisse ne serait-ce que sonder le serveur ou saturer l'échange
   OAuth2 — choisissez-le quand même long et aléatoire. Aucune limitation de débit n'est active par
   défaut : voir `http_rate_limit_per_min` dans « Capacité et exploitation ».
-- Le lien de connexion (`/configurer-invitation`) donne accès à ce `shared_secret` — qui
-  voit le bouton Discord qui le distribue doit donc être contrôlé via les permissions du
-  salon où vous le postez, pas seulement en gardant le secret pour vous.
+- Le lien de connexion directe (bouton « Connexion directe à ce serveur » de `/bot-setup` ou
+  `/configurer-invitation`) donne accès à ce `shared_secret` — qui voit le bouton Discord qui le
+  distribue doit donc être contrôlé via les permissions du salon où vous le postez, pas seulement
+  en gardant le secret pour vous.
 
 ## Dépannage
 

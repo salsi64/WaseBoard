@@ -53,8 +53,8 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 - **Plusieurs serveurs Discord** sur une même instance, catalogues isolés par serveur ; les sons
   d'un serveur où vous êtes aussi membre restent jouables partout où vous allez.
 - **Panel d'administration** par serveur (rôles, corbeille avec restauration, statistiques,
-  journal d'actions, quotas, anti-spam) et un **panneau de boutons Discord** (`/panneau`) pour
-  rejoindre le vocal ou couper les sons sans quitter Discord.
+  journal d'actions, quotas, anti-spam) et un **panneau de boutons Discord tout-en-un**
+  (`/bot-setup`) pour démarrer, rejoindre le vocal ou ajouter le bot ailleurs sans quitter Discord.
 - Formats supportés : mp3, wav, ogg (Vorbis et Opus), flac, m4a, wma.
 
 ## Héberger

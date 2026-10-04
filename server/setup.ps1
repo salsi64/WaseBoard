@@ -254,8 +254,8 @@ Say '[OK] Le serveur WaseBoard tourne.'
 Say ''
 Say 'Dernieres etapes, dans Discord :'
 Say "  1. Tapez /diagnostic : il controle les droits du bot sur vos salons vocaux."
-Say "  2. Dans le salon ou vos membres doivent recuperer leur lien, tapez /configurer-invitation :"
-Say "     le bouton poste leur donne un lien qui ouvre WaseBoard deja connecte a votre serveur."
+Say "  2. Dans un salon, tapez /bot-setup : ca poste un panneau d'accueil pour vos membres"
+Say "     (comment demarrer, rejoindre le vocal, aide, liens utiles) en une seule commande."
 Say ''
 Say "Utile : `"$ComposeText logs -f waseboard`" (journal), `"$ComposeText up -d --build`" (apres une mise a jour),"
 Say '        donnees dans le volume Docker "waseboard_waseboard-data" (a sauvegarder, voir le README).'

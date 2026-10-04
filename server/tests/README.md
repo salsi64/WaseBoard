@@ -35,7 +35,7 @@ Sans `ffmpeg`/`libopus0` installés, les vérifications correspondantes de `diag
 | `test_invite.py` | bouton d'invitation Discord → page `/connect/<code>` → lien `waseboard://` |
 | `test_diagnostic.py` | configuration (fichier + variables d'environnement), `/health`, `/diagnostic`, `--check`/`--invite-url` |
 | `test_capacity.py` | plafonds de ressources, quotas/plafonds de guilde, limitation de débit par IP, `/instance` |
-| `test_panel.py` | panneau de boutons Discord (`/panneau` : rejoindre le vocal, stop, aide) |
+| `test_panel.py` | panneaux de boutons Discord (`/panneau`, `/configurer-invitation`, `/inviter-bot`, `/bot-setup`) |
 
 Volontairement absent de cette suite : un test de lecture multi-guildes qui lisait le catalogue **réel** de
 l'instance de test de l'auteur (`sons_data` d'un déploiement précis, avec ses propres ID de guilde/son) — pas
