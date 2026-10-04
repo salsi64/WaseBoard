@@ -378,7 +378,6 @@ et sous forme de variable d'environnement (`WASEBOARD_` + le nom en majuscules, 
 |---|---|
 | `max_guilds` | nombre de serveurs Discord où le bot reste présent. Au-delà, le bot **quitte** le nouveau serveur après avoir prévenu son propriétaire par message privé. Les serveurs déjà présents ne sont jamais touchés. |
 | `max_concurrent_voice` | salons vocaux occupés en même temps. Au-delà, `/join` et le bouton « Rejoindre mon vocal » répondent « serveur saturé, réessayez dans quelques minutes ». |
-| `max_sources_per_guild` | sons **différents** joués en même temps sur un même serveur (rejouer un son déjà en cours le remplace : jamais refusé). |
 | `max_ffmpeg_processes` | sons joués en même temps, tous serveurs confondus (un processus ffmpeg chacun). |
 | `http_rate_limit_per_min` | requêtes par minute et par adresse IP sur les seules routes publiques ou coûteuses : `/connect/…`, `/oauth/…` (compteur commun) et l'envoi de sons. Les routes utilisées en continu par l'appli (`/activity`, `/status`, `/play`…) ne sont **jamais** freinées. Derrière nginx/Caddy, l'adresse du client est lue dans `X-Forwarded-For` (dernière entrée, celle vue par votre proxy). |
 
@@ -388,11 +387,12 @@ l'anti-spam du membre.
 ### Réglages imposés aux serveurs Discord
 
 Chaque serveur règle ses limites dans le panel d'administration (nombre de sons, taille d'un fichier, durée, anti-spam,
-et **espace disque total** `max_total_mb`). Vous pouvez, en tant qu'hébergeur, imposer :
+**espace disque total** `max_total_mb`, et **sons différents joués en même temps** `max_sources_per_guild` — rejouer un
+son déjà en cours le remplace : jamais refusé). Vous pouvez, en tant qu'hébergeur, imposer :
 
 ```json
 {
-  "default_guild_limits":  { "max_sounds": 300, "max_file_mb": 20, "max_total_mb": 500 },
+  "default_guild_limits":  { "max_sounds": 300, "max_file_mb": 20, "max_total_mb": 500, "max_sources_per_guild": 8 },
   "guild_limit_ceilings":  { "max_file_mb": 50, "max_total_mb": 2000 }
 }
 ```
@@ -403,7 +403,8 @@ et **espace disque total** `max_total_mb`). Vous pouvez, en tant qu'hébergeur, 
 - `guild_limit_ceilings` : plafonds que les admins de serveurs **ne peuvent pas dépasser** (« 0 = illimité » n'est alors
   plus permis pour ce réglage ; le panel affiche la limite imposée et refuse une valeur au-dessus). Rien n'est supprimé :
   seuls les futurs ajouts sont refusés.
-- Réglages concernés : `max_sounds`, `max_file_mb`, `max_duration_s`, `max_total_mb`, `play_rate_per_min`.
+- Réglages concernés : `max_sounds`, `max_file_mb`, `max_duration_s`, `max_total_mb`, `play_rate_per_min`,
+  `max_sources_per_guild`.
 
 ### Voir l'état de l'instance : `/instance`
 
@@ -426,7 +427,8 @@ mixeur et l'encodage Opus, une trame toutes les 20 ms par salon, retard de chaqu
 
 Soit environ **0,02 à 0,03 cœur et 10 Mo par son joué simultanément**. En usage réel les sons sont courts et rarement
 simultanés : la charge moyenne est très inférieure. Points de départ prudents pour cette machine, à ajuster avec
-`/instance` : `max_concurrent_voice` 40, `max_ffmpeg_processes` 100, `max_sources_per_guild` 8, `max_guilds` 100,
+`/instance` : `max_concurrent_voice` 40, `max_ffmpeg_processes` 100, `max_guilds` 100,
+`default_guild_limits.max_sources_per_guild` 8 (serveurs déjà enregistrés non affectés),
 `http_rate_limit_per_min` 60. Sur une autre machine, adaptez-les (le CPU décide : comptez ~0,03 cœur par son simultané,
 en laissant la moitié des cœurs libre).
 

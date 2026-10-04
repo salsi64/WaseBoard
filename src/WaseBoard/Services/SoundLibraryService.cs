@@ -160,14 +160,33 @@ namespace WaseBoard.Services
             }
 
             var backupPath = _settingsFilePath + ".bak";
-            if (!File.Exists(backupPath)) return;
+            if (!File.Exists(backupPath))
+            {
+                ApplyDefaultServer();
+                return;
+            }
             try
             {
                 var backupJson = File.ReadAllText(backupPath);
                 Settings = JsonSerializer.Deserialize<AppSettings>(backupJson) ?? new AppSettings();
                 ApplySecretsAfterLoad();
             }
-            catch { /* sauvegarde également illisible : on repart de réglages par défaut */ }
+            catch
+            {
+                // sauvegarde également illisible : on repart de réglages par défaut
+                ApplyDefaultServer();
+            }
+        }
+
+        /// <summary>Premier lancement réel (ni settings.json ni sa sauvegarde) : pré-remplit le
+        /// serveur public par défaut (voir AppIdentity.DefaultServerUrl) pour que l'onboarding
+        /// n'ait pas besoin de lien Discord ni de saisie manuelle dans le cas courant. Absent en
+        /// build Dev (AppIdentity.DefaultServerUrl est alors null) — comportement inchangé.</summary>
+        private void ApplyDefaultServer()
+        {
+            if (string.IsNullOrEmpty(AppIdentity.DefaultServerUrl)) return;
+            Settings.ServerUrl = AppIdentity.DefaultServerUrl;
+            Settings.ServerToken = AppIdentity.DefaultServerToken;
         }
 
         /// <summary>Déchiffre les secrets persistés (DPAPI) dans les champs en mémoire, et migre

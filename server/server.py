@@ -79,9 +79,10 @@ DOWNLOAD_URL: str = CONFIG.get("download_url") or "https://github.com/salsi64/Wa
 TRASH_RETENTION_DAYS: int = CONFIG.get("trash_retention_days", 30)
 
 # Plafonds de ressources de l'instance (0 = désactivé : comportement historique). Voir « Capacité » dans le README.
+# max_sources_per_guild n'en fait PAS partie : c'est un réglage par guilde (DEFAULT_GUILD_SETTINGS plus bas),
+# chaque serveur peut avoir son propre plafond de sons simultanés (ou aucun).
 MAX_GUILDS: int = CONFIG.get("max_guilds", 0)                          # serveurs Discord où le bot reste présent
 MAX_CONCURRENT_VOICE: int = CONFIG.get("max_concurrent_voice", 0)      # connexions vocales simultanées
-MAX_SOURCES_PER_GUILD: int = CONFIG.get("max_sources_per_guild", 0)    # sons différents joués en même temps, par serveur
 MAX_FFMPEG_PROCESSES: int = CONFIG.get("max_ffmpeg_processes", 0)      # sons joués en même temps, toutes guildes (1 ffmpeg chacun)
 HTTP_RATE_LIMIT_PER_MIN: int = CONFIG.get("http_rate_limit_per_min", 0)  # requêtes/min/IP sur les routes publiques
 # Réglages imposés par l'hébergeur aux guildes : valeurs PAR DÉFAUT de celles qui n'ont encore rien enregistré
@@ -218,6 +219,7 @@ DEFAULT_GUILD_SETTINGS = {
     "max_duration_s": 0,          # 0 = pas de limite
     "max_total_mb": 0,            # 0 = pas de limite d'espace disque cumulé (sons natifs de la guilde)
     "play_rate_per_min": 0,       # 0 = pas d'anti-spam à la lecture
+    "max_sources_per_guild": 0,   # 0 = pas de limite de sons différents joués en même temps sur cette guilde
     "blocked_uploaders": [],      # ids Discord (str) interdits d'upload sur cette guilde
 }
 
@@ -947,7 +949,7 @@ def active_limits_text() -> str:
     """Résumé des plafonds actifs de l'instance (ceux à 0 / absents ne sont pas listés)."""
     parts = []
     for label, value in (("serveurs", MAX_GUILDS), ("salons vocaux", MAX_CONCURRENT_VOICE),
-                         ("sons/serveur", MAX_SOURCES_PER_GUILD), ("sons au total", MAX_FFMPEG_PROCESSES)):
+                         ("sons au total", MAX_FFMPEG_PROCESSES)):
         if value > 0:
             parts.append(f"{label} : {value}")
     if HTTP_RATE_LIMIT_PER_MIN > 0:
@@ -1068,10 +1070,34 @@ class WaseBoardServer(commands.Bot):
         except Exception:
             log.exception("Impossible de quitter le serveur refusé %s", guild.id)
 
+    async def _welcome_new_guild(self, guild: discord.Guild) -> None:
+        """Message de bienvenue (DM au propriétaire, même mécanisme que _decline_guild) quand un
+        nouveau serveur accepte le bot. Moins critique depuis le serveur par défaut intégré au
+        client (les membres n'ont plus besoin d'aucune action de l'admin pour se connecter), mais
+        reste utile pour que l'admin découvre /panneau pour ses membres."""
+        text = (
+            f"👋 Merci d'avoir ajouté **WaseBoard** à **{guild.name}** !\n\n"
+            "WaseBoard est un soundboard partagé : vos membres cliquent un son dans l'application, il "
+            "joue à la fois sur leurs enceintes et dans le salon vocal Discord, pour tout le monde.\n\n"
+            f"**Vos membres n'ont rien de spécial à faire** : télécharger le client (<{DOWNLOAD_URL}>) "
+            "et se connecter avec Discord suffit, l'application se connecte automatiquement à cette "
+            "instance.\n\n"
+            "Pour aller plus loin : tapez `/panneau` dans un salon pour y poster des boutons simples "
+            "(rejoindre le vocal, stop) utilisables par tous sans rien installer.\n\n"
+            "Guide complet : <https://github.com/salsi64/WaseBoard/blob/master/docs/FAQ-utilisateurs.md>\n"
+            "Besoin d'aide ? <https://discord.gg/HAGTNGFyQd>"
+        )
+        try:
+            owner = guild.owner or await guild.fetch_member(guild.owner_id)
+            await owner.send(text)
+        except Exception:
+            log.info("Message de bienvenue non remis au propriétaire de %s (messages privés fermés ?).", guild.id)
+
     async def on_guild_join(self, guild: discord.Guild) -> None:
         if MAX_GUILDS > 0 and len(self.guilds) > MAX_GUILDS:
             await self._decline_guild(guild)
             return
+        await self._welcome_new_guild(guild)
         if not GUILD_ID:
             return  # synchro globale : déjà valable pour ce nouveau serveur
         try:
@@ -1152,15 +1178,16 @@ class WaseBoardServer(commands.Bot):
             "top_guilds": top,
         }
 
-    def _play_capacity_error(self, sound_id: str, mixer: "MixingAudioSource") -> Optional[str]:
+    def _play_capacity_error(self, sound_id: str, guild_id: int, mixer: "MixingAudioSource") -> Optional[str]:
         """Message de refus si lancer ce son dépasserait un plafond de ressources, sinon None. Rejouer un son déjà en
         lecture le REMPLACE (voir MixingAudioSource.add) : cela ne consomme rien de plus, donc n'est jamais refusé."""
-        if MAX_SOURCES_PER_GUILD <= 0 and MAX_FFMPEG_PROCESSES <= 0:
+        max_sources = get_guild_settings(guild_id)["max_sources_per_guild"]
+        if max_sources <= 0 and MAX_FFMPEG_PROCESSES <= 0:
             return None
         if mixer.has(sound_id):
             return None
-        if MAX_SOURCES_PER_GUILD > 0 and mixer.count() >= MAX_SOURCES_PER_GUILD:
-            return f"Trop de sons en même temps sur ce serveur (maximum {MAX_SOURCES_PER_GUILD}) : réessayez dans un instant."
+        if max_sources > 0 and mixer.count() >= max_sources:
+            return f"Trop de sons en même temps sur ce serveur (maximum {max_sources}) : réessayez dans un instant."
         if MAX_FFMPEG_PROCESSES > 0 and self.active_source_count() >= MAX_FFMPEG_PROCESSES:
             return "Le serveur WaseBoard est très sollicité en ce moment : réessayez dans un instant."
         return None
@@ -2085,7 +2112,7 @@ class WaseBoardServer(commands.Bot):
             return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= maximum
 
         limits = {"max_sounds": 100000, "max_file_mb": 1024, "max_duration_s": 3600, "max_total_mb": 1048576,
-                  "play_rate_per_min": 600}
+                  "play_rate_per_min": 600, "max_sources_per_guild": 50}
         settings = get_guild_settings(guild.id, clamp=False)  # valeurs brutes : les plafonds ne sont jamais écrits sur disque
         before = dict(settings)
 
@@ -2302,7 +2329,7 @@ class WaseBoardServer(commands.Bot):
             return web.json_response({"error": "fichier manquant sur le serveur"}, status=404)
 
         # Plafonds de ressources de l'hébergeur : vérifiés AVANT l'anti-spam (un refus ne doit pas compter dans le quota).
-        capacity_error = self._play_capacity_error(sound_id, mixer)
+        capacity_error = self._play_capacity_error(sound_id, guild_id, mixer)
         if capacity_error is not None:
             return web.json_response({"error": capacity_error, "retry_after": 2}, status=429, headers={"Retry-After": "2"})
 

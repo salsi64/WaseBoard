@@ -133,7 +133,7 @@ async def main():
     finally:
         Path("/tmp/wbcap_cfg.json").unlink(missing_ok=True)
     check("un booléen n'est pas un nombre valide (max_guilds: true)", ok)
-    check("sans configuration : aucun plafond actif", S.MAX_GUILDS == 0 and S.MAX_CONCURRENT_VOICE == 0 and S.MAX_SOURCES_PER_GUILD == 0
+    check("sans configuration : aucun plafond actif", S.MAX_GUILDS == 0 and S.MAX_CONCURRENT_VOICE == 0
           and S.MAX_FFMPEG_PROCESSES == 0 and S.HTTP_RATE_LIMIT_PER_MIN == 0 and S.DEFAULT_GUILD_LIMITS == {} and S.GUILD_LIMIT_CEILINGS == {})
 
     print("\n--- Réglages de guilde : défauts de l'hébergeur et plafonds ---")
@@ -192,8 +192,10 @@ async def main():
         check("borne de validation propre au réglage conservée (max_total_mb <= 1 048 576)", st == 400)
     st, p, _ = await adm(bot._handle_admin_put_settings, 10, {"max_file_mb": 900, "max_total_mb": 5000})
     check("sans plafonds configurés : valeurs libres comme avant", st == 200 and p["settings"]["max_total_mb"] == 5000 and p["ceilings"] == {}, (st, p))
+    st, p, _ = await adm(bot._handle_admin_put_settings, 10, {"max_sources_per_guild": 5})
+    check("max_sources_per_guild modifiable via le panel admin, comme ses réglages voisins", st == 200 and p["settings"]["max_sources_per_guild"] == 5, (st, p))
     settings_before = S.get_guild_settings(G1.id)
-    S.save_guild_settings(G1.id, {**settings_before, "max_file_mb": 0, "max_total_mb": 0, "max_sounds": 0, "play_rate_per_min": 0})
+    S.save_guild_settings(G1.id, {**settings_before, "max_file_mb": 0, "max_total_mb": 0, "max_sounds": 0, "play_rate_per_min": 0, "max_sources_per_guild": 0})
 
     print("\n--- Quota d'espace disque cumulé (max_total_mb) ---")
     S.save_guild_settings(G1.id, {**S.DEFAULT_GUILD_SETTINGS, "max_total_mb": 1})
@@ -254,18 +256,21 @@ async def main():
     check("sans plafond : 6 sons simultanés, tous acceptés", bot.mixers[G1.id].count() == 6)
 
     fresh_mixers()
-    S.save_guild_settings(G1.id, {**S.DEFAULT_GUILD_SETTINGS, "play_rate_per_min": 3})
-    with Limits(MAX_SOURCES_PER_GUILD=2):
-        r1 = (await play(21, "s1", G1.id))[0]
-        r2 = (await play(21, "s2", G1.id))[0]
-        st, p, resp = await play(21, "s3", G1.id)
-        check("max_sources_per_guild=2 : 3e son différent refusé en 429 avec message et Retry-After",
-              (r1, r2) == (200, 200) and st == 429 and "maximum 2" in p["error"] and p["retry_after"] == 2 and resp.headers.get("Retry-After") == "2", (r1, r2, st, p))
-        check("le son refusé n'est pas parti dans le mixeur", bot.mixers[G1.id].count() == 2 and not bot.mixers[G1.id].has("s3"))
-        r4 = (await play(21, "s1", G1.id))[0]
-        check("rejouer un son déjà en lecture reste permis (il remplace)", r4 == 200 and bot.mixers[G1.id].count() == 2, r4)
-        st, p, _ = await play(21, "s1", G1.id)
-        check("le refus de capacité n'a PAS consommé l'anti-spam (3 lectures valides = limite atteinte ensuite)", st == 429 and "Trop de sons envoyés" in p["error"], (st, p))
+    # max_sources_per_guild est un réglage PAR SERVEUR (pas un plafond d'instance global, voir migration) :
+    # posé directement dans les réglages enregistrés de G1, pas via Limits().
+    S.save_guild_settings(G1.id, {**S.DEFAULT_GUILD_SETTINGS, "play_rate_per_min": 3, "max_sources_per_guild": 2})
+    r1 = (await play(21, "s1", G1.id))[0]
+    r2 = (await play(21, "s2", G1.id))[0]
+    st, p, resp = await play(21, "s3", G1.id)
+    check("max_sources_per_guild=2 (réglage de guilde) : 3e son différent refusé en 429 avec message et Retry-After",
+          (r1, r2) == (200, 200) and st == 429 and "maximum 2" in p["error"] and p["retry_after"] == 2 and resp.headers.get("Retry-After") == "2", (r1, r2, st, p))
+    check("le son refusé n'est pas parti dans le mixeur", bot.mixers[G1.id].count() == 2 and not bot.mixers[G1.id].has("s3"))
+    r4 = (await play(21, "s1", G1.id))[0]
+    check("rejouer un son déjà en lecture reste permis (il remplace)", r4 == 200 and bot.mixers[G1.id].count() == 2, r4)
+    st, p, _ = await play(21, "s1", G1.id)
+    check("le refus de capacité n'a PAS consommé l'anti-spam (3 lectures valides = limite atteinte ensuite)", st == 429 and "Trop de sons envoyés" in p["error"], (st, p))
+    st, _, _ = await play(20, "t1", G2.id)
+    check("une AUTRE guilde (sans ce réglage) n'est pas affectée : bien par serveur, pas global", st == 200, st)
     S.save_guild_settings(G1.id, {**S.DEFAULT_GUILD_SETTINGS})
 
     fresh_mixers()
@@ -343,14 +348,24 @@ async def main():
             await bot.on_guild_join(g2)
             check("messages privés fermés : le bot quitte quand même", g2.left)
             fake_list = [G1, G2, newg]
-            g3 = JoinGuild(9003, FakeOwner()); fake_list = [G1, G2, g3]
+            owner3 = FakeOwner(); g3 = JoinGuild(9003, owner3); fake_list = [G1, G2, g3]
             await bot.on_guild_join(g3)
             check("sous le plafond (3/3 atteint exactement) : le serveur est accepté", not g3.left)
+            check("serveur accepté : message de BIENVENUE au propriétaire (distinct du refus), mentionne /panneau",
+                  len(owner3.dms) == 1 and "Nouveau9003" in owner3.dms[0] and "/panneau" in owner3.dms[0]
+                  and "capacité maximale" not in owner3.dms[0], owner3.dms)
+            check("le DM de bienvenue n'embarque pas de lien de connexion direct (expirerait avant lecture)",
+                  "/connect/" not in owner3.dms[0], owner3.dms)
         with Limits(MAX_GUILDS=0):
-            fake_list = [G1, G2, G3, JoinGuild(9004, FakeOwner())]
-            g4 = fake_list[-1]
+            owner4 = FakeOwner(); g4 = JoinGuild(9004, owner4)
+            fake_list = [G1, G2, G3, g4]
             await bot.on_guild_join(g4)
             check("sans plafond : jamais refusé", not g4.left)
+            check("et reçoit quand même le message de bienvenue", len(owner4.dms) == 1 and "Nouveau9004" in owner4.dms[0])
+        owner5 = FakeOwner(fail=True); g5 = JoinGuild(9005, owner5)
+        fake_list = [G1, G2, G3, g5]
+        await bot.on_guild_join(g5)
+        check("messages privés fermés sur le DM de bienvenue : n'empêche pas le reste (pas d'exception)", not g5.left)
         check("les serveurs déjà présents ne sont jamais touchés (on_guild_join ne concerne que le nouveau)", all(not hasattr(g, "left") for g in (G1, G2, G3)))
     finally:
         del S.WaseBoardServer.guilds
@@ -436,10 +451,12 @@ async def main():
     check("format_bytes", S.format_bytes(0) == "0 octets" and S.format_bytes(1536) == "1.5 Ko" and S.format_bytes(5 * 1024**3) == "5.0 Go" and S.format_bytes(2 * 1024**4) == "2048.0 Go", [S.format_bytes(x) for x in (0, 1536, 5 * 1024**3)])
     check("format_duration", S.format_duration(30) == "0 min" and S.format_duration(3 * 3600 + 5 * 60) == "3 h 05 min" and S.format_duration(2 * 86400 + 3 * 3600) == "2 j 3 h" and S.format_duration(12 * 60) == "12 min")
     check("plafonds actifs : « aucun » par défaut", "aucun" in S.active_limits_text())
-    with Limits(MAX_GUILDS=50, MAX_CONCURRENT_VOICE=20, MAX_SOURCES_PER_GUILD=8, MAX_FFMPEG_PROCESSES=40, HTTP_RATE_LIMIT_PER_MIN=60,
-                GUILD_LIMIT_CEILINGS={"max_total_mb": 500}, DEFAULT_GUILD_LIMITS={"max_sounds": 200}):
+    with Limits(MAX_GUILDS=50, MAX_CONCURRENT_VOICE=20, MAX_FFMPEG_PROCESSES=40, HTTP_RATE_LIMIT_PER_MIN=60,
+                GUILD_LIMIT_CEILINGS={"max_total_mb": 500}, DEFAULT_GUILD_LIMITS={"max_sounds": 200, "max_sources_per_guild": 8}):
         t = S.active_limits_text()
-        check("plafonds actifs listés", all(x in t for x in ("serveurs : 50", "salons vocaux : 20", "sons/serveur : 8", "sons au total : 40", "60/min/IP", "max_total_mb=500", "max_sounds=200")), t)
+        check("plafonds actifs listés (max_sources_per_guild n'y figure plus : c'est un réglage de guilde, pas un plafond d'instance)",
+              all(x in t for x in ("serveurs : 50", "salons vocaux : 20", "sons au total : 40", "60/min/IP", "max_total_mb=500", "max_sounds=200", "max_sources_per_guild=8"))
+              and "sons/serveur" not in t, t)
     fresh_mixers()
     bot.mixers[G1.id].add("a", ("x", 1)); bot.mixers[G1.id].add("b", ("x", 2))
     bot.online_users = {"1": {"username": "u", "avatar_url": "", "last_seen": time.time()}}
