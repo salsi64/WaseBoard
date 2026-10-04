@@ -348,14 +348,24 @@ async def main():
             await bot.on_guild_join(g2)
             check("messages privés fermés : le bot quitte quand même", g2.left)
             fake_list = [G1, G2, newg]
-            g3 = JoinGuild(9003, FakeOwner()); fake_list = [G1, G2, g3]
+            owner3 = FakeOwner(); g3 = JoinGuild(9003, owner3); fake_list = [G1, G2, g3]
             await bot.on_guild_join(g3)
             check("sous le plafond (3/3 atteint exactement) : le serveur est accepté", not g3.left)
+            check("serveur accepté : message de BIENVENUE au propriétaire (distinct du refus), mentionne /panneau",
+                  len(owner3.dms) == 1 and "Nouveau9003" in owner3.dms[0] and "/panneau" in owner3.dms[0]
+                  and "capacité maximale" not in owner3.dms[0], owner3.dms)
+            check("le DM de bienvenue n'embarque pas de lien de connexion direct (expirerait avant lecture)",
+                  "/connect/" not in owner3.dms[0], owner3.dms)
         with Limits(MAX_GUILDS=0):
-            fake_list = [G1, G2, G3, JoinGuild(9004, FakeOwner())]
-            g4 = fake_list[-1]
+            owner4 = FakeOwner(); g4 = JoinGuild(9004, owner4)
+            fake_list = [G1, G2, G3, g4]
             await bot.on_guild_join(g4)
             check("sans plafond : jamais refusé", not g4.left)
+            check("et reçoit quand même le message de bienvenue", len(owner4.dms) == 1 and "Nouveau9004" in owner4.dms[0])
+        owner5 = FakeOwner(fail=True); g5 = JoinGuild(9005, owner5)
+        fake_list = [G1, G2, G3, g5]
+        await bot.on_guild_join(g5)
+        check("messages privés fermés sur le DM de bienvenue : n'empêche pas le reste (pas d'exception)", not g5.left)
         check("les serveurs déjà présents ne sont jamais touchés (on_guild_join ne concerne que le nouveau)", all(not hasattr(g, "left") for g in (G1, G2, G3)))
     finally:
         del S.WaseBoardServer.guilds

@@ -1070,10 +1070,34 @@ class WaseBoardServer(commands.Bot):
         except Exception:
             log.exception("Impossible de quitter le serveur refusé %s", guild.id)
 
+    async def _welcome_new_guild(self, guild: discord.Guild) -> None:
+        """Message de bienvenue (DM au propriétaire, même mécanisme que _decline_guild) quand un
+        nouveau serveur accepte le bot. Moins critique depuis le serveur par défaut intégré au
+        client (les membres n'ont plus besoin d'aucune action de l'admin pour se connecter), mais
+        reste utile pour que l'admin découvre /panneau pour ses membres."""
+        text = (
+            f"👋 Merci d'avoir ajouté **WaseBoard** à **{guild.name}** !\n\n"
+            "WaseBoard est un soundboard partagé : vos membres cliquent un son dans l'application, il "
+            "joue à la fois sur leurs enceintes et dans le salon vocal Discord, pour tout le monde.\n\n"
+            f"**Vos membres n'ont rien de spécial à faire** : télécharger le client (<{DOWNLOAD_URL}>) "
+            "et se connecter avec Discord suffit, l'application se connecte automatiquement à cette "
+            "instance.\n\n"
+            "Pour aller plus loin : tapez `/panneau` dans un salon pour y poster des boutons simples "
+            "(rejoindre le vocal, stop) utilisables par tous sans rien installer.\n\n"
+            "Guide complet : <https://github.com/salsi64/WaseBoard/blob/master/docs/FAQ-utilisateurs.md>\n"
+            "Besoin d'aide ? <https://discord.gg/HAGTNGFyQd>"
+        )
+        try:
+            owner = guild.owner or await guild.fetch_member(guild.owner_id)
+            await owner.send(text)
+        except Exception:
+            log.info("Message de bienvenue non remis au propriétaire de %s (messages privés fermés ?).", guild.id)
+
     async def on_guild_join(self, guild: discord.Guild) -> None:
         if MAX_GUILDS > 0 and len(self.guilds) > MAX_GUILDS:
             await self._decline_guild(guild)
             return
+        await self._welcome_new_guild(guild)
         if not GUILD_ID:
             return  # synchro globale : déjà valable pour ce nouveau serveur
         try:
