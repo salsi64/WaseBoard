@@ -855,6 +855,24 @@ PANEL_HELP_TEXT = (
 )
 
 
+async def _handle_join_voice_button(interaction: discord.Interaction) -> None:
+    """Logique du bouton "Rejoindre mon vocal", partagée par MemberPanelView et BotSetupView (deux
+    boutons différents, même comportement — évite de la dupliquer)."""
+    member = interaction.user
+    if not isinstance(member, discord.Member) or member.voice is None or member.voice.channel is None:
+        await interaction.response.send_message(
+            "Connectez-vous d'abord à un salon vocal sur Discord, puis recliquez ce bouton.", ephemeral=True)
+        return
+    channel = member.voice.channel
+    try:
+        await bot.join_guild_voice(interaction.guild_id, channel)
+    except CapacityError as ex:
+        await interaction.response.send_message(f"⚠️ {ex}", ephemeral=True)
+        return
+    await interaction.response.send_message(
+        f"Connecté à **{channel.name}**. Prêt à jouer les sons envoyés par WaseBoard.", ephemeral=True)
+
+
 class MemberPanelView(discord.ui.View):
     """Panneau de boutons persistant (voir /panneau, et setup_hook : bot.add_view) — une alternative aux
     commandes slash pour les membres qui ne les utilisent pas spontanément. Posté une fois par un admin dans
@@ -866,28 +884,7 @@ class MemberPanelView(discord.ui.View):
     @discord.ui.button(label="Rejoindre mon vocal", emoji="🔊", style=discord.ButtonStyle.primary,
                         custom_id="waseboard_panel_join")
     async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        member = interaction.user
-        if not isinstance(member, discord.Member) or member.voice is None or member.voice.channel is None:
-            await interaction.response.send_message(
-                "Connectez-vous d'abord à un salon vocal sur Discord, puis recliquez ce bouton.", ephemeral=True)
-            return
-        channel = member.voice.channel
-        try:
-            await bot.join_guild_voice(interaction.guild_id, channel)
-        except CapacityError as ex:
-            await interaction.response.send_message(f"⚠️ {ex}", ephemeral=True)
-            return
-        await interaction.response.send_message(
-            f"Connecté à **{channel.name}**. Prêt à jouer les sons envoyés par WaseBoard.", ephemeral=True)
-
-    @discord.ui.button(label="Stop", emoji="⏹️", style=discord.ButtonStyle.secondary, custom_id="waseboard_panel_stop")
-    async def stop_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        mixer = bot.mixers.get(interaction.guild_id)
-        if mixer is None or mixer.count() == 0:
-            await interaction.response.send_message("Aucun son n'est en cours sur ce serveur.", ephemeral=True)
-            return
-        mixer.clear()  # déclenche aussi les callbacks on_finish : l'activité est effacée immédiatement (voir _handle_stop_all)
-        await interaction.response.send_message("Tous les sons ont été coupés.", ephemeral=True)
+        await _handle_join_voice_button(interaction)
 
     @discord.ui.button(label="Aide", emoji="❓", style=discord.ButtonStyle.secondary, custom_id="waseboard_panel_help")
     async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -895,16 +892,17 @@ class MemberPanelView(discord.ui.View):
 
 
 class InviteView(discord.ui.View):
-    """Bouton persistant (voir setup_hook : bot.add_view) posté par /configurer-invitation —
-    répond en message éphémère avec un vrai bouton-lien https vers la page d'invitation de ce
-    serveur (voir plus haut). Le lien mène à la même adresse + même secret partagé pour tout le
-    monde ; seule la visibilité du message qui porte ce bouton est restreinte, nativement via les
-    permissions du salon Discord où l'admin l'a posté — aucun contrôle de rôle à faire ici."""
+    """Panneau persistant (voir /configurer-invitation et setup_hook : bot.add_view) : un bouton de
+    téléchargement (lien statique) à côté d'un bouton de connexion directe à CE serveur précis (code
+    généré à chaque clic). Le lien de connexion mène à la même adresse + même secret partagé pour
+    tout le monde ; seule la visibilité du message qui porte ce panneau est restreinte, nativement
+    via les permissions du salon Discord où l'admin l'a posté — aucun contrôle de rôle à faire ici."""
 
     def __init__(self) -> None:
         super().__init__(timeout=None)
+        self.add_item(discord.ui.Button(label="⬇ Télécharger WaseBoard", style=discord.ButtonStyle.link, url=DOWNLOAD_URL))
 
-    @discord.ui.button(label="📬 Recevoir mon lien WaseBoard", style=discord.ButtonStyle.primary,
+    @discord.ui.button(label="🚀 Connexion directe à ce serveur", style=discord.ButtonStyle.secondary,
                         custom_id="waseboard_invite_button")
     async def send_link(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not PUBLIC_URL or not SHARED_SECRET:
@@ -916,16 +914,76 @@ class InviteView(discord.ui.View):
         page_url = f"{PUBLIC_URL.rstrip('/')}/connect/{create_invite_code()}"
         link_view = discord.ui.View()
         link_view.add_item(discord.ui.Button(label="🚀 Ouvrir WaseBoard", style=discord.ButtonStyle.link, url=page_url))
-        # Discord affiche toujours les boutons APRÈS tout le texte d'un message : pour que le
-        # bouton apparaisse visuellement avant le lien de téléchargement (et pas l'inverse), le
-        # lien de téléchargement part dans un second message (followup) plutôt que dans celui-ci.
         await interaction.response.send_message(
-            "Cliquez sur le bouton : WaseBoard s'ouvre et se connecte tout seul à ce serveur "
-            f"(le lien expire dans {INVITE_CODE_TTL_SECONDS // 60} minutes).",
+            "Cliquez sur le bouton : WaseBoard s'ouvre et se connecte directement à CE serveur "
+            f"(utile si votre application est reliée à une autre instance — le lien expire dans "
+            f"{INVITE_CODE_TTL_SECONDS // 60} minutes).",
             view=link_view,
             ephemeral=True,
         )
-        await interaction.followup.send(f"Pas encore installé ? Téléchargez-le : <{DOWNLOAD_URL}>", ephemeral=True)
+
+
+class BotSetupView(discord.ui.View):
+    """Panneau tout-en-un (voir /bot-setup) : démarrer (télécharger + connexion directe à CE
+    serveur), actions membres (rejoindre le vocal, aide), ajouter le bot à un autre serveur, et
+    liens utiles (site, communauté, code source) — pour n'avoir qu'une seule commande à taper
+    plutôt que /configurer-invitation + /panneau + /inviter-bot séparément. Persistant (voir
+    setup_hook : bot.add_view). Les boutons liens sont tous des chaînes fixes (pas de dépendance à
+    l'état du bot à la construction) pour pouvoir être enregistrés dès setup_hook, avant que le
+    bot soit complètement prêt ; "Ajouter à un autre serveur" calcule son URL à chaque clic plutôt
+    qu'à la construction, pour la même raison (voir oauth_client_id)."""
+
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+        self.add_item(discord.ui.Button(label="⬇ Télécharger WaseBoard", style=discord.ButtonStyle.link, url=DOWNLOAD_URL, row=0))
+        self.add_item(discord.ui.Button(label="🌐 Site", style=discord.ButtonStyle.link, url="https://waseboard.salsi.bid", row=2))
+        self.add_item(discord.ui.Button(label="💬 Discord WaseBoard", style=discord.ButtonStyle.link, url="https://discord.gg/HAGTNGFyQd", row=2))
+        self.add_item(discord.ui.Button(label="📦 GitHub", style=discord.ButtonStyle.link, url="https://github.com/salsi64/WaseBoard", row=2))
+
+    @discord.ui.button(label="🚀 Connexion directe à ce serveur", style=discord.ButtonStyle.secondary,
+                        custom_id="waseboard_setup_connect", row=0)
+    async def send_link(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not PUBLIC_URL or not SHARED_SECRET:
+            await interaction.response.send_message(
+                "Lien non configuré côté serveur (public_url/shared_secret manquants dans config.json).",
+                ephemeral=True,
+            )
+            return
+        page_url = f"{PUBLIC_URL.rstrip('/')}/connect/{create_invite_code()}"
+        link_view = discord.ui.View()
+        link_view.add_item(discord.ui.Button(label="🚀 Ouvrir WaseBoard", style=discord.ButtonStyle.link, url=page_url))
+        await interaction.response.send_message(
+            "Cliquez sur le bouton : WaseBoard s'ouvre et se connecte directement à CE serveur "
+            f"(utile si votre application est reliée à une autre instance — le lien expire dans "
+            f"{INVITE_CODE_TTL_SECONDS // 60} minutes).",
+            view=link_view,
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Rejoindre mon vocal", emoji="🔊", style=discord.ButtonStyle.primary,
+                        custom_id="waseboard_setup_join", row=1)
+    async def join_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _handle_join_voice_button(interaction)
+
+    @discord.ui.button(label="Aide", emoji="❓", style=discord.ButtonStyle.secondary,
+                        custom_id="waseboard_setup_help", row=1)
+    async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(PANEL_HELP_TEXT, ephemeral=True)
+
+    @discord.ui.button(label="➕ Ajouter à un autre serveur", style=discord.ButtonStyle.secondary,
+                        custom_id="waseboard_setup_invite", row=3)
+    async def invite_other_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        invite_url = diagnostics.build_invite_url(bot.oauth_client_id())
+        invite_view = discord.ui.View()
+        invite_view.add_item(discord.ui.Button(label="➕ Ajouter WaseBoard à mon serveur", style=discord.ButtonStyle.link, url=invite_url))
+        await interaction.response.send_message(
+            "Ajoutez ce bot WaseBoard à un **autre** serveur Discord (le vôtre ou celui d'un ami) — chaque "
+            "serveur obtient sa **propre bibliothèque de sons**, totalement indépendante des autres : pratique "
+            "si vous gérez plusieurs communautés Discord. Il faut avoir le droit « Gérer le serveur » sur ce "
+            "nouveau serveur pour l'ajouter.",
+            view=invite_view,
+            ephemeral=True,
+        )
 
 
 def format_bytes(number: float) -> str:
@@ -1019,6 +1077,7 @@ class WaseBoardServer(commands.Bot):
         # retenir où il a été posté.
         self.add_view(InviteView())
         self.add_view(MemberPanelView())
+        self.add_view(BotSetupView())
 
         if not GUILD_ID:
             await self.tree.sync()
@@ -2487,18 +2546,27 @@ async def leave(interaction: discord.Interaction) -> None:
 
 
 @bot.tree.command(name="configurer-invitation",
-                   description="Poste un bouton pour que les membres récupèrent leur lien de connexion WaseBoard")
+                   description="Poste un panneau expliquant comment démarrer avec WaseBoard (téléchargement, connexion)")
 @app_commands.checks.has_permissions(administrator=True)
 async def configurer_invitation(interaction: discord.Interaction) -> None:
     if not PUBLIC_URL or not SHARED_SECRET:
         await interaction.response.send_message(
-            "⚠️ `public_url` ou `shared_secret` manquant dans config.json — le bouton serait "
-            "posté mais ne produirait aucun lien utilisable. Configurez-les puis réessayez.",
+            "⚠️ `public_url` ou `shared_secret` manquant dans config.json — le panneau serait "
+            "posté mais son bouton de connexion directe ne produirait aucun lien utilisable. "
+            "Configurez-les puis réessayez.",
             ephemeral=True,
         )
         return
-    await interaction.channel.send("Cliquez pour recevoir votre lien de connexion WaseBoard :", view=InviteView())
-    await interaction.response.send_message("Bouton posté.", ephemeral=True)
+    await interaction.channel.send(
+        "**Comment démarrer avec WaseBoard**\n"
+        "1. Téléchargez l'application (bouton ci-dessous).\n"
+        "2. Connectez-vous avec votre compte Discord quand elle le demande — ça suffit, elle se "
+        "connecte automatiquement à l'instance publique par défaut.\n\n"
+        "Ce serveur utilise sa **propre instance** WaseBoard (pas celle par défaut) ? Cliquez "
+        "« Connexion directe à ce serveur » pour vous y connecter directement.",
+        view=InviteView(),
+    )
+    await interaction.response.send_message("Panneau posté.", ephemeral=True)
 
 
 @bot.tree.command(name="inviter-bot",
@@ -2517,15 +2585,17 @@ async def inviter_bot(interaction: discord.Interaction) -> None:
     invite_view = discord.ui.View()
     invite_view.add_item(discord.ui.Button(label="➕ Ajouter WaseBoard à mon serveur", style=discord.ButtonStyle.link, url=invite_url))
     await interaction.channel.send(
-        "Pour utiliser WaseBoard sur un **autre** serveur Discord (le vôtre ou celui d'un ami) : cliquez ce "
-        "bouton — il faut avoir le droit « Gérer le serveur » sur ce nouveau serveur pour l'ajouter.",
+        "Ajoutez ce bot WaseBoard à un **autre** serveur Discord (le vôtre ou celui d'un ami) — chaque "
+        "serveur obtient sa **propre bibliothèque de sons**, totalement indépendante des autres : pratique "
+        "si vous gérez plusieurs communautés Discord. Il faut avoir le droit « Gérer le serveur » sur ce "
+        "nouveau serveur pour l'ajouter.",
         view=invite_view,
     )
     await interaction.response.send_message("Bouton posté.", ephemeral=True)
 
 
 @bot.tree.command(name="panneau",
-                   description="Poste un panneau de boutons (rejoindre le vocal, stop, aide) utilisable par tous les membres")
+                   description="Poste un panneau de boutons (rejoindre le vocal, aide) utilisable par tous les membres")
 @app_commands.guild_only()
 @app_commands.default_permissions(administrator=True)
 async def panneau(interaction: discord.Interaction) -> None:
@@ -2541,6 +2611,53 @@ async def panneau(interaction: discord.Interaction) -> None:
         "puis jouez vos sons depuis l'application.",
         view=MemberPanelView(),
     )
+    await interaction.response.send_message("Panneau posté.", ephemeral=True)
+
+
+@bot.tree.command(name="bot-setup",
+                   description="Poste un panneau tout-en-un (démarrer, actions, inviter ailleurs, liens) — une seule commande")
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
+async def bot_setup(interaction: discord.Interaction) -> None:
+    member = interaction.user
+    if not isinstance(member, discord.Member) or not member.guild_permissions.administrator:
+        await interaction.response.send_message("Cette commande est réservée aux administrateurs du serveur.", ephemeral=True)
+        return
+    # Embed plutôt que du texte brut : la barre de couleur + les champs distincts rendent le
+    # panneau plus engageant qu'un bloc de markdown, et l'ordre place "autre serveur" en dernier
+    # (une précision pour le cas minoritaire, pas la première chose lue).
+    embed = discord.Embed(
+        title="🎛️ WaseBoard",
+        description="Soundboard partagé pour Discord : cliquez un son, il joue à la fois sur vos "
+                     "enceintes et dans le salon vocal, pour tout le monde.",
+        color=discord.Color(0x38BDF8),
+    )
+    if bot.user is not None:
+        embed.set_thumbnail(url=bot.user.display_avatar.url)
+    embed.add_field(
+        name="🚀 Démarrer",
+        value="Téléchargez l'application et connectez-vous avec Discord — ça suffit, elle se connecte "
+              "automatiquement à l'instance publique par défaut.",
+        inline=False,
+    )
+    embed.add_field(
+        name="🔊 Une fois connecté",
+        value="Rejoignez un salon vocal puis cliquez 🔊, ou cliquez directement un son dans l'application.",
+        inline=False,
+    )
+    embed.add_field(
+        name="✨ Pour aller plus loin",
+        value="Ajoutez ce bot à un autre serveur Discord (bibliothèque de sons indépendante), ou "
+              "retrouvez le site, la communauté et le code source ci-dessous.",
+        inline=False,
+    )
+    embed.add_field(
+        name="🏠 Un autre serveur WaseBoard (auto-hébergé) ?",
+        value="Utilisez « Connexion directe à ce serveur » pour vous y connecter directement.",
+        inline=False,
+    )
+    embed.set_footer(text="WaseBoard — projet open-source")
+    await interaction.channel.send(embed=embed, view=BotSetupView())
     await interaction.response.send_message("Panneau posté.", ephemeral=True)
 
 

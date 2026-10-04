@@ -89,13 +89,12 @@ jouent aussi ce vocal/serveur), et les admins voient votre nom dans les statisti
 
 ## Les boutons Discord
 
-Si votre serveur a un panneau WaseBoard posté dans un salon (bouton **/panneau**, à la discrétion des
-admins), trois boutons sont disponibles sans rien installer de plus que Discord :
+Si votre serveur a un panneau WaseBoard posté dans un salon (commande **/bot-setup** ou **/panneau**,
+à la discrétion des admins), ces boutons sont disponibles sans rien installer de plus que Discord :
 
 | Bouton | Effet |
 |---|---|
 | 🔊 **Rejoindre mon vocal** | fait venir le bot WaseBoard dans votre salon vocal actuel |
-| ⏹️ **Stop** | coupe tous les sons en cours sur ce serveur |
 | ❓ **Aide** | rappelle l'essentiel de ce guide, en message privé (visible de vous seul) |
 
 Commandes équivalentes à taper dans Discord : `/join`, `/leave` (déconnecte complètement le bot).
