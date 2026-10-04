@@ -20,14 +20,9 @@ class FakeResponse:
     def __init__(self): self.sent = []
     async def send_message(self, content=None, **kw): self.sent.append((content, kw))
 
-class FakeFollowup:
-    def __init__(self): self.sent = []
-    async def send(self, content=None, **kw): self.sent.append((content, kw))
-
 class FakeInteraction:
     def __init__(self):
         self.response = FakeResponse()
-        self.followup = FakeFollowup()
 
 class FakeReq:
     def __init__(self, code): self.match_info = {"code": code}
@@ -43,13 +38,24 @@ async def click():
     inter = FakeInteraction()
     await view.send_link.callback(inter)
     (content, kw), = inter.response.sent
-    followup = inter.followup.sent[0] if inter.followup.sent else None
-    return content, kw, followup
+    return content, kw
 
 
 async def main():
-    print("--- Clic sur le bouton Discord ---")
-    content, kw, followup = await click()
+    print("--- Panneau InviteView : bouton de téléchargement statique ---")
+    panel = S.InviteView()
+    panel_children = list(panel.children)
+    check("2 éléments : téléchargement (lien statique) + connexion directe (callback)", len(panel_children) == 2, panel_children)
+    download_btn = next((b for b in panel_children if b.style.name == "link"), None)
+    check("bouton de téléchargement : style lien, pointe vers DOWNLOAD_URL, pas de custom_id",
+          download_btn is not None and download_btn.url == S.DOWNLOAD_URL and download_btn.custom_id is None, download_btn)
+    connect_btn = next((b for b in panel_children if b.style.name != "link"), None)
+    check("bouton de connexion : « Connexion directe à ce serveur », custom_id fixe",
+          connect_btn is not None and connect_btn.label == "🚀 Connexion directe à ce serveur"
+          and connect_btn.custom_id == "waseboard_invite_button", connect_btn)
+
+    print("\n--- Clic sur le bouton de connexion directe ---")
+    content, kw = await click()
     link_view = kw["view"]
     buttons = list(link_view.children)
     check("réponse éphémère", kw.get("ephemeral") is True)
@@ -61,10 +67,8 @@ async def main():
     check("le code est valide", S.invite_code_is_valid(code))
     check("le message ne contient NI le secret NI un lien waseboard:// (rien de fuitable en texte)",
           SECRET not in content and "waseboard://" not in content and "s3cr" not in content, content)
-    check("le premier message (avec le bouton) mentionne la durée, sans le téléchargement",
+    check("mentionne la durée (pas de téléchargement en texte : c'est un bouton séparé du panneau)",
           "15 minutes" in content and "<https://" not in content, content)
-    check("le téléchargement part dans un second message (followup), donc affiché APRÈS le bouton",
-          followup is not None and "<https://" in followup[0] and followup[1].get("ephemeral") is True, followup)
 
     print("\n--- Page /connect/<code> ---")
     bot = S.bot
@@ -92,9 +96,8 @@ async def main():
     S.PUBLIC_URL = ""
     r = await bot._handle_connect_page(FakeReq(c2))
     check("sans public_url : 404 même avec un code valide", r.status == 404)
-    content, kw, followup = await click()
+    content, kw = await click()
     check("sans public_url : le bouton le dit au lieu d'émettre un lien", "non configuré" in content and "view" not in kw, content)
-    check("sans public_url : pas de second message de téléchargement envoyé non plus", followup is None, followup)
     S.PUBLIC_URL = "https://exemple.test"
 
     print("\n--- Robustesse ---")
