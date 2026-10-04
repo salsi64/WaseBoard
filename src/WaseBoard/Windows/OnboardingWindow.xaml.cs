@@ -9,6 +9,23 @@ using WaseBoard.Services;
 
 namespace WaseBoard.Windows
 {
+    /// <summary>Pourquoi l'assistant s'ouvre — détermine l'étape de départ, le titre de la fenêtre et
+    /// une bannière de contexte optionnelle (voir OnboardingWindow.DescribeReason).</summary>
+    public enum OnboardingReason
+    {
+        /// <summary>Tout premier lancement : les 3 étapes depuis le début.</summary>
+        FreshInstall,
+        /// <summary>Un lien de connexion waseboard:// vient d'être cliqué (app déjà ouverte ou qui
+        /// vient de démarrer) : réglages serveur déjà posés, il ne reste qu'à confirmer via Discord.</summary>
+        DeepLinkReconnect,
+        /// <summary>Le serveur actuellement enregistré répond 401 (jeton/adresse caduc) : direct à
+        /// l'étape Serveur, avec explication (pas une saisie initiale, une correction).</summary>
+        ServerReconfigNeeded,
+        /// <summary>Jeton de session Discord absent/expiré, sans lien ni serveur caduc en cause —
+        /// simple reconnexion à l'étape Discord.</summary>
+        SessionExpired,
+    }
+
     /// <summary>
     /// Assistant de premier lancement (3 étapes : bienvenue → serveur → connexion Discord),
     /// remplace le nudge affiché au démarrage. Réutilise directement SoundLibraryService (même
@@ -23,27 +40,71 @@ namespace WaseBoard.Windows
         private int _currentStep;
         private DiscordOAuthService.LoginResult? _loginResult;
 
+        private const int WelcomeStepIndex = 0;
+        private const int ServerStepIndex = 1;
         private const int DiscordStepIndex = 2;
 
-        /// <summary>
-        /// startAtDiscordStep : vrai quand l'assistant a déjà été vu (Bienvenue/Serveur déjà
-        /// remplis lors d'un lancement précédent) mais que la connexion Discord, désormais
-        /// obligatoire, manque encore — évite de refaire revoir les deux premières étapes à
-        /// chaque lancement.
-        /// </summary>
-        public OnboardingWindow(AppSettings settings, SoundLibraryService library, bool startAtDiscordStep = false)
+        private static (int Step, string Title, string? Banner) DescribeReason(OnboardingReason reason) => reason switch
+        {
+            OnboardingReason.DeepLinkReconnect => (DiscordStepIndex, "Reconnexion WaseBoard",
+                "Vous venez de cliquer un lien de connexion WaseBoard — terminez en vous reconnectant avec Discord ci-dessous."),
+            OnboardingReason.ServerReconfigNeeded => (ServerStepIndex, "Reconnexion WaseBoard",
+                "Votre serveur WaseBoard a changé d'adresse ou de jeton d'accès — mettez à jour vos réglages ci-dessous, ou "
+                + "passez par Paramètres > Mises à jour si vous utilisez le serveur par défaut."),
+            OnboardingReason.SessionExpired => (DiscordStepIndex, "Reconnexion WaseBoard",
+                "Votre connexion Discord a expiré — reconnectez-vous pour continuer."),
+            _ => (WelcomeStepIndex, "Bienvenue sur WaseBoard", null),
+        };
+
+        public OnboardingWindow(AppSettings settings, SoundLibraryService library, OnboardingReason reason = OnboardingReason.FreshInstall)
         {
             InitializeComponent();
             _settings = settings;
             _library = library;
             _steps = new[] { StepWelcome, StepServer, StepDiscord };
-            _currentStep = startAtDiscordStep ? DiscordStepIndex : 0;
+
+            var (step, title, banner) = DescribeReason(reason);
+            _currentStep = step;
+            Title = title;
+            TitleBar.TitleText = title;
+            if (banner is not null)
+            {
+                ContextBannerText.Text = banner;
+                ContextBanner.Visibility = Visibility.Visible;
+            }
+
+            // Serveur par défaut intégré (voir AppIdentity.DefaultServerUrl) : l'étape Bienvenue
+            // l'explique au lieu de demander une adresse/un jeton, avec une échappatoire pour qui a
+            // son propre serveur. Absent en build Dev (pas de défaut) : texte d'origine inchangé.
+            if (!string.IsNullOrEmpty(AppIdentity.DefaultServerUrl))
+            {
+                ServerModeExplainText.Text = "Vous êtes connecté par défaut à l'instance publique et gratuite de "
+                    + "WaseBoard — il ne reste qu'à vous identifier avec Discord à l'étape suivante.";
+                UseCustomServerLink.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                ServerModeExplainText.Text = "Pour l'utiliser, il vous faut un serveur WaseBoard — celui de la personne "
+                    + "qui vous a fait découvrir l'app (demandez-lui l'adresse et le jeton d'accès), ou le vôtre. Deux "
+                    + "petites étapes pour vous connecter ; vous pourrez toujours y revenir depuis les Paramètres.";
+            }
 
             ServerUrlBox.Text = _settings.ServerUrl;
             ServerTokenBox.Text = _settings.ServerToken;
 
             UpdateStepUi();
         }
+
+        /// <summary>Lien « Vous avez votre propre serveur ? » de l'étape Bienvenue : force l'étape
+        /// Serveur même quand le défaut intégré dispenserait de la montrer.</summary>
+        private void UseCustomServer_Click(object sender, RoutedEventArgs e)
+        {
+            _currentStep = ServerStepIndex;
+            UpdateStepUi();
+        }
+
+        private bool UsesDefaultServer() =>
+            !string.IsNullOrEmpty(AppIdentity.DefaultServerUrl) && _settings.ServerUrl == AppIdentity.DefaultServerUrl;
 
         private void UpdateStepUi()
         {
@@ -63,7 +124,7 @@ namespace WaseBoard.Windows
 
         private void Back_Click(object sender, RoutedEventArgs e)
         {
-            if (_currentStep == 0) return;
+            if (_currentStep == WelcomeStepIndex) return;
             _currentStep--;
             UpdateStepUi();
         }
@@ -82,11 +143,13 @@ namespace WaseBoard.Windows
 
         private void Next_Click(object sender, RoutedEventArgs e)
         {
-            if (_currentStep == 1) CommitServerFields();
+            if (_currentStep == ServerStepIndex) CommitServerFields();
 
             if (_currentStep < _steps.Length - 1)
             {
-                _currentStep++;
+                // Depuis Bienvenue, avec le serveur par défaut encore en place (pas de personnalisation,
+                // pas passé par "mon propre serveur") : l'étape Serveur n'apporterait rien, direct à Discord.
+                _currentStep = _currentStep == WelcomeStepIndex && UsesDefaultServer() ? DiscordStepIndex : _currentStep + 1;
                 UpdateStepUi();
                 return;
             }

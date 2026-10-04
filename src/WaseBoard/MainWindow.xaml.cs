@@ -153,8 +153,9 @@ namespace WaseBoard
             // Lien waseboard:// reçu en argument de lancement (voir App.OnStartup) — appliqué
             // AVANT le bloc d'onboarding juste en dessous, qui s'ouvrira normalement si c'est un
             // premier lancement et affichera alors les champs déjà pré-remplis.
+            var deepLinkJustApplied = false;
             if (App.PendingDeepLink is not null)
-                await ApplyDeepLinkAsync(App.PendingDeepLink, isRuntimeTrigger: false);
+                deepLinkJustApplied = await ApplyDeepLinkAsync(App.PendingDeepLink, isRuntimeTrigger: false);
 
             var hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             hwndSource?.AddHook(DeepLinkHwndHook);
@@ -183,11 +184,15 @@ namespace WaseBoard
 
             if (needsFirstRun || needsLogin || serverNeedsReconfig)
             {
-                if (serverNeedsReconfig)
-                    ToastService.Show("Votre serveur WaseBoard a changé d'adresse ou de jeton d'accès — mettez à jour vos réglages ci-dessous.", ToastKind.Warning);
+                // Priorité : premier lancement > lien qu'on vient d'appliquer > serveur caduc >
+                // simple expiration de session — voir OnboardingWindow.DescribeReason pour le texte
+                // affiché à chaque cas.
+                var reason = needsFirstRun ? OnboardingReason.FreshInstall
+                    : deepLinkJustApplied ? OnboardingReason.DeepLinkReconnect
+                    : serverNeedsReconfig ? OnboardingReason.ServerReconfigNeeded
+                    : OnboardingReason.SessionExpired;
 
-                var onboarding = new OnboardingWindow(_library.Settings, _library,
-                    startAtDiscordStep: !needsFirstRun && !serverNeedsReconfig) { Owner = this };
+                var onboarding = new OnboardingWindow(_library.Settings, _library, reason) { Owner = this };
                 onboarding.ShowDialog();
                 _library.Settings.HasSeenOnboarding = true;
                 _library.SaveSettings();
@@ -424,9 +429,11 @@ namespace WaseBoard
 
         /// <summary>Applique un lien waseboard://connect?url=...&amp;token=... — pré-remplit
         /// silencieusement si l'app n'était pas encore configurée (l'onboarding qui suit sert de
-        /// confirmation visuelle), ou demande une confirmation explicite sinon (un tel lien peut
-        /// en théorie être déclenché par n'importe quelle page/appli sur la machine).</summary>
-        private async Task ApplyDeepLinkAsync(string uri, bool isRuntimeTrigger)
+        /// confirmation visuelle), ou demande une confirmation explicite si ça change réellement de
+        /// serveur (un tel lien peut en théorie être déclenché par n'importe quelle page/appli sur
+        /// la machine). Renvoie true si de nouveaux réglages ont été appliqués (pour que l'appelant
+        /// sache qu'un lien vient d'être traité — voir OnboardingReason.DeepLinkReconnect).</summary>
+        private async Task<bool> ApplyDeepLinkAsync(string uri, bool isRuntimeTrigger)
         {
             // Une autre fenêtre modale (Paramètres, sélecteur de guilde à l'upload, découpe
             // audio...) est déjà ouverte : ne pas empiler une confirmation par-dessus, ce serait
@@ -437,7 +444,7 @@ namespace WaseBoard
                 ToastService.Show(
                     "Lien de connexion WaseBoard reçu — terminez d'abord l'action en cours, puis recliquez le lien.",
                     ToastKind.Warning);
-                return;
+                return false;
             }
 
             string? url = null, token = null;
@@ -457,15 +464,18 @@ namespace WaseBoard
             if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
             {
                 ToastService.Show("Lien de connexion WaseBoard invalide ou incomplet.", ToastKind.Warning);
-                return;
+                return false;
             }
 
             var isFreshInstall = string.IsNullOrEmpty(_library.Settings.ServerUrl) || !_library.Settings.HasSeenOnboarding;
-            if (!isFreshInstall)
+            // Avertir uniquement si ça change RÉELLEMENT de serveur : recliquer le lien du même
+            // serveur (cas courant, juste une reconnexion) ne doit pas afficher un avertissement
+            // anxiogène pour rien.
+            if (!isFreshInstall && url != _library.Settings.ServerUrl)
             {
                 var confirmed = ConfirmDialog.Show(this,
                     $"Se connecter à un nouveau serveur WaseBoard ?\n\n{url}\n\nVos réglages de connexion actuels seront remplacés.");
-                if (!confirmed) return;
+                if (!confirmed) return false;
 
                 // Les fichiers en cache appartiennent à l'ancien serveur — plus valides une fois
                 // qu'on en change (et un ID de son pourrait en théorie se recouper entre deux
@@ -483,7 +493,7 @@ namespace WaseBoard
 
             if (isRuntimeTrigger)
             {
-                var onboarding = new OnboardingWindow(_library.Settings, _library) { Owner = this };
+                var onboarding = new OnboardingWindow(_library.Settings, _library, OnboardingReason.DeepLinkReconnect) { Owner = this };
                 onboarding.ShowDialog();
                 _library.Settings.HasSeenOnboarding = true;
                 _library.SaveSettings();
@@ -493,6 +503,7 @@ namespace WaseBoard
             }
             // Sinon (reçu avant que Window_Loaded ait fini) : le bloc d'onboarding normal juste
             // après s'en charge déjà, pas besoin de dupliquer la logique ici.
+            return true;
         }
 
         /// <summary>
