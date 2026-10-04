@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaseBoard — Politique de confidentialité</title>
+<style>
+  :root {
+    --bg: #0F1624;
+    --panel: #182236;
+    --accent: #38BDF8;
+    --on-accent: #0B1220;
+    --text: #EAF0FA;
+    --text-dim: #B8C4D9;
+    --track: #26324A;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", -apple-system, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+  header .emoji { font-size: 40px; }
+  h1 { font-size: 26px; margin: 8px 0 4px; }
+  .tagline { color: var(--text-dim); font-size: 14px; }
+  .card {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+  }
+  .card h2 { margin-top: 0; font-size: 17px; }
+  .card p, .card li { font-size: 14px; color: var(--text-dim); }
+  ul { padding-left: 20px; margin-bottom: 0; }
+  li { margin-bottom: 8px; }
+  li:last-child { margin-bottom: 0; }
+  a.link { color: var(--accent); }
+  .note {
+    font-size: 12px;
+    color: var(--text-dim);
+    opacity: 0.8;
+    text-align: center;
+    margin-top: 40px;
+  }
+  .back { display: block; text-align: center; margin-bottom: 24px; font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back link" href="/">← Retour à WaseBoard</a>
+    <header>
+      <div class="emoji">🔒</div>
+      <h1>Politique de confidentialité</h1>
+      <div class="tagline">Dernière mise à jour : 4 octobre 2026</div>
+    </header>
+
+    <div class="card">
+      <p>WaseBoard est un soundboard partagé pour Discord. Cette page décrit les données traitées par
+      l'<strong>instance publique par défaut</strong> (waseboard.salsi.bid) et le bot Discord associé.
+      WaseBoard étant open-source, n'importe qui peut héberger sa propre instance : si vous utilisez
+      celle d'un tiers, contactez cette personne — elle seule contrôle ses propres données.</p>
+    </div>
+
+    <div class="card">
+      <h2>Données collectées</h2>
+      <ul>
+        <li><strong>Identité Discord</strong> : via la connexion OAuth2 Discord, nous recevons votre identifiant
+        Discord, votre pseudo et l'URL de votre avatar. Jamais votre e-mail ni votre mot de passe.</li>
+        <li><strong>Présence vocale</strong> : pour savoir dans quel salon vocal vous rejoindre, le bot observe
+        en temps réel votre présence sur les salons des serveurs où il est présent — non conservée au-delà
+        de cet usage immédiat.</li>
+        <li><strong>Appartenance aux serveurs</strong> : la liste des serveurs Discord que vous partagez avec le
+        bot, pour déterminer quels sons vous sont accessibles.</li>
+        <li><strong>Sons que vous ajoutez</strong> : les fichiers audio importés sont stockés sur le serveur,
+        associés au serveur Discord concerné et à votre identifiant (auteur), pour la gestion (suppression,
+        corbeille).</li>
+        <li><strong>Statistiques d'usage</strong> : quel son a été joué, par qui, et quand — visible par les
+        administrateurs du serveur concerné dans son panel d'administration.</li>
+        <li><strong>Journal d'actions admin</strong> : les actions des administrateurs (réglages, suppression de
+        son...) sont journalisées avec leur identifiant, pour traçabilité.</li>
+        <li><strong>Jetons de session</strong> : pour éviter de vous reconnecter en permanence, un jeton de
+        session interne et le jeton d'accès Discord associé sont stockés côté serveur, chiffrés.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Ce que nous ne faisons pas</h2>
+      <ul>
+        <li>Nous n'enregistrons jamais votre micro ni le contenu audio de vos salons vocaux — WaseBoard
+        <em>joue</em> des sons, il n'écoute rien.</li>
+        <li>Nous ne revendons ni ne partageons vos données avec des tiers.</li>
+        <li>Aucune publicité, aucun tracker, aucune analyse comportementale.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Qui a accès à mes données ?</h2>
+      <p>Les membres d'un salon vocal voient votre pseudo/avatar quand vous jouez un son, comme sur Discord
+      normalement. Les administrateurs du panel d'un serveur voient les statistiques d'usage et le journal
+      d'actions de <strong>ce serveur uniquement</strong> (isolation stricte entre serveurs). La personne qui
+      héberge l'instance (pour l'instance publique par défaut : le mainteneur du projet) a un accès technique
+      aux données stockées sur son propre serveur.</p>
+    </div>
+
+    <div class="card">
+      <h2>Suppression de vos données</h2>
+      <p>Un administrateur de votre serveur peut supprimer vos sons depuis le panel (avec corbeille temporaire
+      avant suppression définitive). Pour toute autre demande, contactez-nous sur le
+      <a class="link" href="https://discord.gg/HAGTNGFyQd">Discord WaseBoard</a>.</p>
+    </div>
+
+    <div class="card">
+      <h2>Code source</h2>
+      <p>WaseBoard est open-source : <a class="link" href="https://github.com/salsi64/WaseBoard">github.com/salsi64/WaseBoard</a>
+      — vous pouvez vérifier vous-même exactement quelles données sont traitées, et héberger votre propre
+      instance si vous préférez garder un contrôle total sur les vôtres.</p>
+    </div>
+
+    <div class="note">
+      Cette politique peut évoluer ; la version à jour est toujours disponible à cette adresse.
+      Voir aussi les <a class="link" href="/terms.html">conditions d'utilisation</a>.
+    </div>
+  </div>
+</body>
+</html>
