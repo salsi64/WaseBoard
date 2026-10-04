@@ -12,17 +12,17 @@ votre micro (donc jamais coupé par un filtre anti-bruit type Krisp).
 ## Démarrer (une seule fois)
 
 1. **[Téléchargez le client](https://github.com/salsi64/WaseBoard/releases/latest)** et installez-le
-   (Windows).
-2. **Récupérez votre lien de connexion** : dans Discord, cliquez sur le bouton **📬 Recevoir mon lien
-   WaseBoard** posté par un admin (ou tapez la commande s'il n'y en a pas : demandez-lui de taper
-   `/configurer-invitation`). Vous recevez un message visible de vous seul avec un bouton
-   **🚀 Ouvrir WaseBoard** : cliquez dessus, l'application s'ouvre et se connecte toute seule.
-3. **Connectez-vous avec Discord** quand l'application vous le demande (bouton bleu « Se connecter avec
+   (Windows) — il se connecte tout seul à l'instance publique de WaseBoard, rien à saisir.
+2. **Connectez-vous avec Discord** quand l'application vous le demande (bouton bleu « Se connecter avec
    Discord ») — ça sert uniquement à afficher votre avatar quand vous jouez un son et à retrouver
    automatiquement le bon salon vocal.
 
 Vous n'avez rien d'autre à installer ni à configurer : WaseBoard reconnaît votre serveur, vos sons et
 votre salon vocal tout seul.
+
+Un admin a posté un bouton **📬 Recevoir mon lien WaseBoard** dans Discord ? Cliquer dessus (puis
+**🚀 Ouvrir WaseBoard**) reste un raccourci pratique — surtout utile si vous utilisez un serveur
+WaseBoard auto-hébergé plutôt que l'instance publique par défaut.
 
 ## Jouer un son
 

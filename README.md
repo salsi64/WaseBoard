@@ -11,23 +11,27 @@ les suppressions de bruit type Krisp).
 
 ## Comment ça marche
 
-WaseBoard est **auto-hébergé** : il n'y a pas de serveur central, chaque groupe fait tourner
-le sien (gratuit, ~15 minutes) — il héberge le catalogue de sons partagé et le bot Discord qui
-les joue dans le vocal.
+Le client se connecte **par défaut à une instance publique et gratuite** (pas besoin d'héberger
+quoi que ce soit, ni de demander un lien à qui que ce soit) : téléchargez l'application,
+connectez-vous avec Discord, ajoutez le bot à votre serveur, c'est prêt. WaseBoard reste
+**auto-hébergeable** pour qui préfère sa propre instance privée (gratuit, ~15 minutes) — voir
+« Héberger » plus bas.
 
 ## Installation / utilisation
 
-Si quelqu'un dans votre groupe a déjà un serveur WaseBoard (le bot est déjà présent sur votre
-Discord) :
-
-1. Cliquez sur le bouton de connexion reçu sur Discord (📬 **Recevoir mon lien WaseBoard**, posté
-   par un admin) : WaseBoard s'installe et se configure tout seul. Sans ce bouton, [téléchargez et
-   installez le client](https://github.com/salsi64/WaseBoard/releases/latest), puis saisissez
-   l'adresse du serveur et le jeton d'accès donnés par cette personne, dans les Paramètres.
+1. [Téléchargez et installez le client](https://github.com/salsi64/WaseBoard/releases/latest) —
+   il se connecte tout seul à l'instance publique par défaut.
 2. Connectez-vous avec votre compte Discord quand l'application le demande — ça sert uniquement à
    afficher votre avatar et à retrouver votre salon vocal, rien d'autre à saisir.
-3. Rejoignez un salon vocal, cliquez 🔊 **Rejoindre mon vocal** dans WaseBoard.
-4. Cliquez un son — c'est prêt.
+3. Si le bot n'est pas encore sur votre serveur Discord :
+   **[➕ Ajouter WaseBoard à mon serveur](https://discord.com/oauth2/authorize?client_id=1546838877631811656&permissions=3146752&scope=bot%20applications.commands)**
+   (droit « Gérer le serveur » requis).
+4. Rejoignez un salon vocal, cliquez 🔊 **Rejoindre mon vocal** dans WaseBoard.
+5. Cliquez un son — c'est prêt.
+
+Vous avez (ou voulez utiliser) un autre serveur WaseBoard auto-hébergé ? Au premier lancement,
+cliquez « Vous avez votre propre serveur WaseBoard ? », ou changez l'adresse/le jeton dans
+Paramètres à tout moment.
 
 Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 
@@ -55,9 +59,10 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 
 ## Héberger
 
-Personne dans votre groupe n'a encore de serveur ? Un assistant Docker s'occupe de tout (bot
-Discord, HTTPS automatique) — gratuit, ~15 minutes. Suivez
-[`server/README.md`](server/README.md).
+Vous préférez votre propre instance (données séparées, pas de plafond de l'instance publique) ?
+Un assistant Docker s'occupe de tout (bot Discord, HTTPS automatique) — gratuit, ~15 minutes.
+Suivez [`server/README.md`](server/README.md), puis indiquez son adresse dans le client (« Vous
+avez votre propre serveur WaseBoard ? » au premier lancement, ou Paramètres ensuite).
 
 ## Pistes d'amélioration
 
