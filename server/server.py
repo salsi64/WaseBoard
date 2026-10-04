@@ -2623,17 +2623,41 @@ async def bot_setup(interaction: discord.Interaction) -> None:
     if not isinstance(member, discord.Member) or not member.guild_permissions.administrator:
         await interaction.response.send_message("Cette commande est réservée aux administrateurs du serveur.", ephemeral=True)
         return
-    await interaction.channel.send(
-        "**WaseBoard**\n\n"
-        "**Démarrer :** téléchargez l'application et connectez-vous avec Discord — ça suffit, elle se "
-        "connecte automatiquement à l'instance publique par défaut. Un **autre** serveur WaseBoard "
-        "(auto-hébergé) ? Utilisez « Connexion directe à ce serveur ».\n\n"
-        "**Une fois connecté :** rejoignez un salon vocal puis cliquez 🔊, ou cliquez directement un son "
-        "dans l'application.\n\n"
-        "**Pour aller plus loin :** ajoutez ce bot à un autre serveur Discord (bibliothèque de sons "
-        "indépendante), ou retrouvez le site, la communauté et le code source ci-dessous.",
-        view=BotSetupView(),
+    # Embed plutôt que du texte brut : la barre de couleur + les champs distincts rendent le
+    # panneau plus engageant qu'un bloc de markdown, et l'ordre place "autre serveur" en dernier
+    # (une précision pour le cas minoritaire, pas la première chose lue).
+    embed = discord.Embed(
+        title="🎛️ WaseBoard",
+        description="Soundboard partagé pour Discord : cliquez un son, il joue à la fois sur vos "
+                     "enceintes et dans le salon vocal, pour tout le monde.",
+        color=discord.Color(0x38BDF8),
     )
+    if bot.user is not None:
+        embed.set_thumbnail(url=bot.user.display_avatar.url)
+    embed.add_field(
+        name="🚀 Démarrer",
+        value="Téléchargez l'application et connectez-vous avec Discord — ça suffit, elle se connecte "
+              "automatiquement à l'instance publique par défaut.",
+        inline=False,
+    )
+    embed.add_field(
+        name="🔊 Une fois connecté",
+        value="Rejoignez un salon vocal puis cliquez 🔊, ou cliquez directement un son dans l'application.",
+        inline=False,
+    )
+    embed.add_field(
+        name="✨ Pour aller plus loin",
+        value="Ajoutez ce bot à un autre serveur Discord (bibliothèque de sons indépendante), ou "
+              "retrouvez le site, la communauté et le code source ci-dessous.",
+        inline=False,
+    )
+    embed.add_field(
+        name="🏠 Un autre serveur WaseBoard (auto-hébergé) ?",
+        value="Utilisez « Connexion directe à ce serveur » pour vous y connecter directement.",
+        inline=False,
+    )
+    embed.set_footer(text="WaseBoard — projet open-source")
+    await interaction.channel.send(embed=embed, view=BotSetupView())
     await interaction.response.send_message("Panneau posté.", ephemeral=True)
 
 

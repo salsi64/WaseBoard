@@ -254,6 +254,14 @@ async def main():
           S.bot_setup.default_permissions is not None and S.bot_setup.default_permissions.administrator
           and S.bot_setup.guild_only)
 
+    embed = inter.channel_sent[0][1].get("embed")
+    check("un embed coloré (pas du texte brut) porte le panneau",
+          embed is not None and inter.channel_sent[0][0] is None and embed.color is not None
+          and embed.color.value == 0x38BDF8, embed)
+    field_names = [f.name for f in embed.fields] if embed else []
+    check("4 champs, « autre serveur auto-hébergé » en DERNIER (précision secondaire, pas la première lue)",
+          len(field_names) == 4 and "auto-hébergé" in field_names[-1] and "Démarrer" in field_names[0], field_names)
+
     print()
     print(f"{sum(results)}/{len(results)} vérifications OK")
     sys.exit(0 if all(results) else 1)
