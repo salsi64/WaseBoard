@@ -285,7 +285,7 @@ namespace WaseBoard
         private void ApplyColorScheme()
         {
             var settings = _library.Settings;
-            var preset = PalettePresets.Get(settings.PaletteId);
+            var preset = settings.UiTheme == "Flat" ? PalettePresets.Flat : PalettePresets.Get(settings.PaletteId);
 
             var snapshot = settings.FollowSystemTheme || settings.FollowSystemAccent ? RegistryThemeWatcher.ReadCurrent() : null;
             _lastSystemTheme = snapshot;
@@ -308,11 +308,12 @@ namespace WaseBoard
             res["OnAccentBrush"] = new SolidColorBrush(PalettePresets.OnAccent(accent));
         }
 
-        /// <summary>Bascule thème classique/moderne. Paramètres/volume de la barre d'outils sont
-        /// masqués en moderne (déjà dans la barre latérale), seule voie d'accès en classique.</summary>
+        /// <summary>Bascule thème classique/moderne/flat (flat = disposition moderne + sa propre palette, voir
+        /// ApplyColorScheme). Paramètres/volume de la barre d'outils sont masqués en moderne (déjà dans la barre
+        /// latérale), seule voie d'accès en classique.</summary>
         private void ApplyTheme()
         {
-            var isModern = _library.Settings.UiTheme == "Modern";
+            var isModern = _library.Settings.UiTheme is "Modern" or "Flat";
             ThemeState.IsModern = isModern;
             ThemeState.Options.ShowWaveforms = _library.Settings.ShowWaveforms;
 

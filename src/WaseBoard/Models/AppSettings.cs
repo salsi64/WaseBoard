@@ -71,7 +71,8 @@ namespace WaseBoard.Models
         /// <summary>Couleur de fond personnalisée de l'application (hex, ex: "#1E1E2E"). Null = thème par défaut.</summary>
         public string? BackgroundColorHex { get; set; }
 
-        /// <summary>Thème d'interface : "Classic" (barre d'outils classique) ou "Modern" (barre latérale, boutons en pilule).</summary>
+        /// <summary>Thème d'interface : "Classic" (barre d'outils classique), "Modern" (barre latérale, boutons en pilule)
+        /// ou "Flat" (disposition moderne + palette bleu nuit/violet imposée).</summary>
         public string UiTheme { get; set; } = "Modern";
 
         /// <summary>Si vrai, la palette clair/sombre suit automatiquement le thème Windows (ignore BackgroundColorHex).</summary>
