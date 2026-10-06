@@ -756,6 +756,8 @@ def rate_limit_bucket(request: web.Request) -> Optional[str]:
         return "oauth"
     if request.method == "POST" and path == "/sounds":
         return "upload"
+    if request.method == "PUT" and path.startswith("/sounds/") and path.endswith("/file"):
+        return "upload"  # remplacer un fichier coûte autant qu'un ajout : même seau
     return None
 
 
@@ -1581,6 +1583,7 @@ class WaseBoardServer(commands.Bot):
         app.router.add_get("/sounds/{id}/file", self._handle_get_file)
         app.router.add_post("/sounds", self._handle_upload_sound)
         app.router.add_patch("/sounds/{id}", self._handle_update_sound)
+        app.router.add_put("/sounds/{id}/file", self._handle_replace_sound_file)
         app.router.add_delete("/sounds/{id}", self._handle_delete_sound)
         app.router.add_post("/play", self._handle_play)
         app.router.add_post("/stop", self._handle_stop_all)
@@ -1853,6 +1856,120 @@ class WaseBoardServer(commands.Bot):
                          {"from": old_trim if old_trim[0] is not None else None,
                           "to": list(new_trim) if new_trim else None})
         return web.json_response({**entry, "is_mine": is_sound_mine(entry, user_id), "can_edit": True})
+
+    async def _handle_replace_sound_file(self, request: web.Request) -> web.Response:
+        """PUT /sounds/{id}/file : remplace le fichier audio d'un son existant EN GARDANT son identité (id, nom, emoji,
+        catégories partagées, favoris/volumes locaux des utilisateurs). La découpe est retirée : elle visait l'ancien
+        fichier. Mêmes droits que la modification (auteur ou admin), mêmes plafonds de taille/durée/espace que l'ajout.
+        L'ancien fichier n'est PAS conservé (le client demande confirmation avant)."""
+        if not self._check_auth(request):
+            return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
+
+        sound_id = request.match_info["id"]
+        user_id = session["user_id"]
+        temp_path: Optional[Path] = None
+        try:
+            data = await request.post()
+            file_field = data.get("file")
+            if file_field is None:
+                return web.json_response({"error": "champ 'file' requis"}, status=400)
+
+            visible, perms = await self.user_access(user_id)
+            entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
+            if entry is None or not self.sound_visible_to(entry, visible):
+                return web.json_response({"error": "son introuvable"}, status=404)
+            if not can_edit_sound(entry, user_id, perms):
+                return web.json_response(
+                    {"error": "Seuls l'auteur du son ou un administrateur du serveur peuvent remplacer son fichier."}, status=403)
+            # Remplacer un fichier revient à en ajouter un : un membre bloqué, ou sur un serveur dont les ajouts sont
+            # réservés aux admins, ne doit pas contourner cette règle via son propre son.
+            if not perms[str(entry["guild_id"])]["can_upload"]:
+                return web.json_response({"error": "Vous n'avez pas le droit d'ajouter des sons sur ce serveur."}, status=403)
+
+            extension = Path(getattr(file_field, "filename", "") or "").suffix.lower()
+            if extension not in ALLOWED_EXTENSIONS:
+                return web.json_response({"error": f"extension non supportée : {extension}"}, status=400)
+
+            file_bytes = file_field.file.read()
+            new_hash = hashlib.sha256(file_bytes).hexdigest()
+            if new_hash == entry.get("hash"):
+                # Même contenu : rien à remplacer (et surtout pas de découpe à perdre pour rien).
+                return web.json_response({**entry, "is_mine": is_sound_mine(entry, user_id), "can_edit": True, "unchanged": True})
+
+            # Les plafonds sont ceux de la guilde propriétaire du son (comme à l'ajout).
+            settings = get_guild_settings(entry.get("guild_id"))
+            max_file_mb = settings["max_file_mb"]
+            if max_file_mb > 0 and len(file_bytes) > max_file_mb * 1024 * 1024:
+                return web.json_response({"error": f"Fichier trop volumineux (maximum {max_file_mb} Mo sur ce serveur)."}, status=413)
+
+            old_extension = entry["extension"]
+            try:
+                old_size = (SOUNDS_DIR / f"{sound_id}{old_extension}").stat().st_size
+            except OSError:
+                old_size = 0
+            max_total_mb = settings["max_total_mb"]
+            if max_total_mb > 0 and entry.get("guild_id"):
+                _, used = await asyncio.to_thread(guild_used_bytes, entry["guild_id"])
+                # L'ancien fichier disparaît : seul le surplus compte contre l'espace du serveur.
+                if used - old_size + len(file_bytes) > max_total_mb * 1024 * 1024:
+                    return web.json_response({
+                        "error": f"Espace insuffisant sur ce serveur : {used / 1048576:.0f} Mo utilisés sur {max_total_mb} Mo, "
+                                 f"et ce fichier fait {len(file_bytes) / 1048576:.1f} Mo (l'ancien fichier de {old_size / 1048576:.1f} Mo "
+                                 f"est libéré par le remplacement)."
+                    }, status=413)
+
+            # Écrit à côté, jamais par-dessus : un son en cours de lecture continue sur l'ancien fichier, et un refus
+            # (durée) laisse tout intact.
+            temp_path = SOUNDS_DIR / f"{sound_id}.replacing{extension}"
+            with open(temp_path, "wb") as out_file:
+                out_file.write(file_bytes)
+
+            max_duration = settings["max_duration_s"]
+            if max_duration > 0:
+                duration = await probe_duration_seconds(temp_path)
+                if duration is not None and duration > max_duration:
+                    return web.json_response(
+                        {"error": f"Son trop long ({duration:.0f} s, maximum {max_duration} s sur ce serveur)."}, status=413)
+
+            # Catalogue rechargé APRÈS tous les await (voir les autres handlers) ; le son a pu être supprimé entre-temps.
+            catalog = load_catalog()
+            entry = next((s for s in catalog if s["id"] == sound_id), None)
+            if entry is None:
+                return web.json_response({"error": "son introuvable"}, status=404)
+
+            old_extension, old_hash = entry["extension"], entry.get("hash")
+            new_path = SOUNDS_DIR / f"{sound_id}{extension}"
+            os.replace(temp_path, new_path)
+            temp_path = None
+
+            entry["extension"] = extension
+            entry["hash"] = new_hash
+            entry["replaced_at"] = int(time.time())
+            entry.pop("trim_start_ms", None)
+            entry.pop("trim_end_ms", None)
+            try:
+                save_catalog(catalog)
+            except Exception:
+                if old_extension != extension:
+                    new_path.unlink(missing_ok=True)
+                raise
+            if old_extension != extension:
+                (SOUNDS_DIR / f"{sound_id}{old_extension}").unlink(missing_ok=True)
+
+            record_audit(entry.get("guild_id"), user_id, session.get("username"), "replace", sound_id, entry["name"],
+                         {"from_hash": (old_hash or "")[:12], "to_hash": new_hash[:12],
+                          "bytes": len(file_bytes), "extension": extension})
+            log.info("Fichier du son remplacé : %s (%s)", entry["name"], sound_id)
+            return web.json_response({**entry, "is_mine": is_sound_mine(entry, user_id), "can_edit": True})
+        except Exception as ex:
+            log.exception("Échec du remplacement de fichier")
+            return web.json_response({"error": str(ex)}, status=500)
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
 
     async def _handle_delete_sound(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
