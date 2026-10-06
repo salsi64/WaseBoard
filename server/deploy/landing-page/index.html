@@ -69,6 +69,7 @@
     border: 1px solid var(--track);
     box-shadow: 0 20px 60px -20px #000A;
     margin: 28px 0;
+    height: auto;
   }
 
   .card {
@@ -175,6 +176,35 @@
     margin: 36px 0 -4px;
   }
 
+  /* nouveautés de la version */
+  .news {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 28px;
+    align-items: center;
+    border: 1px solid var(--track);
+    background:
+      radial-gradient(420px 220px at 0% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+      var(--panel);
+  }
+  .news-shot {
+    width: 100%;
+    height: auto;
+    border-radius: 14px;
+    border: 1px solid var(--track);
+    box-shadow: 0 18px 44px -18px #000C;
+  }
+  .news h2 { font-size: 19px; margin: 0 0 14px; }
+  .news ul { list-style: none; padding: 0; margin: 0 0 18px; }
+  .news li { padding-left: 30px; position: relative; margin-bottom: 10px; font-size: 14px; }
+  .news li::before { content: attr(data-i); position: absolute; left: 0; top: 0; font-size: 16px; }
+  .news li strong { color: var(--text); }
+  .news .fine { font-size: 12px; opacity: .8; margin: -6px 0 16px; }
+  @media (max-width: 640px) {
+    .news { grid-template-columns: 1fr; }
+    .news-shot { max-width: 280px; margin: 0 auto; }
+  }
+
   /* apparition progressive au scroll (dégradée proprement si JS coupé) */
   html.js .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
   html.js .reveal.in { opacity: 1; transform: none; }
@@ -190,14 +220,14 @@
       <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
     </header>
 
-    <img class="hero-shot reveal" src="hero.png" alt="Capture d'écran de l'application WaseBoard : liste de sons colorés par catégorie, favoris, et plusieurs serveurs Discord connectés en même temps">
+    <img class="hero-shot reveal" src="img/hero-flat.png" width="1760" height="1056" alt="Capture d'écran de WaseBoard 3.2 : boutons de son en pilules colorées avec leur forme d'onde, catégories repliables, barre latérale avec les serveurs Discord et les personnes qui jouent un son en ce moment">
 
     <div class="actions">
       <a class="button primary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger le client Windows</a>
       <a class="button secondary" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter WaseBoard à mon serveur</a>
       <a class="button secondary" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord WaseBoard</a>
     </div>
-    <div class="actions-hint">La plupart des gens n'ont besoin que du premier bouton — voir ci-dessous.</div>
+    <div class="actions-hint">La plupart des gens n'ont besoin que du premier bouton — voir ci-dessous. <a class="link" href="#nouveautes">Nouveautés de la 3.2 ↓</a></div>
 
     <div class="choice recommended reveal" style="--card-accent: var(--accent-2); margin-bottom: 20px;">
       <span class="badge">LE PLUS FRÉQUENT</span>
@@ -208,6 +238,25 @@
         <li>Connectez-vous avec Discord</li>
       </ol>
       <p style="opacity:.8; margin-top:12px; margin-bottom:0;">C'est tout, rien d'autre à saisir. Vous rejoignez plutôt un autre serveur WaseBoard auto-hébergé ? Cliquez « Vous avez votre propre serveur WaseBoard ? » au premier lancement.</p>
+    </div>
+
+    <div class="section-label" id="nouveautes">Nouveau dans la version 3.2</div>
+
+    <div class="card news reveal">
+      <img class="news-shot" src="img/editer-son.png" width="360" height="592" loading="lazy" alt="Capture de la fenêtre « Éditer le son » : nom, emoji, couleur, catégories, volume de 0 à 200 %, découpe sur la forme d'onde, remplacement du fichier audio">
+      <div>
+        <h2>Un client plus net, et chaque son réglé à votre goût</h2>
+        <ul>
+          <li data-i="🎨"><strong>Thème « Flat »</strong>, par défaut : champs en creux, boutons à dégradé, barre d'outils à icônes. Il se règle indépendamment de la palette de couleurs.</li>
+          <li data-i="✏️"><strong>Fenêtre « Éditer le son »</strong> (clic droit › Éditer) : nom, emoji, couleur, catégories, favori, découpe sur la forme d'onde.</li>
+          <li data-i="🔊"><strong>Volume propre à chaque son</strong>, de 0 à 200 % : le cri trop fort baisse, le murmure remonte.</li>
+          <li data-i="📁"><strong>Remplacer le fichier audio</strong> sans perdre le nom, les catégories ni les réglages.</li>
+          <li data-i="🌈"><strong>Boutons teintés</strong> de la couleur choisie, catégories repliables (▾/▸) et renommables par clic droit.</li>
+          <li data-i="🟢"><strong>Le voyant « en train de parler »</strong> du bot s'éteint enfin quand rien ne joue.</li>
+        </ul>
+        <div class="fine">Remplacer le fichier demande un serveur WaseBoard à jour (c'est le cas de l'instance publique).</div>
+        <a class="button secondary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Mettre à jour · notes de version</a>
+      </div>
     </div>
 
     <div class="section-label">Vous administrez un serveur Discord ?</div>
