@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaseBoard — Conditions d'utilisation</title>
+<style>
+  :root {
+    --bg: #0F1624;
+    --panel: #182236;
+    --accent: #38BDF8;
+    --on-accent: #0B1220;
+    --text: #EAF0FA;
+    --text-dim: #B8C4D9;
+    --track: #26324A;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", -apple-system, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+  header .emoji { font-size: 40px; }
+  h1 { font-size: 26px; margin: 8px 0 4px; }
+  .tagline { color: var(--text-dim); font-size: 14px; }
+  .card {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+  }
+  .card h2 { margin-top: 0; font-size: 17px; }
+  .card p, .card li { font-size: 14px; color: var(--text-dim); }
+  ul { padding-left: 20px; margin-bottom: 0; }
+  li { margin-bottom: 8px; }
+  li:last-child { margin-bottom: 0; }
+  a.link { color: var(--accent); }
+  .note {
+    font-size: 12px;
+    color: var(--text-dim);
+    opacity: 0.8;
+    text-align: center;
+    margin-top: 40px;
+  }
+  .back { display: block; text-align: center; margin-bottom: 24px; font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back link" href="/">← Retour à WaseBoard</a>
+    <header>
+      <div class="emoji">📋</div>
+      <h1>Conditions d'utilisation</h1>
+      <div class="tagline">Dernière mise à jour : 4 octobre 2026</div>
+    </header>
+
+    <div class="card">
+      <p>En utilisant WaseBoard (le bot Discord et/ou l'application cliente Windows), vous acceptez les
+      conditions ci-dessous. Elles s'appliquent à l'<strong>instance publique par défaut</strong>
+      (waseboard.salsi.bid) ; une instance auto-hébergée par un tiers peut avoir ses propres conditions.</p>
+    </div>
+
+    <div class="card">
+      <h2>Description du service</h2>
+      <p>WaseBoard est un soundboard partagé : il permet aux membres d'un serveur Discord de jouer des sons
+      ensemble dans un salon vocal, depuis une application Windows. Le service est fourni gratuitement,
+      « tel quel », sans garantie de disponibilité continue.</p>
+    </div>
+
+    <div class="card">
+      <h2>Utilisation acceptable</h2>
+      <ul>
+        <li>N'importez pas de contenu illégal, protégé par des droits d'auteur sans autorisation, haineux, ou
+        contraire aux <a class="link" href="https://discord.com/guidelines">règles de Discord</a> et aux
+        <a class="link" href="https://discord.com/terms">conditions d'utilisation de Discord</a>.</li>
+        <li>Les administrateurs de chaque serveur sont responsables de la modération du contenu sur leur propre
+        serveur (suppression des sons inappropriés, gestion des droits d'upload).</li>
+        <li>N'utilisez pas le service pour harceler ou nuire à d'autres utilisateurs.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Disponibilité et capacité</h2>
+      <p>L'instance publique par défaut est gratuite, à usage raisonnable : quelques plafonds de capacité
+      s'appliquent (nombre de sons, taille des fichiers, nouveaux serveurs) pour qu'elle reste disponible pour
+      tous. Nous pouvons suspendre temporairement le service pour maintenance, sans préavis garanti.</p>
+    </div>
+
+    <div class="card">
+      <h2>Modération</h2>
+      <p>Nous nous réservons le droit de retirer le bot d'un serveur, de suspendre un accès, ou de supprimer du
+      contenu qui viole ces conditions ou les règles de Discord.</p>
+    </div>
+
+    <div class="card">
+      <h2>Limitation de responsabilité</h2>
+      <p>WaseBoard est un projet open-source fourni sans garantie, dans la mesure permise par la loi. Le
+      mainteneur ne peut être tenu responsable des dommages résultant de l'utilisation du service.</p>
+    </div>
+
+    <div class="card">
+      <h2>Auto-hébergement</h2>
+      <p>WaseBoard est open-source : <a class="link" href="https://github.com/salsi64/WaseBoard">vous pouvez
+      héberger votre propre instance</a>. Ces conditions ne s'appliquent alors qu'à l'instance publique par
+      défaut — sur votre propre instance, c'est vous qui déterminez vos propres conditions.</p>
+    </div>
+
+    <div class="note">
+      Ces conditions peuvent évoluer ; la version à jour est toujours disponible à cette adresse.
+      Voir aussi la <a class="link" href="/privacy.html">politique de confidentialité</a>.
+      Contact : <a class="link" href="https://discord.gg/HAGTNGFyQd">Discord WaseBoard</a>.
+    </div>
+  </div>
+</body>
+</html>
