@@ -313,6 +313,8 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Border Width="34" Height="34" CornerRadius="9" Background="{DynamicResource PanelBrush}">
                             <TextBlock Text="🎵" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -322,7 +324,14 @@
                             <TextBlock x:Name="FileNameText" FontSize="13.5" Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis"/>
                             <TextBlock x:Name="FileInfoText" FontSize="11.5" Opacity="0.5" Foreground="{DynamicResource TextBrush}"/>
                         </StackPanel>
-                        <Button Grid.Column="2" Content="🗑" Width="30" Height="30" Padding="0" Background="Transparent" BorderThickness="0"
+                        <Button x:Name="ReplaceFileButton" Grid.Column="2" Content="Remplacer…" Padding="12,6" FontSize="12" Margin="0,0,4,0"
+                                VerticalAlignment="Center" Background="{DynamicResource PanelBrush}" Foreground="{DynamicResource TextBrush}"
+                                BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1" Click="ReplaceFileButton_Click"
+                                ToolTip="Remplacer le fichier audio par un autre : le son garde son nom, son emoji, ses catégories et ses réglages"/>
+                        <Button x:Name="RevertFileButton" Grid.Column="3" Content="↩" Width="30" Height="30" Padding="0" Margin="0,0,2,0" Visibility="Collapsed"
+                                Background="Transparent" BorderThickness="0" Foreground="{DynamicResource TextBrush}" Opacity="0.8"
+                                ToolTip="Garder le fichier actuel" Click="RevertFileButton_Click"/>
+                        <Button Grid.Column="4" Content="🗑" Width="30" Height="30" Padding="0" Background="Transparent" BorderThickness="0"
                                 Foreground="{DynamicResource TextBrush}" Opacity="0.6" ToolTip="Supprimer ce son" Click="DeleteButton_Click"/>
                     </Grid>
                 </Border>

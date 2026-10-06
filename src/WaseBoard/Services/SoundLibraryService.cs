@@ -582,10 +582,61 @@ namespace WaseBoard.Services
             }
         }
 
+        /// <summary>Extensions de fichier audio acceptées par le serveur (même liste que server.py).</summary>
+        public static readonly string[] SupportedExtensions = { ".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma" };
+
+        /// <summary>Fichier « .sha » à côté d'un fichier en cache : le hash serveur du contenu téléchargé. Sert à détecter
+        /// qu'un son a été REMPLACÉ depuis (le hash du catalogue change, le fichier en cache n'est plus le bon).</summary>
+        private static string HashSidecarPath(string cachePath) => cachePath + ".sha";
+
+        private bool IsCachedFileCurrent(SoundItem item, string cachePath)
+        {
+            if (string.IsNullOrEmpty(item.ContentHash)) return true; // ancien son sans hash : on ne peut pas savoir
+            try
+            {
+                var sidecar = HashSidecarPath(cachePath);
+                if (File.Exists(sidecar))
+                    return string.Equals(File.ReadAllText(sidecar).Trim(), item.ContentHash, StringComparison.OrdinalIgnoreCase);
+
+                // Cache d'avant le suivi des versions : on l'authentifie une fois, par son vrai contenu.
+                if (string.Equals(ComputeFileHash(cachePath), item.ContentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.WriteAllText(sidecar, item.ContentHash);
+                    return true;
+                }
+                return false;
+            }
+            catch
+            {
+                return true; // en cas de doute on garde le fichier plutôt que de re-télécharger en boucle
+            }
+        }
+
+        /// <summary>Supprime un fichier du cache et son marqueur de version ; false si le fichier est verrouillé (en cours de lecture).</summary>
+        private static bool TryDeleteCachedFile(string cachePath)
+        {
+            try
+            {
+                if (File.Exists(cachePath)) File.Delete(cachePath);
+                var sidecar = HashSidecarPath(cachePath);
+                if (File.Exists(sidecar)) File.Delete(sidecar);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public async Task<string?> GetOrDownloadCachedFileAsync(SoundItem item)
         {
             var cachePath = Path.Combine(_cacheFolder, item.Id + item.Extension);
-            if (File.Exists(cachePath)) return cachePath;
+            if (File.Exists(cachePath))
+            {
+                if (IsCachedFileCurrent(item, cachePath)) return cachePath;
+                // Périmé : le fichier de ce son a été remplacé. On retélécharge ; si l'ancien est verrouillé, on le garde pour cette fois.
+                if (!TryDeleteCachedFile(cachePath)) return cachePath;
+            }
 
             try
             {
@@ -598,8 +649,15 @@ namespace WaseBoard.Services
                     return null;
                 }
 
-                await using var fileStream = File.Create(cachePath);
-                await response.Content.CopyToAsync(fileStream);
+                await using (var fileStream = File.Create(cachePath))
+                    await response.Content.CopyToAsync(fileStream);
+                if (!string.IsNullOrEmpty(item.ContentHash))
+                    try { File.WriteAllText(HashSidecarPath(cachePath), item.ContentHash); } catch { /* le marqueur est facultatif */ }
+
+                // Le son a pu changer d'extension (remplacé par un autre format) : on retire les copies orphelines.
+                foreach (var ext in SupportedExtensions)
+                    if (!string.Equals(ext, item.Extension, StringComparison.OrdinalIgnoreCase))
+                        TryDeleteCachedFile(Path.Combine(_cacheFolder, item.Id + ext));
                 return cachePath;
             }
             catch (Exception ex)
@@ -661,6 +719,63 @@ namespace WaseBoard.Services
             }
         }
 
+        /// <summary>Remplace le fichier audio d'un son EXISTANT (le son garde son identité : nom, emoji, favoris, catégories,
+        /// volume, raccourci...). Le serveur retire la découpe (elle visait l'ancien fichier) et n'en garde pas l'ancienne
+        /// version. Met à jour le SoundItem et invalide le fichier en cache en cas de succès.</summary>
+        public async Task<bool> ReplaceSoundFileAsync(SoundItem item, string localFilePath)
+        {
+            LastErrorDetail = null;
+            try
+            {
+                using var request = CreateRequest(HttpMethod.Put, $"/sounds/{item.Id}/file");
+                using var form = new MultipartFormDataContent();
+                using var fileStream = File.OpenRead(localFilePath);
+                using var fileContent = new StreamContent(fileStream);
+                form.Add(fileContent, "file", Path.GetFileName(localFilePath));
+                request.Content = form;
+
+                using var response = await SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    // 405 : une instance qui n'a pas encore la route de remplacement (PUT refusé sur /sounds/{id}/file).
+                    LastErrorDetail = response.StatusCode == HttpStatusCode.MethodNotAllowed
+                        ? "Ce serveur ne gère pas encore le remplacement de fichier : il faut le mettre à jour."
+                        : await ReadServerErrorAsync(response, $"Remplacement échoué ({(int)response.StatusCode}).");
+                    return false;
+                }
+
+                var entry = JsonSerializer.Deserialize<CatalogEntry>(await response.Content.ReadAsStringAsync());
+                var oldCachePath = Path.Combine(_cacheFolder, item.Id + item.Extension);
+                TryDeleteCachedFile(oldCachePath);
+
+                if (entry is not null)
+                {
+                    item.Extension = entry.extension;
+                    item.ContentHash = entry.hash;
+                }
+
+                // On vient d'envoyer ce fichier : inutile de le retélécharger, il devient directement la version en cache.
+                try
+                {
+                    var newCachePath = Path.Combine(_cacheFolder, item.Id + item.Extension);
+                    File.Copy(localFilePath, newCachePath, overwrite: true);
+                    if (!string.IsNullOrEmpty(item.ContentHash)) File.WriteAllText(HashSidecarPath(newCachePath), item.ContentHash);
+                }
+                catch { /* sera simplement retéléchargé à la demande */ }
+
+                item.TrimStartMs = null;
+                item.TrimEndMs = null;
+                item.WaveformPeaks = null;
+                item.DurationMs = 0;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastErrorDetail = ex.Message;
+                return false;
+            }
+        }
+
         public async Task<bool> DeleteSoundAsync(SoundItem item)
         {
             LastErrorDetail = null;
@@ -675,8 +790,7 @@ namespace WaseBoard.Services
                     return false;
                 }
 
-                var cachePath = Path.Combine(_cacheFolder, item.Id + item.Extension);
-                if (File.Exists(cachePath)) File.Delete(cachePath);
+                TryDeleteCachedFile(Path.Combine(_cacheFolder, item.Id + item.Extension));
 
                 Settings.FavoriteSoundIds.Remove(item.Id);
                 Settings.SoundHotkeys.Remove(item.Id);

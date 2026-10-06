@@ -1378,8 +1378,24 @@ namespace WaseBoard
                 return;
             }
 
+            // Nouveau fichier audio : en premier, car le serveur retire alors la découpe (elle visait l'ancien fichier) et la
+            // découpe choisie dans la fenêtre vise déjà le nouveau ; la confirmation a eu lieu dans la fenêtre.
+            var fileReplaced = false;
+            if (window.ResultReplacementFile is { } replacementFile)
+            {
+                if (!await _library.ReplaceSoundFileAsync(item, replacementFile))
+                {
+                    ToastService.Show(
+                        "Remplacement du fichier échoué." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                        ToastKind.Warning);
+                    return;
+                }
+                fileReplaced = true;
+                await PrecomputeWaveformsAsync(new List<SoundItem> { item });
+            }
+
             // Réglages locaux (volume, couleur, favori, catégories personnelles) : appliqués tout de suite, sans serveur.
-            var localChanged = false;
+            var localChanged = fileReplaced;
             if (Math.Abs(window.ResultVolume - item.Volume) > 0.001f)
             {
                 _library.SetVolume(item, window.ResultVolume);

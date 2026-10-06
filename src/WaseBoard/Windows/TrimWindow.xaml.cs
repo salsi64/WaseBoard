@@ -59,7 +59,11 @@ namespace WaseBoard.Windows
             "#F472B6", "#38BDF8", "#34D399", "#FBBF24", "#F87171", "#A78BFA", "#22D3EE", "#94A3B8"
         };
 
-        private readonly string _sourceFilePath;
+        private string _sourceFilePath;
+        private readonly string _originalSourcePath;
+        private WaveformData? _originalData;
+        private string _originalFileName = "";
+        private string? _replacementPath;
         private readonly TrimWindowMode _mode;
         private readonly TimeSpan? _initialStart;
         private readonly TimeSpan? _initialEnd;
@@ -116,12 +120,17 @@ namespace WaseBoard.Windows
         /// <summary>L'utilisateur a demandé (et confirmé) la suppression du son : la fenêtre se ferme en OK sans rien d'autre à appliquer.</summary>
         public bool ResultDeleteRequested { get; private set; }
 
+        /// <summary>Chemin du nouveau fichier audio choisi pour remplacer celui du son (null = on garde le fichier actuel).
+        /// Quand il est renseigné, la découpe renvoyée vise ce NOUVEAU fichier.</summary>
+        public string? ResultReplacementFile => _replacementPath;
+
         public TrimWindow(string sourceFilePath, string suggestedName, TrimWindowMode mode = TrimWindowMode.Add,
             TimeSpan? initialStart = null, TimeSpan? initialEnd = null, string? initialEmoji = null,
             EditExtras? extras = null)
         {
             InitializeComponent();
             _sourceFilePath = sourceFilePath;
+            _originalSourcePath = sourceFilePath;
             _mode = mode;
             _initialStart = initialStart;
             _initialEnd = initialEnd;
@@ -153,6 +162,7 @@ namespace WaseBoard.Windows
                     BuildSwatches();
                     ApplyThumbColor();
 
+                    _originalFileName = extras.FileName;
                     FileNameText.Text = extras.FileName;
 
                     VolumeSlider.Value = Math.Clamp(Math.Round(extras.Volume * 100), 0, 200);
@@ -184,20 +194,9 @@ namespace WaseBoard.Windows
             try
             {
                 var data = await Task.Run(() => AudioTrimService.ComputeWaveform(_sourceFilePath));
-                _duration = data.Duration.TotalMilliseconds > 0 ? data.Duration : TimeSpan.FromSeconds(1);
-
+                _originalData = data;
                 // Mode Edit : on repart de la portion actuellement gardée (bornée à la durée du fichier).
-                _trimStart = _initialStart is { } s ? Clamp(s, TimeSpan.Zero, _duration) : TimeSpan.Zero;
-                _trimEnd = _initialEnd is { } en ? Clamp(en, TimeSpan.Zero, _duration) : _duration;
-                if (_trimEnd <= _trimStart) { _trimStart = TimeSpan.Zero; _trimEnd = _duration; }
-                _loadedStart = _trimStart;
-                _loadedEnd = _trimEnd;
-
-                FileInfoText.Text = $"Durée totale : {Seconds(_duration)}";
-
-                DrawWaveform(data.Peaks);
-                PositionHandles();
-                UpdateSelection();
+                ShowWaveform(data, _initialStart, _initialEnd);
                 RefreshDirty();
             }
             catch (Exception ex)
@@ -216,6 +215,96 @@ namespace WaseBoard.Windows
 
         private static TimeSpan Clamp(TimeSpan value, TimeSpan min, TimeSpan max) =>
             value < min ? min : value > max ? max : value;
+
+        /// <summary>Affiche la waveform d'un fichier avec la portion gardée donnée (null = le fichier entier).</summary>
+        private void ShowWaveform(WaveformData data, TimeSpan? start, TimeSpan? end)
+        {
+            _duration = data.Duration.TotalMilliseconds > 0 ? data.Duration : TimeSpan.FromSeconds(1);
+            _trimStart = start is { } s ? Clamp(s, TimeSpan.Zero, _duration) : TimeSpan.Zero;
+            _trimEnd = end is { } en ? Clamp(en, TimeSpan.Zero, _duration) : _duration;
+            if (_trimEnd <= _trimStart) { _trimStart = TimeSpan.Zero; _trimEnd = _duration; }
+            _loadedStart = _trimStart;
+            _loadedEnd = _trimEnd;
+
+            foreach (var (bar, _) in _bars) WaveformCanvas.Children.Remove(bar);
+            _bars.Clear();
+            DrawWaveform(data.Peaks);
+            PositionHandles();
+            UpdateSelection();
+            UpdateFileInfoText();
+        }
+
+        private void UpdateFileInfoText() =>
+            FileInfoText.Text = _replacementPath is null
+                ? $"Durée totale : {Seconds(_duration)}"
+                : $"Nouveau fichier · {Seconds(_duration)}";
+
+        // ---------- Remplacement du fichier audio ----------
+
+        private async void ReplaceFileButton_Click(object sender, RoutedEventArgs e)
+        {
+            var patterns = string.Join(";", SoundLibraryService.SupportedExtensions.Select(x => "*" + x));
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Choisir le nouveau fichier audio",
+                Filter = $"Fichiers audio ({patterns})|{patterns}|Tous les fichiers|*.*"
+            };
+            if (dialog.ShowDialog(this) != true) return;
+
+            await ApplyReplacementFileAsync(dialog.FileName);
+        }
+
+        /// <summary>Prend ce fichier comme nouveau fichier audio du son (appliqué à l'enregistrement). Faux si refusé
+        /// (format inconnu ou fichier illisible) : la fenêtre reste alors exactement comme elle était.</summary>
+        private async Task<bool> ApplyReplacementFileAsync(string path)
+        {
+            var extension = System.IO.Path.GetExtension(path).ToLowerInvariant();
+            if (!SoundLibraryService.SupportedExtensions.Contains(extension))
+            {
+                AlertDialog.Show(this, $"Ce format n'est pas pris en charge ({extension}). Formats acceptés : {string.Join(", ", SoundLibraryService.SupportedExtensions)}.",
+                    "WaseBoard", AlertKind.Warning);
+                return false;
+            }
+
+            // On analyse AVANT de bouger quoi que ce soit : un fichier illisible laisse la fenêtre telle quelle.
+            WaveformData data;
+            try
+            {
+                ReplaceFileButton.IsEnabled = false;
+                data = await Task.Run(() => AudioTrimService.ComputeWaveform(path));
+            }
+            catch (Exception ex)
+            {
+                AlertDialog.Show(this, "Impossible d'analyser ce fichier audio :\n" + ex.Message, "Erreur", AlertKind.Error);
+                return false;
+            }
+            finally
+            {
+                ReplaceFileButton.IsEnabled = true;
+            }
+
+            StopPreview();
+            _sourceFilePath = path;
+            _replacementPath = path;
+            FileNameText.Text = System.IO.Path.GetFileName(path);
+            RevertFileButton.Visibility = Visibility.Visible;
+            ShowWaveform(data, null, null); // l'ancienne découpe visait l'ancien fichier
+            RefreshDirty();
+            return true;
+        }
+
+        private void RevertFileButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_replacementPath is null || _originalData is null) return;
+
+            StopPreview();
+            _sourceFilePath = _originalSourcePath;
+            _replacementPath = null;
+            FileNameText.Text = _originalFileName;
+            RevertFileButton.Visibility = Visibility.Collapsed;
+            ShowWaveform(_originalData, _initialStart, _initialEnd);
+            RefreshDirty();
+        }
 
         /// <summary>Waveform en grosses barres arrondies (une cinquantaine, comme la maquette) : chaque barre prend le
         /// pic le plus fort de sa tranche. Les barres dans la zone gardée sont en dégradé d'accent, les autres en sourdine.</summary>
@@ -309,6 +398,7 @@ namespace WaseBoard.Windows
                 || _isFavorite != _initFavorite
                 || _colorHex != _initColor
                 || Math.Abs(VolumeSlider.Value - _initVolume) > 0.01
+                || _replacementPath is not null
                 || !_selectedLocal.SetEquals(_initLocal)
                 || _sharedChoices.Any(s => _initShared.TryGetValue(s.GuildId, out var was) && was != s.IsMember)
                 || trimChanged;
@@ -662,6 +752,11 @@ namespace WaseBoard.Windows
                 AlertDialog.Show(this, "La portion sélectionnée est trop courte.", "WaseBoard", AlertKind.Warning);
                 return;
             }
+
+            // Le remplacement est le seul changement qu'on ne peut pas défaire : confirmation ici, pour pouvoir rester dans la fenêtre.
+            if (_replacementPath is not null && !ConfirmDialog.Show(this,
+                    $"Remplacer le fichier audio de « {NameBox.Text.Trim()} » ?\nLe nouveau fichier sera utilisé par tous les membres du serveur ; l'ancien n'est pas conservé."))
+                return;
 
             StopPreview();
 
