@@ -46,14 +46,14 @@
                     <ControlTemplate TargetType="Button">
                         <Grid>
                             <Border x:Name="Halo" Visibility="Collapsed" Margin="-6" CornerRadius="16" IsHitTestVisible="False" Opacity="0.3"
-                                    Background="{Binding Id, Converter={StaticResource IdToColorConverter}}">
+                                    Background="{Binding Converter={StaticResource IdToColorConverter}}">
                                 <Border.Effect><BlurEffect Radius="16"/></Border.Effect>
                             </Border>
                             <Border x:Name="CardBorder" Background="{DynamicResource PanelBrush}" CornerRadius="10" BorderThickness="2" BorderBrush="Transparent" Height="68">
                                 <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="4,3,4,2"/>
                             </Border>
                             <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="10" BorderThickness="2" IsHitTestVisible="False"
-                                    BorderBrush="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
+                                    BorderBrush="{Binding Converter={StaticResource IdToColorConverter}}"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -193,7 +193,7 @@
                     <ControlTemplate TargetType="Button">
                         <Grid>
                             <Border x:Name="Halo" Visibility="Collapsed" Margin="-5" CornerRadius="22" IsHitTestVisible="False" Opacity="0.3"
-                                    Background="{Binding Id, Converter={StaticResource IdToColorConverter}}">
+                                    Background="{Binding Converter={StaticResource IdToColorConverter}}">
                                 <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
                             </Border>
                             <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="18" Height="54"
@@ -201,7 +201,7 @@
                                 <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                             </Border>
                             <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="18" BorderThickness="2" IsHitTestVisible="False"
-                                    BorderBrush="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
+                                    BorderBrush="{Binding Converter={StaticResource IdToColorConverter}}"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -251,7 +251,7 @@
                                 ToolTip="Aperçu (lecture locale uniquement, sans envoi à Discord)">
                             <Border.Style>
                                 <Style TargetType="Border">
-                                    <Setter Property="Background" Value="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
+                                    <Setter Property="Background" Value="{Binding Converter={StaticResource IdToColorConverter}}"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsPreviewing}" Value="True">
                                             <Setter Property="Background" Value="White"/>

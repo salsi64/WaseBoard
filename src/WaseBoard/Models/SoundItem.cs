@@ -119,8 +119,12 @@ namespace WaseBoard.Models
         /// <summary>Raccourci clavier optionnel, ex: "Ctrl+Alt+1" (préférence locale).</summary>
         public string? Hotkey { get; set; }
 
-        /// <summary>Volume individuel du son (0.0 à 1.5).</summary>
+        /// <summary>Volume individuel du son (0.0 à 2.0), préférence locale.</summary>
         public float Volume { get; set; } = 1.0f;
+
+        /// <summary>Couleur choisie pour ce son ("#RRGGBB", préférence locale) ; null = couleur automatique dérivée de l'ID.</summary>
+        [JsonIgnore]
+        public string? ColorHex { get; set; }
 
         /// <summary>Extension du fichier d'origine (ex: ".wav", ".mp3"), pour nommer correctement le cache local.</summary>
         [JsonIgnore]

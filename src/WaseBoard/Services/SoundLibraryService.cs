@@ -278,6 +278,15 @@ namespace WaseBoard.Services
             SaveSettings();
         }
 
+        /// <summary>Choisit la couleur d'un son ("#RRGGBB") ; null = retour à la couleur automatique.</summary>
+        public void SetColor(SoundItem item, string? hex)
+        {
+            item.ColorHex = hex;
+            if (string.IsNullOrEmpty(hex)) Settings.SoundColors.Remove(item.Id);
+            else Settings.SoundColors[item.Id] = hex;
+            SaveSettings();
+        }
+
         // ---------- Ordre personnalisé des sons ----------
 
         public List<SoundItem> ApplyCustomOrder(List<SoundItem> items)
@@ -560,6 +569,7 @@ namespace WaseBoard.Services
                     item.IsFavorite = Settings.FavoriteSoundIds.Contains(entry.id);
                     item.Hotkey = Settings.SoundHotkeys.TryGetValue(entry.id, out var hk) ? hk : null;
                     item.Volume = Settings.SoundVolumes.TryGetValue(entry.id, out var vol) ? vol : 1.0f;
+                    item.ColorHex = Settings.SoundColors.TryGetValue(entry.id, out var color) ? color : null;
                     return item;
                 }).ToList();
 
@@ -671,6 +681,7 @@ namespace WaseBoard.Services
                 Settings.FavoriteSoundIds.Remove(item.Id);
                 Settings.SoundHotkeys.Remove(item.Id);
                 Settings.SoundVolumes.Remove(item.Id);
+                Settings.SoundColors.Remove(item.Id);
                 Settings.SoundOrder.Remove(item.Id);
                 foreach (var list in Settings.Categories.Values) list.Remove(item.Id);
                 SaveSettings();

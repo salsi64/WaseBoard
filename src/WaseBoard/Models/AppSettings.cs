@@ -51,6 +51,9 @@ namespace WaseBoard.Models
         /// <summary>Volume individuel par son (ID → volume 0.0-1.5), préférence locale.</summary>
         public Dictionary<string, float> SoundVolumes { get; set; } = new();
 
+        /// <summary>Couleur choisie par son (ID → "#RRGGBB"), préférence locale. Absent = couleur automatique dérivée de l'ID.</summary>
+        public Dictionary<string, string> SoundColors { get; set; } = new();
+
         /// <summary>Ordre d'affichage personnalisé des sons dans la grille principale (liste d'IDs). Vide = ordre du serveur.</summary>
         public List<string> SoundOrder { get; set; } = new();
 

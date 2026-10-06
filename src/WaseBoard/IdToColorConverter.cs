@@ -17,6 +17,16 @@ namespace WaseBoard
 
         public object Convert(object? value, Type targetType, object parameter, CultureInfo culture)
         {
+            // Le son entier est lié (et non son seul ID) : sa couleur choisie, si elle existe, passe avant la couleur automatique.
+            if (value is Models.SoundItem item)
+            {
+                if (!string.IsNullOrEmpty(item.ColorHex))
+                {
+                    try { return new SolidColorBrush((Color)ColorConverter.ConvertFromString(item.ColorHex)); }
+                    catch { /* couleur invalide enregistrée : retombe sur la couleur automatique */ }
+                }
+                value = item.Id;
+            }
             if (value is not string s || s.Length == 0) return Brushes.Gray;
 
             var hash = 0;

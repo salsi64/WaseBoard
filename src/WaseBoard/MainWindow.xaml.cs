@@ -306,6 +306,11 @@ namespace WaseBoard
             res["TrackBrush"] = new SolidColorBrush(isLight ? PalettePresets.LightTrack : preset.Track);
             res["AccentBrush"] = new SolidColorBrush(accent);
             res["OnAccentBrush"] = new SolidColorBrush(PalettePresets.OnAccent(accent));
+
+            // Dégradé « accent → teinte voisine » (boutons principaux, vignette, poignées de la fenêtre d'édition).
+            var accent2 = PalettePresets.ShiftHue(accent, -28);
+            res["Accent2Brush"] = new SolidColorBrush(accent2);
+            res["AccentGradientBrush"] = new LinearGradientBrush(accent, accent2, new Point(0, 0), new Point(1, 1));
         }
 
         /// <summary>Bascule thème classique/moderne/flat (flat = disposition moderne + style d'interface Flat ; la
@@ -1250,22 +1255,7 @@ namespace WaseBoard
                 var confirm = ConfirmDialog.Show(this,
                     $"Supprimer « {item.Name} » du catalogue partagé ?\nUn administrateur du serveur pourra le restaurer depuis la corbeille.");
                 if (!confirm) return;
-
-                var ok = await _library.DeleteSoundAsync(item);
-                if (ok)
-                {
-                    // Après le retrait (pas avant) : ResyncHotkeys() reconstruit depuis Sounds, donc
-                    // le son doit déjà être absent pour que son raccourci disparaisse vraiment.
-                    Sounds.Remove(item);
-                    ResyncHotkeys();
-                    RefreshSections();
-                }
-                else
-                {
-                    ToastService.Show(
-                        "Suppression échouée." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                        ToastKind.Warning);
-                }
+                await DeleteSoundAsync(item);
             };
 
             menu.Items.Add(favoriteItem);
@@ -1324,6 +1314,26 @@ namespace WaseBoard
             menu.IsOpen = true;
         }
 
+        /// <summary>Supprime un son du catalogue partagé (la confirmation est demandée par l'appelant).</summary>
+        private async Task DeleteSoundAsync(SoundItem item)
+        {
+            var ok = await _library.DeleteSoundAsync(item);
+            if (ok)
+            {
+                // Après le retrait (pas avant) : ResyncHotkeys() reconstruit depuis Sounds, donc
+                // le son doit déjà être absent pour que son raccourci disparaisse vraiment.
+                Sounds.Remove(item);
+                ResyncHotkeys();
+                RefreshSections();
+            }
+            else
+            {
+                ToastService.Show(
+                    "Suppression échouée." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    ToastKind.Warning);
+            }
+        }
+
         /// <summary>« Éditer… » : rouvre la fenêtre d'édition sur le son COMPLET (gardé par le serveur) avec la portion
         /// actuelle déjà placée ; nom et emoji sont modifiables au passage. Un seul appel au serveur pour tout enregistrer.</summary>
         private async Task EditSoundAsync(SoundItem item)
@@ -1344,6 +1354,8 @@ namespace WaseBoard
             {
                 Volume = item.Volume,
                 IsFavorite = item.IsFavorite,
+                ColorHex = item.ColorHex,
+                FileName = item.Name + item.Extension,
                 LocalCategories = localCategories,
                 SelectedLocalCategories = localCategories
                     .Where(c => _library.Settings.Categories.TryGetValue(c, out var ids) && ids.Contains(item.Id)).ToList(),
@@ -1359,11 +1371,23 @@ namespace WaseBoard
             var window = new TrimWindow(localPath, item.Name, TrimWindowMode.Edit, start, end, item.Emoji, extras) { Owner = this };
             if (window.ShowDialog() != true) return;
 
-            // Réglages locaux (volume, favori, catégories personnelles) : appliqués tout de suite, sans serveur.
+            // Suppression demandée (et déjà confirmée) depuis la ligne « Son » : plus rien d'autre à appliquer.
+            if (window.ResultDeleteRequested)
+            {
+                await DeleteSoundAsync(item);
+                return;
+            }
+
+            // Réglages locaux (volume, couleur, favori, catégories personnelles) : appliqués tout de suite, sans serveur.
             var localChanged = false;
             if (Math.Abs(window.ResultVolume - item.Volume) > 0.001f)
             {
                 _library.SetVolume(item, window.ResultVolume);
+                localChanged = true;
+            }
+            if (!string.Equals(window.ResultColorHex, item.ColorHex, StringComparison.OrdinalIgnoreCase))
+            {
+                _library.SetColor(item, window.ResultColorHex);
                 localChanged = true;
             }
             if (window.ResultFavorite != item.IsFavorite)

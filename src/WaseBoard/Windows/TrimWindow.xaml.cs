@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -9,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 using WaseBoard.Services;
 
 namespace WaseBoard.Windows
@@ -27,26 +29,35 @@ namespace WaseBoard.Windows
     }
 
     /// <summary>Ce que la fenêtre d'édition sait d'un son existant en plus de son nom/emoji/découpe : réglages locaux
-    /// (volume, favori, catégories personnelles) et catégories partagées des serveurs.</summary>
+    /// (volume, couleur, favori, catégories personnelles), catégories partagées des serveurs et nom du fichier.</summary>
     public sealed class EditExtras
     {
         public float Volume { get; init; } = 1f;
         public bool IsFavorite { get; init; }
+        public string? ColorHex { get; init; }
+        public string FileName { get; init; } = "";
         public IReadOnlyList<string> LocalCategories { get; init; } = Array.Empty<string>();
         public IReadOnlyCollection<string> SelectedLocalCategories { get; init; } = Array.Empty<string>();
         public IReadOnlyList<SharedCategoryChoice> SharedCategories { get; init; } = Array.Empty<SharedCategoryChoice>();
     }
 
     /// <summary>
-    /// Fenêtre « Éditer le son » : nom, emoji, favori, catégories, volume et portion gardée, sur la waveform du son
-    /// COMPLET. La découpe est non destructive : le fichier n'est jamais modifié (le serveur garde le son entier et ne
-    /// mémorise que le début et la fin), donc on peut recouper plus tard en rouvrant cette fenêtre.
+    /// Fenêtre « Éditer le son » : nom, emoji, favori, couleur, catégories, volume et portion gardée, sur la waveform du
+    /// son COMPLET. La découpe est non destructive : le fichier n'est jamais modifié (le serveur garde le son entier et
+    /// ne mémorise que le début et la fin), donc on peut recouper plus tard en rouvrant cette fenêtre.
     /// </summary>
     public partial class TrimWindow : Window
     {
-        private const double CanvasWidth = 496;
-        private const double CanvasHeight = 110;
+        private const double CanvasWidth = 374;
+        private const double CanvasHeight = 58;
         private const double HandleWidth = 14;
+        private const double BarWidth = 6;
+        private const double BarGap = 2;
+
+        private static readonly string[] SwatchColors =
+        {
+            "#F472B6", "#38BDF8", "#34D399", "#FBBF24", "#F87171", "#A78BFA", "#22D3EE", "#94A3B8"
+        };
 
         private readonly string _sourceFilePath;
         private readonly TrimWindowMode _mode;
@@ -55,17 +66,34 @@ namespace WaseBoard.Windows
         private TimeSpan _duration = TimeSpan.FromSeconds(1);
         private TimeSpan _trimStart = TimeSpan.Zero;
         private TimeSpan _trimEnd = TimeSpan.FromSeconds(1);
+        private TimeSpan _loadedStart = TimeSpan.Zero;
+        private TimeSpan _loadedEnd = TimeSpan.FromSeconds(1);
 
         private WaveOutEvent? _previewOutput;
         private WaveStream? _previewStream;
+        private bool _previewMuted;
 
-        private readonly List<Rectangle> _bars = new();
+        private readonly List<(Rectangle Bar, double CenterX)> _bars = new();
+        private Brush _barDimBrush = Brushes.Gray;
+        private Brush _barSelectedBrush = Brushes.White;
+
         private readonly List<string> _localCategories = new();
         private readonly HashSet<string> _selectedLocal = new(StringComparer.Ordinal);
         private readonly List<SharedCategoryChoice> _sharedChoices = new();
         private bool _isFavorite;
+        private string? _colorHex;
         private DateTime _emojiPopupClosedAt = DateTime.MinValue;
         private DateTime _categoryPopupClosedAt = DateTime.MinValue;
+
+        // Valeurs de départ (mode Edit) : « Enregistrer » ne s'active que si quelque chose a changé.
+        private bool _initialized;
+        private string _initName = "";
+        private string _initEmoji = "";
+        private bool _initFavorite;
+        private string? _initColor;
+        private double _initVolume = 100;
+        private HashSet<string> _initLocal = new();
+        private Dictionary<string, bool> _initShared = new();
 
         public string ResultName { get; private set; } = string.Empty;
 
@@ -79,8 +107,14 @@ namespace WaseBoard.Windows
         /// <summary>Volume individuel choisi (1.0 = 100 %). Mode Edit uniquement.</summary>
         public float ResultVolume { get; private set; } = 1f;
         public bool ResultFavorite { get; private set; }
+
+        /// <summary>Couleur choisie ("#RRGGBB"), null = automatique.</summary>
+        public string? ResultColorHex { get; private set; }
         public IReadOnlyCollection<string> ResultLocalCategories => _selectedLocal;
         public IReadOnlyList<SharedCategoryChoice> ResultSharedCategories => _sharedChoices;
+
+        /// <summary>L'utilisateur a demandé (et confirmé) la suppression du son : la fenêtre se ferme en OK sans rien d'autre à appliquer.</summary>
+        public bool ResultDeleteRequested { get; private set; }
 
         public TrimWindow(string sourceFilePath, string suggestedName, TrimWindowMode mode = TrimWindowMode.Add,
             TimeSpan? initialStart = null, TimeSpan? initialEnd = null, string? initialEmoji = null,
@@ -96,20 +130,30 @@ namespace WaseBoard.Windows
             Palette.EmojiChosen += emoji => { EmojiBox.Text = emoji; EmojiPopup.IsOpen = false; };
             EmojiBox.Text = initialEmoji ?? "";
 
-            if (mode == TrimWindowMode.Edit)
+            if (mode == TrimWindowMode.Add)
             {
-                Title = "Éditer le son";
-                ChromeTitleBar.TitleText = "Éditer le son";
+                Title = "Ajouter un son";
+                HeadingText.Text = "Ajouter un son";
+            }
+            else
+            {
                 ConfirmButton.Content = "Enregistrer";
-                HintText.Text = "Le son complet est conservé : déplacez les poignées pour changer la partie jouée, ou « Tout garder » pour retrouver le son entier.";
+                HintText.Visibility = Visibility.Collapsed;
 
                 if (extras is not null)
                 {
                     EditOnlyPanel.Visibility = Visibility.Visible;
+                    FilePanel.Visibility = Visibility.Visible;
                     FavoriteButton.Visibility = Visibility.Visible;
 
                     _isFavorite = extras.IsFavorite;
                     UpdateFavoriteVisual();
+
+                    _colorHex = extras.ColorHex;
+                    BuildSwatches();
+                    ApplyThumbColor();
+
+                    FileNameText.Text = extras.FileName;
 
                     VolumeSlider.Value = Math.Clamp(Math.Round(extras.Volume * 100), 0, 200);
 
@@ -119,8 +163,18 @@ namespace WaseBoard.Windows
                     BuildCategoryList();
                 }
             }
+
+            _initName = NameBox.Text;
+            _initEmoji = EmojiBox.Text.Trim();
+            _initFavorite = _isFavorite;
+            _initColor = _colorHex;
+            _initVolume = VolumeSlider.Value;
+            _initLocal = new HashSet<string>(_selectedLocal);
+            _initShared = _sharedChoices.ToDictionary(s => s.GuildId, s => s.IsMember);
+            _initialized = true;
+
             ResultVolume = (float)(VolumeSlider.Value / 100.0);
-            UpdateConfirmEnabled();
+            RefreshDirty();
 
             Loaded += TrimWindow_Loaded;
         }
@@ -136,10 +190,15 @@ namespace WaseBoard.Windows
                 _trimStart = _initialStart is { } s ? Clamp(s, TimeSpan.Zero, _duration) : TimeSpan.Zero;
                 _trimEnd = _initialEnd is { } en ? Clamp(en, TimeSpan.Zero, _duration) : _duration;
                 if (_trimEnd <= _trimStart) { _trimStart = TimeSpan.Zero; _trimEnd = _duration; }
+                _loadedStart = _trimStart;
+                _loadedEnd = _trimEnd;
+
+                FileInfoText.Text = $"Durée totale : {Seconds(_duration)}";
 
                 DrawWaveform(data.Peaks);
                 PositionHandles();
-                UpdateMasksAndLabel();
+                UpdateSelection();
+                RefreshDirty();
             }
             catch (Exception ex)
             {
@@ -158,33 +217,46 @@ namespace WaseBoard.Windows
         private static TimeSpan Clamp(TimeSpan value, TimeSpan min, TimeSpan max) =>
             value < min ? min : value > max ? max : value;
 
+        /// <summary>Waveform en grosses barres arrondies (une cinquantaine, comme la maquette) : chaque barre prend le
+        /// pic le plus fort de sa tranche. Les barres dans la zone gardée sont en dégradé d'accent, les autres en sourdine.</summary>
         private void DrawWaveform(float[] peaks)
         {
             if (peaks.Length == 0) return;
 
-            double barWidth = CanvasWidth / peaks.Length;
-            double centerY = CanvasHeight / 2;
-            var fill = (Brush)FindResource("AccentBrush");
+            var accent = ((SolidColorBrush)FindResource("AccentBrush")).Color;
+            var accent2 = ((SolidColorBrush)FindResource("Accent2Brush")).Color;
+            _barSelectedBrush = new LinearGradientBrush(accent, accent2, 90);
+            _barDimBrush = (Brush)FindResource("TrackBrush");
 
-            for (int i = 0; i < peaks.Length; i++)
+            int count = Math.Max(2, (int)Math.Floor((CanvasWidth + BarGap) / (BarWidth + BarGap)));
+            double stride = (CanvasWidth - BarWidth) / (count - 1);
+            double centerY = CanvasHeight / 2;
+            float overallMax = Math.Max(0.01f, peaks.Max());
+
+            for (int i = 0; i < count; i++)
             {
-                double barHeight = Math.Max(2, peaks[i] * (CanvasHeight - 10));
+                int from = i * peaks.Length / count;
+                int to = Math.Max(from + 1, (i + 1) * peaks.Length / count);
+                float peak = 0;
+                for (int p = from; p < Math.Min(to, peaks.Length); p++) peak = Math.Max(peak, peaks[p]);
+
+                double barHeight = Math.Max(5, peak / overallMax * (CanvasHeight - 14));
                 var bar = new Rectangle
                 {
-                    Width = Math.Max(1, barWidth - 1),
+                    Width = BarWidth,
                     Height = barHeight,
-                    Fill = fill,
-                    Opacity = 0.85,
-                    RadiusX = 1,
-                    RadiusY = 1,
+                    RadiusX = 2,
+                    RadiusY = 2,
+                    Fill = _barDimBrush,
                     RenderTransformOrigin = new Point(0.5, 0.5)
                 };
-                Canvas.SetLeft(bar, i * barWidth);
+                double left = i * stride;
+                Canvas.SetLeft(bar, left);
                 Canvas.SetTop(bar, centerY - barHeight / 2);
 
-                // Inséré en dessous des masques/poignées (déjà présents dans le XAML) pour rester en arrière-plan.
+                // Inséré en dessous de la sélection et des poignées (déjà présentes dans le XAML).
                 WaveformCanvas.Children.Insert(0, bar);
-                _bars.Add(bar);
+                _bars.Add((bar, left + BarWidth / 2));
             }
             ApplyVolumeVisuals();
         }
@@ -211,17 +283,37 @@ namespace WaseBoard.Windows
             // Image plutôt que texte (voir EmojiImageResolver) ; vide = pas d'aperçu.
             EmojiPreview.Source = string.IsNullOrEmpty(emoji) ? null : EmojiImageResolver.Resolve(emoji);
             EmojiPlaceholder.Visibility = EmojiPreview.Source is null ? Visibility.Visible : Visibility.Collapsed;
-            UpdateConfirmEnabled();
+            RefreshDirty();
         }
 
-        /// <summary>À l'ajout, l'emoji est obligatoire (comportement historique : chaque son en a un) ;
-        /// en modification on peut aussi le retirer.</summary>
-        private void UpdateConfirmEnabled()
+        private void NameBox_TextChanged(object sender, TextChangedEventArgs e) => RefreshDirty();
+
+        /// <summary>Ajout : l'emoji est obligatoire (comportement historique : chaque son en a un). Modification :
+        /// « Enregistrer » ne s'active que si quelque chose a changé par rapport à l'ouverture de la fenêtre.</summary>
+        private void RefreshDirty()
         {
-            if (ConfirmButton is null || EmojiBox is null) return; // encore en cours d'InitializeComponent
-            var needsEmoji = _mode == TrimWindowMode.Add;
-            ConfirmButton.IsEnabled = !needsEmoji || !string.IsNullOrWhiteSpace(EmojiBox.Text);
-            ConfirmButton.ToolTip = ConfirmButton.IsEnabled ? null : "Choisissez un emoji pour ce son";
+            if (!_initialized || ConfirmButton is null) return; // encore en cours d'initialisation
+
+            if (_mode == TrimWindowMode.Add)
+            {
+                var hasEmoji = !string.IsNullOrWhiteSpace(EmojiBox.Text);
+                ConfirmButton.IsEnabled = hasEmoji;
+                ConfirmButton.ToolTip = hasEmoji ? null : "Choisissez un emoji pour ce son";
+                return;
+            }
+
+            var trimChanged = Math.Abs((_trimStart - _loadedStart).TotalMilliseconds) > 10 ||
+                              Math.Abs((_trimEnd - _loadedEnd).TotalMilliseconds) > 10;
+            var dirty = NameBox.Text != _initName
+                || EmojiBox.Text.Trim() != _initEmoji
+                || _isFavorite != _initFavorite
+                || _colorHex != _initColor
+                || Math.Abs(VolumeSlider.Value - _initVolume) > 0.01
+                || !_selectedLocal.SetEquals(_initLocal)
+                || _sharedChoices.Any(s => _initShared.TryGetValue(s.GuildId, out var was) && was != s.IsMember)
+                || trimChanged;
+            ConfirmButton.IsEnabled = dirty;
+            ConfirmButton.ToolTip = dirty ? null : "Aucune modification";
         }
 
         // ---------- Favori ----------
@@ -230,6 +322,7 @@ namespace WaseBoard.Windows
         {
             _isFavorite = !_isFavorite;
             UpdateFavoriteVisual();
+            RefreshDirty();
         }
 
         private void UpdateFavoriteVisual()
@@ -237,6 +330,47 @@ namespace WaseBoard.Windows
             FavoriteGlyph.Text = _isFavorite ? "★" : "☆";
             FavoriteGlyph.Foreground = _isFavorite ? new SolidColorBrush(Color.FromRgb(0xFB, 0xBF, 0x24)) : (Brush)FindResource("TextBrush");
             FavoriteGlyph.Opacity = _isFavorite ? 1.0 : 0.7;
+        }
+
+        // ---------- Couleur ----------
+
+        private void BuildSwatches()
+        {
+            SwatchPanel.Children.Clear();
+            foreach (var hex in SwatchColors)
+            {
+                var color = (Color)ColorConverter.ConvertFromString(hex);
+                var selected = string.Equals(_colorHex, hex, StringComparison.OrdinalIgnoreCase);
+                var swatch = new Button
+                {
+                    Style = (Style)FindResource("SwatchButton"),
+                    Background = new SolidColorBrush(color),
+                    BorderBrush = selected ? (Brush)FindResource("TextBrush") : Brushes.Transparent,
+                    Content = selected ? new TextBlock { Text = "✓", FontWeight = FontWeights.ExtraBold, FontSize = 13, Foreground = new SolidColorBrush(Color.FromRgb(0x0B, 0x12, 0x20)) } : null,
+                    ToolTip = selected ? "Cliquer pour revenir à la couleur automatique" : "Couleur du son"
+                };
+                swatch.Click += (_, _) =>
+                {
+                    // Recliquer sur la couleur choisie la désélectionne : retour à la couleur automatique.
+                    _colorHex = selected ? null : hex;
+                    BuildSwatches();
+                    ApplyThumbColor();
+                    RefreshDirty();
+                };
+                SwatchPanel.Children.Add(swatch);
+            }
+        }
+
+        /// <summary>La vignette prend la couleur choisie (en dégradé vers l'accent voisin), sinon le dégradé d'accent de la palette.</summary>
+        private void ApplyThumbColor()
+        {
+            if (_colorHex is null)
+            {
+                ThumbButton.SetResourceReference(BackgroundProperty, "AccentGradientBrush");
+                return;
+            }
+            var accent2 = ((SolidColorBrush)FindResource("Accent2Brush")).Color;
+            ThumbButton.Background = new LinearGradientBrush((Color)ColorConverter.ConvertFromString(_colorHex), accent2, new Point(0, 0), new Point(1, 1));
         }
 
         // ---------- Catégories ----------
@@ -287,6 +421,7 @@ namespace WaseBoard.Windows
             }
 
             UpdateCategoryTriggerText();
+            RefreshDirty();
         }
 
         private TextBlock CreateGroupHeader(string text) => new()
@@ -371,13 +506,14 @@ namespace WaseBoard.Windows
             VolumeChip.Text = $"{percent}%";
             ResetVolumeButton.Visibility = percent == 100 ? Visibility.Hidden : Visibility.Visible;
             ApplyVolumeVisuals();
+            RefreshDirty();
         }
 
         /// <summary>La waveform grandit/rétrécit avec le volume : 0 % → ×0,4 · 100 % → ×1 · 200 % → ×1,6 (rendu seulement).</summary>
         private void ApplyVolumeVisuals()
         {
             var factor = 0.4 + (VolumeSlider.Value / 200.0) * 1.2;
-            foreach (var bar in _bars) bar.RenderTransform = new ScaleTransform(1, factor);
+            foreach (var (bar, _) in _bars) bar.RenderTransform = new ScaleTransform(1, factor);
         }
 
         private void VolumeMinus_Click(object sender, RoutedEventArgs e) => VolumeSlider.Value = Math.Max(0, VolumeSlider.Value - 5);
@@ -406,7 +542,7 @@ namespace WaseBoard.Windows
 
             _trimStart = XToTime(newX);
             Canvas.SetLeft(StartHandle, newX - HandleWidth / 2);
-            UpdateMasksAndLabel();
+            UpdateSelection();
         }
 
         private void EndHandle_DragDelta(object sender, DragDeltaEventArgs e)
@@ -417,23 +553,29 @@ namespace WaseBoard.Windows
 
             _trimEnd = XToTime(newX);
             Canvas.SetLeft(EndHandle, newX - HandleWidth / 2);
-            UpdateMasksAndLabel();
+            UpdateSelection();
         }
 
-        private void UpdateMasksAndLabel()
+        private void Handle_DragCompleted(object sender, DragCompletedEventArgs e) => RefreshDirty();
+
+        /// <summary>Repositionne la zone gardée (teinte + liserés) et recolore les barres selon qu'elles sont dedans ou dehors.</summary>
+        private void UpdateSelection()
         {
             double startX = TimeToX(_trimStart);
             double endX = TimeToX(_trimEnd);
 
-            LeftMaskRect.Width = Math.Max(0, startX);
-            Canvas.SetLeft(LeftMaskRect, 0);
+            Canvas.SetLeft(SelectionRect, startX);
+            SelectionRect.Width = Math.Max(0, endX - startX);
+            Canvas.SetLeft(SelectionStartLine, Math.Max(0, startX - 1));
+            Canvas.SetLeft(SelectionEndLine, Math.Min(CanvasWidth - 2, endX - 1));
 
-            RightMaskRect.Width = Math.Max(0, CanvasWidth - endX);
-            Canvas.SetLeft(RightMaskRect, endX);
+            foreach (var (bar, centerX) in _bars)
+                bar.Fill = centerX >= startX && centerX <= endX ? _barSelectedBrush : _barDimBrush;
 
-            var selected = _trimEnd - _trimStart;
-            TimeLabel.Text = $"{Format(_trimStart)} → {Format(_trimEnd)}  ·  {Format(selected)} gardées sur {Format(_duration)}";
+            TimeLabel.Text = $"{Seconds(_trimStart)} – {Seconds(_trimEnd)}";
         }
+
+        private static string Seconds(TimeSpan t) => t.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) + "s";
 
         private static string Format(TimeSpan t) => $"{(int)t.TotalMinutes}:{t.Seconds:D2}";
 
@@ -442,10 +584,18 @@ namespace WaseBoard.Windows
             _trimStart = TimeSpan.Zero;
             _trimEnd = _duration;
             PositionHandles();
-            UpdateMasksAndLabel();
+            UpdateSelection();
+            RefreshDirty();
         }
 
         // ---------- Aperçu ----------
+
+        private void MuteButton_Click(object sender, RoutedEventArgs e)
+        {
+            _previewMuted = !_previewMuted;
+            MuteButton.Content = _previewMuted ? "🔇" : "🔊";
+            MuteButton.ToolTip = _previewMuted ? "Réactiver le son de l'aperçu" : "Couper le son de l'aperçu";
+        }
 
         private void PreviewButton_Click(object sender, RoutedEventArgs e)
         {
@@ -453,12 +603,16 @@ namespace WaseBoard.Windows
 
             try
             {
-                // Même flux que la lecture locale réelle (TrimmedWaveStream) : l'aperçu correspond pile à ce
-                // que fera le son une fois enregistré, sans fichier temporaire.
+                // Même flux que la lecture locale réelle (TrimmedWaveStream) : l'aperçu correspond pile à ce que fera
+                // le son une fois enregistré, volume choisi compris (le curseur passe jusqu'à 200 %).
                 var reader = AudioReaderFactory.OpenForPlayback(_sourceFilePath, out _);
                 _previewStream = new TrimmedWaveStream(reader, _trimStart, _trimEnd);
+                var volume = new VolumeSampleProvider(_previewStream.ToSampleProvider())
+                {
+                    Volume = _previewMuted ? 0f : (float)(VolumeSlider.Value / 100.0)
+                };
                 _previewOutput = new WaveOutEvent();
-                _previewOutput.Init(_previewStream);
+                _previewOutput.Init(new SampleToWaveProvider16(volume));
                 _previewOutput.PlaybackStopped += (_, _) => Dispatcher.BeginInvoke(ReleasePreview);
                 _previewOutput.Play();
             }
@@ -485,6 +639,20 @@ namespace WaseBoard.Windows
             _previewStream = null;
         }
 
+        // ---------- Suppression ----------
+
+        private void DeleteButton_Click(object sender, RoutedEventArgs e)
+        {
+            var confirmed = ConfirmDialog.Show(this,
+                $"Supprimer « {NameBox.Text.Trim()} » du catalogue partagé ?\nUn administrateur du serveur pourra le restaurer depuis la corbeille.");
+            if (!confirmed) return;
+
+            StopPreview();
+            ResultDeleteRequested = true;
+            DialogResult = true;
+            Close();
+        }
+
         // ---------- Validation ----------
 
         private void Confirm_Click(object sender, RoutedEventArgs e)
@@ -508,6 +676,7 @@ namespace WaseBoard.Windows
             ResultEmoji = EmojiBox.Text.Trim();
             ResultVolume = (float)(VolumeSlider.Value / 100.0);
             ResultFavorite = _isFavorite;
+            ResultColorHex = _colorHex;
             DialogResult = true;
             Close();
         }

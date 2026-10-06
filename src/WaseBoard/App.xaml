@@ -21,6 +21,12 @@
         <SolidColorBrush x:Key="PanelBrush" Color="#182236"/>
         <SolidColorBrush x:Key="AccentBrush" Color="#38BDF8"/>
         <SolidColorBrush x:Key="OnAccentBrush" Color="#0B1220"/>
+        <!-- Valeurs par défaut ; ApplyPalette() les recalcule depuis l'accent choisi (dégradé = accent → teinte voisine) -->
+        <SolidColorBrush x:Key="Accent2Brush" Color="#38F8DB"/>
+        <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#38BDF8" Offset="0"/>
+            <GradientStop Color="#38F8DB" Offset="1"/>
+        </LinearGradientBrush>
         <SolidColorBrush x:Key="TextBrush" Color="#EAF0FA"/>
         <SolidColorBrush x:Key="TrackBrush" Color="#26324A"/>
 
