@@ -101,6 +101,10 @@ ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma"}
 FRAME_BYTES = 3840
 SILENCE = b"\x00" * FRAME_BYTES
 
+#: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
+#: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).
+SERVER_FEATURES = ["replace_file"]
+
 # Filet de sécurité seulement : l'activité est normalement effacée précisément à la fin
 # réelle du son (voir MixingAudioSource.on_finish), pas après un délai fixe. Cette valeur ne
 # sert que si ce mécanisme venait à échouer (ex: redémarrage du serveur en pleine lecture).
@@ -577,16 +581,55 @@ class MixingAudioSource(discord.AudioSource):
 
     Le callback "on_finish" optionnel se déclenche à la fin réelle du son (ou à son remplacement),
     utilisé pour effacer le highlight partagé au bon moment.
+
+    Voyant « en train de parler » : le lecteur ne s'arrête jamais (pas de latence au premier son), mais quand rien
+    ne joue depuis IDLE_FRAMES_BEFORE_SLEEP frames il est mis en PAUSE (le voyant s'éteint, plus aucun paquet audio
+    n'est envoyé) et il est relancé par add() dès qu'un son arrive — voir attach().
     """
+
+    #: Frames de 20 ms sans aucun son avant d'éteindre le voyant (10 = 200 ms ; discord.py envoie en plus 5 trames de
+    #: silence en entrant en pause, ce qui évite de couper net la fin d'un son).
+    IDLE_FRAMES_BEFORE_SLEEP = 10
 
     def __init__(self) -> None:
         self._entries: dict[str, tuple[discord.AudioSource, Optional[callable]]] = {}
         self._lock = threading.Lock()
+        self._voice_client = None
+        self._idle_frames = 0
+        self._asleep = False
+
+    def attach(self, voice_client) -> None:
+        """Lie ce mixeur au client vocal qui le lit : permet de mettre le lecteur en pause quand rien ne joue."""
+        self._voice_client = voice_client
+
+    def _wake_locked(self) -> None:
+        """Un son arrive : sort le lecteur de sa pause (rallume le voyant). Appelé verrou pris, comme la mise en pause,
+        pour qu'un add() ne puisse jamais s'intercaler entre « plus rien » et « pause » et laisser un son bloqué."""
+        self._idle_frames = 0
+        if self._asleep:
+            self._asleep = False
+            if self._voice_client is not None:
+                try:
+                    self._voice_client.resume()
+                except Exception:
+                    log.exception("Reprise du lecteur vocal impossible")
+
+    def _maybe_sleep_locked(self) -> None:
+        if self._asleep or self._idle_frames < self.IDLE_FRAMES_BEFORE_SLEEP or self._voice_client is None:
+            return
+        self._asleep = True
+        try:
+            self._voice_client.pause()
+        except Exception:
+            self._asleep = False
+            self._idle_frames = 0  # on réessaiera dans 200 ms plutôt qu'à chaque frame
+            log.exception("Pause du lecteur vocal impossible")
 
     def add(self, key: str, source: discord.AudioSource, on_finish: Optional[callable] = None) -> None:
         with self._lock:
             previous = self._entries.get(key)
             self._entries[key] = (source, on_finish)
+            self._wake_locked()
         # Coupe l'ancienne instance après avoir publié la nouvelle (jamais de trou pour cette
         # clé), hors du verrou (cleanup/on_finish peuvent être lents).
         if previous is not None:
@@ -619,6 +662,11 @@ class MixingAudioSource(discord.AudioSource):
     def read(self) -> bytes:
         with self._lock:
             snapshot = list(self._entries.items())
+            if snapshot:
+                self._idle_frames = 0
+            else:
+                self._idle_frames += 1
+                self._maybe_sleep_locked()
 
         if not snapshot:
             return SILENCE
@@ -1265,6 +1313,7 @@ class WaseBoardServer(commands.Bot):
         vc = await channel.connect()
         self.voice_clients_map[guild_id] = vc
         mixer = MixingAudioSource()
+        mixer.attach(vc)
         self.mixers[guild_id] = mixer
         vc.play(mixer)  # lecture persistante : les sons s'ajoutent au mixeur, ne "remplacent" jamais rien
         return vc
@@ -2124,6 +2173,7 @@ class WaseBoardServer(commands.Bot):
             "guild_name": guild.name if guild else None,
             "connected_guild_count": len(self.voice_clients_map),
             "channel_members": channel_members,
+            "features": SERVER_FEATURES,
         })
 
     # ---------- Activité en temps réel & présence ----------

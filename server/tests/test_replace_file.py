@@ -156,6 +156,18 @@ async def main():
     check("aucun fichier temporaire résiduel", not list(S.SOUNDS_DIR.glob("*.replacing*")), list(S.SOUNDS_DIR.iterdir()))
     check("le journal trace le remplacement", "replace" in audit_actions(), audit_actions())
 
+    # Compatibilité avec les clients qui ne sont pas à jour : un son remplacé garde TOUS ses champs historiques et ne
+    # gagne que `replaced_at` (un ancien client ignore les champs inconnus).
+    LEGACY_KEYS = {"id", "name", "extension", "hash", "guild_id", "uploaded_by", "uploaded_at", "is_mine", "can_edit",
+                   "emoji", "trim_start_ms", "trim_end_ms"}
+    st, listing = await call(bot._handle_list_sounds, 20)
+    listed = next(x for x in listing["sounds"] if x["id"] == sid)
+    check("compat anciens clients : champs historiques tous présents après remplacement",
+          {"id", "name", "extension", "hash", "guild_id", "uploaded_by", "is_mine", "can_edit"} <= set(listed), set(listed))
+    check("compat anciens clients : seul `replaced_at` est ajouté", set(listed) - LEGACY_KEYS == {"replaced_at"}, set(listed) - LEGACY_KEYS)
+    check("compat anciens clients : l'extension du catalogue est celle du fichier réellement servi",
+          (S.SOUNDS_DIR / f"{sid}{listed['extension']}").exists())
+
     print("\n--- Même contenu : rien à faire ---")
     ts = entry_of(sid)["replaced_at"]
     st, p = await replace(20, sid, new)
