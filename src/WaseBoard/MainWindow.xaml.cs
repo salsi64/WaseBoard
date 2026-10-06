@@ -160,9 +160,6 @@ namespace WaseBoard
             var hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             hwndSource?.AddHook(DeepLinkHwndHook);
 
-            MainVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
-            SidebarVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
-            UpdateMainVolumeLabel();
 
             // La connexion Discord est désormais obligatoire (OAuth2) : tant qu'elle est absente,
             // l'assistant se rouvre à CHAQUE lancement, pas seulement au premier — mais
@@ -295,6 +292,37 @@ namespace WaseBoard
             ApplyPalette(preset, isLight, accent);
 
             if (!settings.FollowSystemTheme) ApplyBackgroundColor();
+
+            // Après le fond personnalisé : les jetons se calculent depuis les brosses FINALES.
+            ApplyThemeTokens(settings.UiTheme == "Flat");
+        }
+
+        /// <summary>Jetons de style : ce qui sépare le thème Flat des autres, indépendamment de la palette. Flat = champs « en
+        /// creux » (plus sombres que la fenêtre), fenêtres secondaires sur le panneau, boutons principaux en dégradé
+        /// d'accent, bordures douces, curseurs fins, liseré discret sur les pills. Classique/Moderne gardent leur rendu.</summary>
+        private static void ApplyThemeTokens(bool flat)
+        {
+            var res = Application.Current.Resources;
+            var bg = (Brush)res["BgBrush"];
+            var panel = (Brush)res["PanelBrush"];
+            var track = (Brush)res["TrackBrush"];
+            var text = (Brush)res["TextBrush"];
+            var accent = (Brush)res["AccentBrush"];
+            var gradient = (Brush)res["AccentGradientBrush"];
+
+            res["PrimaryBrush"] = flat ? gradient : accent;
+            res["FieldBrush"] = flat ? bg : panel;
+            res["OutlineBrush"] = flat ? track : text;
+            res["SurfaceBrush"] = flat ? panel : bg;
+            res["CardBrush"] = flat ? bg : panel;
+            res["SecondaryBrush"] = flat ? bg : Brushes.Transparent;
+            res["PillBorderBrush"] = flat ? track : Brushes.Transparent;
+            res["NavOutlineBrush"] = flat ? track : new SolidColorBrush(Color.FromRgb(0x70, 0x70, 0x70));
+            res["SliderThumbFill"] = flat ? gradient : Brushes.White;
+            res["SliderThumbStroke"] = flat ? panel : accent;
+            res["FieldRadius"] = new CornerRadius(flat ? 10 : 8);
+            res["SecondaryBorderThickness"] = new Thickness(flat ? 1 : 0);
+            res["SliderTrackHeight"] = flat ? 4.0 : 6.0;
         }
 
         private static void ApplyPalette(PalettePreset preset, bool isLight, Color accent)
@@ -306,13 +334,19 @@ namespace WaseBoard
             res["TrackBrush"] = new SolidColorBrush(isLight ? PalettePresets.LightTrack : preset.Track);
             res["AccentBrush"] = new SolidColorBrush(accent);
             res["OnAccentBrush"] = new SolidColorBrush(PalettePresets.OnAccent(accent));
+
+            // Dégradé « accent → teinte voisine » (boutons principaux, vignette, poignées de la fenêtre d'édition).
+            var accent2 = PalettePresets.ShiftHue(accent, -28);
+            res["Accent2Brush"] = new SolidColorBrush(accent2);
+            res["AccentGradientBrush"] = new LinearGradientBrush(accent, accent2, new Point(0, 0), new Point(1, 1));
         }
 
-        /// <summary>Bascule thème classique/moderne. Paramètres/volume de la barre d'outils sont
-        /// masqués en moderne (déjà dans la barre latérale), seule voie d'accès en classique.</summary>
+        /// <summary>Bascule thème classique/moderne/flat (flat = disposition moderne + style d'interface Flat ; la
+        /// palette de couleurs reste un choix indépendant). Paramètres/volume de la barre d'outils sont masqués en
+        /// moderne (déjà dans la barre latérale), seule voie d'accès en classique.</summary>
         private void ApplyTheme()
         {
-            var isModern = _library.Settings.UiTheme == "Modern";
+            var isModern = _library.Settings.UiTheme is "Modern" or "Flat";
             ThemeState.IsModern = isModern;
             ThemeState.Options.ShowWaveforms = _library.Settings.ShowWaveforms;
 
@@ -320,7 +354,6 @@ namespace WaseBoard
             SidebarColumn.Width = new GridLength(isModern ? (_sidebarCollapsed ? 60 : 230) : 0);
             TitleText.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
             SettingsButton.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
-            MainVolumePanel.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
 
             // Thème moderne : « En ce moment » et le statut serveur vivent dans la barre latérale, la
             // barre du haut (qui ne servait qu'à ça) disparaît et rend ses 40 px aux sons.
@@ -364,7 +397,7 @@ namespace WaseBoard
             JoinVoiceLabel.Visibility = labels;
             StopAllLabel.Visibility = labels;
             AddCategoryLabel.Visibility = labels;
-            AddSoundLabel.Text = compact ? " Son" : " Ajouter un son";
+            AddSoundLabel.Text = compact ? "Son" : "Ajouter un son";
             // Le titre de l'application est déjà dans la barre de titre de la fenêtre : on le retire en premier.
             TitleText.Visibility = !ThemeState.IsModern && !compact ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -711,29 +744,6 @@ namespace WaseBoard
             await Task.WhenAll(tasks);
         }
 
-        /// <summary>
-        /// Partagé par les deux sliders de volume (classique/moderne, voir ApplyTheme()) : garde
-        /// l'autre à jour même si un seul est visible, pour un changement de thème en session.
-        /// </summary>
-        private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (!_settingsReady) return; // évite d'écraser settings.json pendant InitializeComponent(), voir _settingsReady
-            _library.Settings.LocalPlaybackVolume = (float)e.NewValue;
-            _library.SaveSettings();
-
-            if (!ReferenceEquals(sender, MainVolumeSlider)) MainVolumeSlider.Value = e.NewValue;
-            if (!ReferenceEquals(sender, SidebarVolumeSlider)) SidebarVolumeSlider.Value = e.NewValue;
-
-            UpdateMainVolumeLabel();
-        }
-
-        private void UpdateMainVolumeLabel()
-        {
-            var text = $"{(int)(MainVolumeSlider.Value * 100)}%";
-            if (MainVolumeLabel is not null) MainVolumeLabel.Text = text;
-            if (SidebarVolumeLabel is not null) SidebarVolumeLabel.Text = text;
-        }
-
         /// <summary>Pastille de statut serveur : pulse pendant la connexion, fixe une fois résolue.</summary>
         private void SetStatusDot(Color color, bool pulsing)
         {
@@ -881,7 +891,7 @@ namespace WaseBoard
                 var guildSounds = Sounds.Where(s => s.GuildId == shared.GuildId || idSet.Contains(s.Id));
                 sections.Add(new SectionViewModel
                 {
-                    Name = "🌐 " + shared.GuildName,
+                    Name = shared.GuildName,
                     CategoryKey = shared.GuildId,
                     Sounds = new ObservableCollection<SoundItem>(SortAllSounds(Filtered(guildSounds))),
                     IsManageable = false, // catégorie automatique : pas de renommage/suppression manuel
@@ -897,7 +907,7 @@ namespace WaseBoard
             SectionsItemsControl.ItemsSource = sections;
 
             // Navigation de la barre latérale : une entrée par section réellement affichée. Pour
-            // les catégories partagées, l'icône du serveur Discord remplace l'emoji 🌐 générique.
+            // les catégories partagées, l'icône du serveur Discord est affichée à côté du nom (pas d'emoji générique).
             // Favoris a son propre bouton (à côté d'Accueil) : seules les catégories et les serveurs ont des groupes.
             var navItems = sections
                 .Select((s, i) =>
@@ -1090,7 +1100,7 @@ namespace WaseBoard
                 {
                     var proceed = ConfirmDialog.Show(this,
                         $"Ce fichier est identique à « {hashMatch.Name} », déjà présent dans le catalogue.\n" +
-                        "Pour une autre portion du même son, vous pouvez aussi recouper l'existant (clic droit › Redécouper).\nL'ajouter quand même ?");
+                        "Pour une autre portion du même son, vous pouvez aussi modifier l'existant (clic droit › Éditer).\nL'ajouter quand même ?");
                     if (!proceed) continue;
                 }
                 else if (nameMatch is not null)
@@ -1144,139 +1154,26 @@ namespace WaseBoard
                 PreviewLocal(item);
         }
 
+        /// <summary>Clic droit sur un son : « Éditer… » regroupe désormais tout ce qui se règle sur le son (nom, emoji,
+        /// favori, catégories, volume, couleur, découpe, fichier, suppression) ; le menu ne garde que ce qui dépend de
+        /// l'endroit où l'on a cliqué (retirer de cette section) et le raccourci clavier.</summary>
         private void SoundButton_RightClick(object sender, MouseButtonEventArgs e)
         {
             if (sender is not Button { Tag: SoundItem item } button) return;
 
             var menu = new ContextMenu();
 
-            var favoriteItem = new MenuItem { Header = item.IsFavorite ? "★ Retirer des favoris" : "☆ Ajouter aux favoris" };
-            favoriteItem.Click += (_, _) => { _library.ToggleFavorite(item); RefreshSections(); };
-
-            var categoryMenu = new MenuItem { Header = "Ajouter à une catégorie" };
-            foreach (var categoryName in _library.GetCategoriesInOrder())
-            {
-                var catItem = new MenuItem { Header = categoryName };
-                catItem.Click += (_, _) => { _library.AddSoundToCategory(categoryName, item); RefreshSections(); };
-                categoryMenu.Items.Add(catItem);
-            }
-            // Une catégorie partagée n'accepte que les sons de leur auteur, ou n'importe lesquels si
-            // vous êtes admin de ce serveur : les autres entrées ne sont simplement pas proposées.
-            foreach (var shared in _sharedCategories.Where(s => CanShareTo(s, item)))
-            {
-                var catItem = new MenuItem { Header = "🌐 " + shared.GuildName };
-                catItem.Click += async (_, _) =>
-                {
-                    if (!await _library.SetSharedCategorySoundAsync(shared.GuildId, item, true))
-                        ToastService.Show("Ajout à la catégorie impossible. " + _library.LastErrorDetail, ToastKind.Warning);
-                    await RefreshSharedCategoriesAsync();
-                };
-                categoryMenu.Items.Add(catItem);
-            }
-            categoryMenu.Items.Add(new Separator());
-            var newCategoryItem = new MenuItem { Header = "Nouvelle catégorie..." };
-            newCategoryItem.Click += (_, _) =>
-            {
-                var name = PromptDialog.Show(this, "Nom de la nouvelle catégorie :", "");
-                if (string.IsNullOrWhiteSpace(name)) return;
-                _library.CreateCategory(name.Trim());
-                _library.AddSoundToCategory(name.Trim(), item);
-                RefreshSections();
-            };
-            categoryMenu.Items.Add(newCategoryItem);
-
-            var emojiItem = new MenuItem { Header = string.IsNullOrEmpty(item.Emoji) ? "Choisir un emoji..." : $"Modifier l'emoji ({item.Emoji})" };
-            emojiItem.Click += async (_, _) =>
-            {
-                var picker = new EmojiPickerWindow(item.Emoji) { Owner = this };
-                if (picker.ShowDialog() != true || picker.Result is null) return;
-
-                var ok = await _library.SetEmojiAsync(item, picker.Result);
-                if (ok) RefreshSections();
-                else
-                {
-                    ToastService.Show(
-                        "Échec de l'assignation de l'emoji." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                        ToastKind.Warning);
-                }
-            };
-
-            var removeEmojiItem = new MenuItem { Header = "Retirer l'emoji", IsEnabled = !string.IsNullOrEmpty(item.Emoji) };
-            removeEmojiItem.Click += async (_, _) =>
-            {
-                var ok = await _library.SetEmojiAsync(item, null);
-                if (ok) RefreshSections();
-                else
-                {
-                    ToastService.Show(
-                        "Échec du retrait de l'emoji." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                        ToastKind.Warning);
-                }
-            };
-
-            var renameItem = new MenuItem { Header = "Renommer" };
-            renameItem.Click += async (_, _) =>
-            {
-                var newName = PromptDialog.Show(this, "Nouveau nom :", item.Name);
-                if (string.IsNullOrWhiteSpace(newName)) return;
-
-                var ok = await _library.RenameSoundAsync(item, newName.Trim());
-                if (ok) RefreshSections();
-                else
-                {
-                    ToastService.Show(
-                        "Renommage échoué." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                        ToastKind.Warning);
-                }
-            };
-
-            var retrimItem = new MenuItem { Header = item.IsTrimmed ? "✂ Redécouper…" : "✂ Découper…" };
-            retrimItem.Click += async (_, _) => await EditSoundAsync(item);
-
-            var hotkeyItem = new MenuItem { Header = string.IsNullOrEmpty(item.Hotkey) ? "Définir un raccourci..." : $"Modifier le raccourci ({item.Hotkey})" };
-            hotkeyItem.Click += (_, _) => AssignHotkey(item);
-
-            var removeHotkeyItem = new MenuItem { Header = "Retirer le raccourci", IsEnabled = !string.IsNullOrEmpty(item.Hotkey) };
-            removeHotkeyItem.Click += (_, _) =>
-            {
-                _library.SetHotkey(item, null);
-                ResyncHotkeys();
-            };
-
-            var deleteItem = new MenuItem { Header = "Supprimer" };
-            deleteItem.Click += async (_, _) =>
-            {
-                var confirm = ConfirmDialog.Show(this,
-                    $"Supprimer « {item.Name} » du catalogue partagé ?\nUn administrateur du serveur pourra le restaurer depuis la corbeille.");
-                if (!confirm) return;
-
-                var ok = await _library.DeleteSoundAsync(item);
-                if (ok)
-                {
-                    // Après le retrait (pas avant) : ResyncHotkeys() reconstruit depuis Sounds, donc
-                    // le son doit déjà être absent pour que son raccourci disparaisse vraiment.
-                    Sounds.Remove(item);
-                    ResyncHotkeys();
-                    RefreshSections();
-                }
-                else
-                {
-                    ToastService.Show(
-                        "Suppression échouée." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                        ToastKind.Warning);
-                }
-            };
-
-            menu.Items.Add(favoriteItem);
-            menu.Items.Add(categoryMenu);
+            var editItem = new MenuItem { Header = "✏ Éditer…" };
+            editItem.Click += async (_, _) => await EditSoundAsync(item);
+            menu.Items.Add(editItem);
 
             // Retirer de la catégorie EXACTE d'où l'on a cliqué (pas "toutes les catégories"),
             // retrouvée en remontant l'arbre visuel jusqu'au conteneur de la section — un même
             // son étant potentiellement affiché dans plusieurs sections à la fois.
             var section = FindEnclosingSection(button);
             // Pas de "Retirer" pour un son dans sa guilde d'origine : ce n'est pas un ajout
-            // manuel à retirer (voir Supprimer, plus bas, pour l'effacer réellement). Dans une
-            // catégorie partagée, seuls l'auteur du son ou un admin du serveur peuvent le retirer.
+            // manuel à retirer (voir la suppression, dans la fenêtre « Éditer », pour l'effacer réellement).
+            // Dans une catégorie partagée, seuls l'auteur du son ou un admin du serveur peuvent le retirer.
             var isNativeToGuildSection = section is not null && section.IsShared && item.GuildId == section.CategoryKey;
             var canRemoveFromSection = section is not null
                 && (!section.IsShared || CanShareTo(_sharedCategories.FirstOrDefault(s => s.GuildId == section.CategoryKey), item));
@@ -1304,48 +1201,165 @@ namespace WaseBoard
                 menu.Items.Add(removeFromSectionItem);
             }
 
-            // Emoji, nom et suppression sont des données PARTAGÉES du catalogue : réservés à
-            // l'auteur du son et aux admins de sa guilde (le serveur le re-vérifie de toute façon).
-            if (item.CanEdit)
+            var hotkeyItem = new MenuItem { Header = string.IsNullOrEmpty(item.Hotkey) ? "Définir un raccourci..." : $"Modifier le raccourci ({item.Hotkey})" };
+            hotkeyItem.Click += (_, _) => AssignHotkey(item);
+
+            var removeHotkeyItem = new MenuItem { Header = "Retirer le raccourci", IsEnabled = !string.IsNullOrEmpty(item.Hotkey) };
+            removeHotkeyItem.Click += (_, _) =>
             {
-                menu.Items.Add(emojiItem);
-                menu.Items.Add(removeEmojiItem);
-                menu.Items.Add(renameItem);
-                menu.Items.Add(retrimItem);
-            }
+                _library.SetHotkey(item, null);
+                ResyncHotkeys();
+            };
+
+            menu.Items.Add(new Separator());
             menu.Items.Add(hotkeyItem);
             menu.Items.Add(removeHotkeyItem);
-            if (item.CanEdit)
-            {
-                menu.Items.Add(new Separator());
-                menu.Items.Add(deleteItem);
-            }
             menu.IsOpen = true;
         }
 
-        /// <summary>« Redécouper… » : rouvre la fenêtre de découpe sur le son COMPLET (gardé par le serveur) avec la portion
+        /// <summary>Supprime un son du catalogue partagé (la confirmation est demandée par l'appelant).</summary>
+        private async Task DeleteSoundAsync(SoundItem item)
+        {
+            var ok = await _library.DeleteSoundAsync(item);
+            if (ok)
+            {
+                // Après le retrait (pas avant) : ResyncHotkeys() reconstruit depuis Sounds, donc
+                // le son doit déjà être absent pour que son raccourci disparaisse vraiment.
+                Sounds.Remove(item);
+                ResyncHotkeys();
+                RefreshSections();
+            }
+            else
+            {
+                ToastService.Show(
+                    "Suppression échouée." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    ToastKind.Warning);
+            }
+        }
+
+        /// <summary>« Éditer… » : rouvre la fenêtre d'édition sur le son COMPLET (gardé par le serveur) avec la portion
         /// actuelle déjà placée ; nom et emoji sont modifiables au passage. Un seul appel au serveur pour tout enregistrer.</summary>
         private async Task EditSoundAsync(SoundItem item)
         {
-            var localPath = await _library.GetOrDownloadCachedFileAsync(item);
-            if (localPath is null)
+            // Son d'un autre (ni auteur ni admin) : la fenêtre ne propose que les réglages locaux, sans besoin du fichier.
+            var canEdit = item.CanEdit;
+            var localPath = "";
+            if (canEdit)
             {
-                ToastService.Show(
-                    "Impossible de charger le son complet." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                    ToastKind.Warning);
-                return;
+                var downloaded = await _library.GetOrDownloadCachedFileAsync(item);
+                if (downloaded is null)
+                {
+                    ToastService.Show(
+                        "Impossible de charger le son complet." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                        ToastKind.Warning);
+                    return;
+                }
+                localPath = downloaded;
             }
 
             TimeSpan? start = item.TrimStartMs is { } s ? TimeSpan.FromMilliseconds(s) : null;
             TimeSpan? end = item.TrimEndMs is { } e ? TimeSpan.FromMilliseconds(e) : null;
-            var window = new TrimWindow(localPath, item.Name, TrimWindowMode.Edit, start, end, item.Emoji) { Owner = this };
+            var localCategories = _library.GetCategoriesInOrder();
+            var extras = new EditExtras
+            {
+                CanEditShared = canEdit,
+                CanReplaceFile = _library.ServerSupports("replace_file"),
+                Volume = item.Volume,
+                IsFavorite = item.IsFavorite,
+                ColorHex = item.ColorHex,
+                FileName = item.Name + item.Extension,
+                LocalCategories = localCategories,
+                SelectedLocalCategories = localCategories
+                    .Where(c => _library.Settings.Categories.TryGetValue(c, out var ids) && ids.Contains(item.Id)).ToList(),
+                SharedCategories = _sharedCategories.Where(s => CanShareTo(s, item))
+                    .Select(s => new SharedCategoryChoice
+                    {
+                        GuildId = s.GuildId,
+                        GuildName = StripSharedPrefix(s.GuildName),
+                        IsMember = s.SoundIds.Contains(item.Id) || item.GuildId == s.GuildId,
+                        Locked = item.GuildId == s.GuildId
+                    }).ToList()
+            };
+            var window = new TrimWindow(localPath, item.Name, TrimWindowMode.Edit, start, end, item.Emoji, extras) { Owner = this };
             if (window.ShowDialog() != true) return;
+
+            // Suppression demandée (et déjà confirmée) depuis la ligne « Son » : plus rien d'autre à appliquer.
+            if (window.ResultDeleteRequested)
+            {
+                await DeleteSoundAsync(item);
+                return;
+            }
+
+            // Nouveau fichier audio : en premier, car le serveur retire alors la découpe (elle visait l'ancien fichier) et la
+            // découpe choisie dans la fenêtre vise déjà le nouveau ; la confirmation a eu lieu dans la fenêtre.
+            var fileReplaced = false;
+            if (window.ResultReplacementFile is { } replacementFile)
+            {
+                if (!await _library.ReplaceSoundFileAsync(item, replacementFile))
+                {
+                    ToastService.Show(
+                        "Remplacement du fichier échoué." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                        ToastKind.Warning);
+                    return;
+                }
+                fileReplaced = true;
+                await PrecomputeWaveformsAsync(new List<SoundItem> { item });
+            }
+
+            // Réglages locaux (volume, couleur, favori, catégories personnelles) : appliqués tout de suite, sans serveur.
+            var localChanged = fileReplaced;
+            if (Math.Abs(window.ResultVolume - item.Volume) > 0.001f)
+            {
+                _library.SetVolume(item, window.ResultVolume);
+                localChanged = true;
+            }
+            if (!string.Equals(window.ResultColorHex, item.ColorHex, StringComparison.OrdinalIgnoreCase))
+            {
+                _library.SetColor(item, window.ResultColorHex);
+                localChanged = true;
+            }
+            if (window.ResultFavorite != item.IsFavorite)
+            {
+                _library.ToggleFavorite(item);
+                localChanged = true;
+            }
+            var wantedLocal = new HashSet<string>(window.ResultLocalCategories);
+            foreach (var category in _library.GetCategoriesInOrder().Concat(wantedLocal).Distinct())
+            {
+                var isMember = _library.Settings.Categories.TryGetValue(category, out var ids) && ids.Contains(item.Id);
+                if (wantedLocal.Contains(category) && !isMember) { _library.AddSoundToCategory(category, item); localChanged = true; }
+                else if (!wantedLocal.Contains(category) && isMember) { _library.RemoveSoundFromCategory(category, item); localChanged = true; }
+            }
+
+            // Catégories partagées des serveurs : une requête par changement (le serveur re-vérifie les droits).
+            var sharedFailed = false;
+            var sharedChanged = false;
+            foreach (var choice in window.ResultSharedCategories.Where(c => !c.Locked))
+            {
+                var wasMember = _sharedCategories.FirstOrDefault(s => s.GuildId == choice.GuildId)?.SoundIds.Contains(item.Id) ?? false;
+                if (choice.IsMember == wasMember) continue;
+                sharedChanged = true;
+                if (!await _library.SetSharedCategorySoundAsync(choice.GuildId, item, choice.IsMember)) sharedFailed = true;
+            }
+            if (sharedChanged) await RefreshSharedCategoriesAsync();
+            if (sharedFailed)
+                ToastService.Show("Une catégorie de serveur n'a pas pu être modifiée. " + _library.LastErrorDetail, ToastKind.Warning);
+
+            if (!canEdit)
+            {
+                if (localChanged) RefreshSections();
+                return;
+            }
 
             var newName = window.ResultName != item.Name ? window.ResultName : null;
             var newEmoji = window.ResultEmoji != (item.Emoji ?? "") ? window.ResultEmoji : null;
             var trimChanged = window.ResultTrimStartMs != item.TrimStartMs || window.ResultTrimEndMs != item.TrimEndMs;
             (int?, int?)? newTrim = trimChanged ? (window.ResultTrimStartMs, window.ResultTrimEndMs) : null;
-            if (newName is null && newEmoji is null && newTrim is null) return;
+            if (newName is null && newEmoji is null && newTrim is null)
+            {
+                if (localChanged) RefreshSections();
+                return;
+            }
 
             if (await _library.UpdateSoundDetailsAsync(item, newName, newEmoji, newTrim))
             {
@@ -1785,17 +1799,33 @@ namespace WaseBoard
             public string Name { get; set; } = "";
         }
 
-        /// <summary>Clic droit sur la barre d'une section : menu avec l'export, seule action disponible
-        /// pour toutes les sections (favoris, catégorie perso/partagée, tous les sons) — contrairement
-        /// à renommer/supprimer (boutons dédiés, ✎/🗑) qui restent réservés aux catégories personnelles.</summary>
+        /// <summary>Clic droit sur la barre d'une section : l'export est proposé pour toutes (favoris, catégorie
+        /// perso/partagée, tous les sons) ; renommer et supprimer seulement pour les catégories personnelles.</summary>
         private void SectionHeader_RightClick(object sender, MouseButtonEventArgs e)
         {
             if (sender is not FrameworkElement { Tag: SectionViewModel section }) return;
 
             var menu = new ContextMenu();
+            var canManage = section.IsManageable && !section.IsShared;
+
+            if (canManage)
+            {
+                var renameItem = new MenuItem { Header = "✎ Renommer..." };
+                renameItem.Click += (_, _) => RenameCategory(section);
+                menu.Items.Add(renameItem);
+            }
+
             var exportItem = new MenuItem { Header = "⬇ Exporter cette catégorie..." };
             exportItem.Click += (_, _) => ExportCategory(section);
             menu.Items.Add(exportItem);
+
+            if (canManage)
+            {
+                menu.Items.Add(new Separator());
+                var deleteItem = new MenuItem { Header = "🗑 Supprimer la catégorie..." };
+                deleteItem.Click += (_, _) => DeleteCategory(section);
+                menu.Items.Add(deleteItem);
+            }
             menu.IsOpen = true;
         }
 
@@ -1894,11 +1924,11 @@ namespace WaseBoard
 
         // Catégories partagées : créées automatiquement par serveur Discord (voir
         // RefreshSharedCategoriesAsync), non renommables/supprimables — rename/delete ci-dessous
-        // ne concernent que les catégories personnelles.
+        // ne concernent que les catégories personnelles (menu clic droit de leur en-tête).
 
-        private void RenameCategory_Click(object sender, RoutedEventArgs e)
+        private void RenameCategory(SectionViewModel section)
         {
-            if (sender is not Button { Tag: SectionViewModel section } || section.IsShared) return;
+            if (section.IsShared) return;
             var newName = PromptDialog.Show(this, "Nouveau nom de catégorie :", section.Name);
             if (string.IsNullOrWhiteSpace(newName)) return;
 
@@ -1906,9 +1936,9 @@ namespace WaseBoard
             RefreshSections();
         }
 
-        private void DeleteCategory_Click(object sender, RoutedEventArgs e)
+        private void DeleteCategory(SectionViewModel section)
         {
-            if (sender is not Button { Tag: SectionViewModel section } || section.IsShared) return;
+            if (section.IsShared) return;
 
             var confirm = ConfirmDialog.Show(this, $"Supprimer la catégorie « {section.Name} » ?");
             if (!confirm) return;

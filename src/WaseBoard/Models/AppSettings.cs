@@ -51,6 +51,9 @@ namespace WaseBoard.Models
         /// <summary>Volume individuel par son (ID → volume 0.0-1.5), préférence locale.</summary>
         public Dictionary<string, float> SoundVolumes { get; set; } = new();
 
+        /// <summary>Couleur choisie par son (ID → "#RRGGBB"), préférence locale. Absent = couleur automatique dérivée de l'ID.</summary>
+        public Dictionary<string, string> SoundColors { get; set; } = new();
+
         /// <summary>Ordre d'affichage personnalisé des sons dans la grille principale (liste d'IDs). Vide = ordre du serveur.</summary>
         public List<string> SoundOrder { get; set; } = new();
 
@@ -71,8 +74,13 @@ namespace WaseBoard.Models
         /// <summary>Couleur de fond personnalisée de l'application (hex, ex: "#1E1E2E"). Null = thème par défaut.</summary>
         public string? BackgroundColorHex { get; set; }
 
-        /// <summary>Thème d'interface : "Classic" (barre d'outils classique) ou "Modern" (barre latérale, boutons en pilule).</summary>
-        public string UiTheme { get; set; } = "Modern";
+        /// <summary>Thème d'interface : "Classic" (barre d'outils classique), "Modern" (barre latérale, boutons en pilule)
+        /// ou "Flat" (disposition moderne + style d'interface Flat ; indépendant de la palette de couleurs).</summary>
+        public string UiTheme { get; set; } = "Flat";
+
+        /// <summary>Vrai une fois la bascule « Flat par défaut » traitée : un thème « Moderne » (ancien défaut) devient Flat une seule fois,
+        /// puis le choix de l'utilisateur n'est plus jamais touché.</summary>
+        public bool FlatThemeApplied { get; set; }
 
         /// <summary>Si vrai, la palette clair/sombre suit automatiquement le thème Windows (ignore BackgroundColorHex).</summary>
         public bool FollowSystemTheme { get; set; } = true;

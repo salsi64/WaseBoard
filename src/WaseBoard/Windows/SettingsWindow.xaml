@@ -6,9 +6,9 @@
         FontFamily="Segoe UI Emoji, Segoe UI" Height="480" Width="620"
         MinHeight="380" MinWidth="480"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource BgBrush}"
+        Background="{DynamicResource SurfaceBrush}"
         chrome:WindowChromeBehavior.Enable="True">
-    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource BgBrush}">
+    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource SurfaceBrush}">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="36"/>
@@ -35,7 +35,7 @@
                         Style="{StaticResource SettingsNavButtonStyle}"/>
             </StackPanel>
 
-            <Border Grid.Column="1" Background="{DynamicResource PanelBrush}" CornerRadius="8" Margin="4,8,12,8">
+            <Border Grid.Column="1" Background="{DynamicResource CardBrush}" CornerRadius="8" Margin="4,8,12,8">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
@@ -60,12 +60,12 @@
                             <Button x:Name="TestConnectionButton" Content="Tester la connexion" Height="34" HorizontalAlignment="Left" Padding="16,0" Margin="0,0,8,0"
                                     Click="TestConnectionButton_Click"
                                     Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                                    BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                                    BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                             <Button x:Name="CopyInviteLinkButton" Content="Copier le lien d'invitation" Height="34" HorizontalAlignment="Left" Padding="16,0"
                                     Click="CopyInviteLinkButton_Click"
                                     ToolTip="Génère un lien waseboard:// à partir de l'adresse/jeton ci-dessus, pour inviter quelqu'un sans qu'il ait à les saisir"
                                     Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                                    BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                                    BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                         </StackPanel>
                     </StackPanel>
 
@@ -76,7 +76,7 @@
 
                         <Button x:Name="ConnectDiscordButton" Content="Se connecter avec Discord" Height="34" Click="ConnectDiscordButton_Click"
                                 HorizontalAlignment="Left" Padding="14,0"
-                                Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                                Style="{StaticResource PrimaryButtonStyle}"/>
 
                         <Border x:Name="VerifyResultBorder" CornerRadius="6" Padding="8" Visibility="Collapsed" Margin="0,10,0,4">
                             <StackPanel Orientation="Horizontal">
@@ -108,9 +108,11 @@
                         <TextBlock Text="Thème de l'interface" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                             <Button x:Name="ClassicThemeButton" Content="Classique" Padding="14,6" Margin="0,0,8,0" Click="ClassicThemeButton_Click"
-                                    Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
-                            <Button x:Name="ModernThemeButton" Content="Moderne" Padding="14,6" Click="ModernThemeButton_Click"
-                                    Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
+                            <Button x:Name="ModernThemeButton" Content="Moderne" Padding="14,6" Margin="0,0,8,0" Click="ModernThemeButton_Click"
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
+                            <Button x:Name="FlatThemeButton" Content="Flat" Padding="14,6" Click="FlatThemeButton_Click"
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                         </StackPanel>
 
                         <TextBlock Text="Boutons de son" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
@@ -131,10 +133,10 @@
                                 <TextBox x:Name="CustomColorBox" Grid.Column="0" Height="28" Margin="0,0,8,0" ToolTip="Code hexadécimal, ex : #101820"/>
                                 <Button Grid.Column="1" Content="Appliquer" Padding="10,0" Margin="0,0,6,0" Click="ApplyCustomColor_Click"
                                         Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                                        BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                                 <Button Grid.Column="2" Content="Effacer" Padding="10,0" Click="ClearCustomColor_Click"
                                         Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                                        BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                                        BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                             </Grid>
 
                             <Border x:Name="ColorPreview" Height="30" CornerRadius="6" BorderBrush="{DynamicResource TextBrush}" BorderThickness="1"/>
@@ -165,11 +167,11 @@
                         <Button x:Name="CheckUpdateButton" Content="Rechercher les mises à jour" Height="34" HorizontalAlignment="Left" Padding="16,0"
                                 Click="CheckUpdateButton_Click"
                                 Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                                BorderThickness="1" BorderBrush="{DynamicResource TextBrush}"/>
+                                BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                         <TextBlock x:Name="UpdateResultText" Margin="0,10,0,10" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
                         <Button x:Name="OpenReleaseButton" Content="Voir la nouvelle version" Height="34" HorizontalAlignment="Left" Padding="16,0"
                                 Click="OpenReleaseButton_Click" Visibility="Collapsed"
-                                Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                                Style="{StaticResource PrimaryButtonStyle}"/>
                     </StackPanel>
 
                     <!-- Page : Administration (admins de serveur uniquement) -->
@@ -179,7 +181,7 @@
 
                         <Button x:Name="OpenAdminPanelButton" Content="Ouvrir le panel d'administration" Height="34" HorizontalAlignment="Left" Padding="16,0"
                                 Click="OpenAdminPanelButton_Click"
-                                Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                                Style="{StaticResource PrimaryButtonStyle}"/>
                         <TextBlock Text="Sons du serveur, corbeille, réglages (rôle admin, quotas, anti-spam, membres bloqués), statistiques, journal d'actions et lien d'invitation."
                                    FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,10,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
@@ -187,7 +189,7 @@
             </ScrollViewer>
 
             <Button Grid.Row="1" Content="Enregistrer" Height="38" HorizontalAlignment="Right" Width="130" Margin="20,0,20,16"
-                    Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"
+                    Style="{StaticResource PrimaryButtonStyle}"
                     FontWeight="SemiBold" Click="SaveButton_Click"/>
             </Grid>
             </Border>

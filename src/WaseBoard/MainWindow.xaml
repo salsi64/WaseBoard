@@ -46,14 +46,17 @@
                     <ControlTemplate TargetType="Button">
                         <Grid>
                             <Border x:Name="Halo" Visibility="Collapsed" Margin="-6" CornerRadius="16" IsHitTestVisible="False" Opacity="0.3"
-                                    Background="{Binding Id, Converter={StaticResource IdToColorConverter}}">
+                                    Background="{Binding Converter={StaticResource IdToColorConverter}}">
                                 <Border.Effect><BlurEffect Radius="16"/></Border.Effect>
                             </Border>
                             <Border x:Name="CardBorder" Background="{DynamicResource PanelBrush}" CornerRadius="10" BorderThickness="2" BorderBrush="Transparent" Height="68">
-                                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="4,3,4,2"/>
+                                <Grid>
+                                    <Border CornerRadius="8" IsHitTestVisible="False" Background="{Binding Converter={StaticResource SoundTintConverter}}"/>
+                                    <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="4,3,4,2"/>
+                                </Grid>
                             </Border>
                             <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="10" BorderThickness="2" IsHitTestVisible="False"
-                                    BorderBrush="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
+                                    BorderBrush="{Binding Converter={StaticResource IdToColorConverter}}"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -193,15 +196,20 @@
                     <ControlTemplate TargetType="Button">
                         <Grid>
                             <Border x:Name="Halo" Visibility="Collapsed" Margin="-5" CornerRadius="22" IsHitTestVisible="False" Opacity="0.3"
-                                    Background="{Binding Id, Converter={StaticResource IdToColorConverter}}">
+                                    Background="{Binding Converter={StaticResource IdToColorConverter}}">
                                 <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
                             </Border>
                             <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="18" Height="54"
-                                    BorderThickness="2" BorderBrush="Transparent" Padding="4,3,15,4">
-                                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                    BorderThickness="2" BorderBrush="{DynamicResource PillBorderBrush}">
+                                <Grid>
+                                    <!-- Teinte légère de la couleur choisie (rien si aucune couleur choisie) -->
+                                    <Border x:Name="PillTint" CornerRadius="16" IsHitTestVisible="False"
+                                            Background="{Binding Converter={StaticResource SoundTintConverter}}"/>
+                                    <ContentPresenter x:Name="PillContent" Margin="4,3,15,4" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                </Grid>
                             </Border>
                             <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="18" BorderThickness="2" IsHitTestVisible="False"
-                                    BorderBrush="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
+                                    BorderBrush="{Binding Converter={StaticResource IdToColorConverter}}"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -213,7 +221,8 @@
                             <DataTrigger Binding="{Binding Source={x:Static local:ThemeState.Options}, Path=ShowWaveforms}" Value="False">
                                 <Setter TargetName="PillBorder" Property="Height" Value="40"/>
                                 <Setter TargetName="PillBorder" Property="CornerRadius" Value="20"/>
-                                <Setter TargetName="PillBorder" Property="Padding" Value="4,0,4,0"/>
+                                <Setter TargetName="PillContent" Property="Margin" Value="4,0,4,0"/>
+                                <Setter TargetName="PillTint" Property="CornerRadius" Value="18"/>
                                 <Setter TargetName="Ring" Property="CornerRadius" Value="20"/>
                                 <Setter TargetName="Halo" Property="CornerRadius" Value="24"/>
                             </DataTrigger>
@@ -251,7 +260,7 @@
                                 ToolTip="Aperçu (lecture locale uniquement, sans envoi à Discord)">
                             <Border.Style>
                                 <Style TargetType="Border">
-                                    <Setter Property="Background" Value="{Binding Id, Converter={StaticResource IdToColorConverter}}"/>
+                                    <Setter Property="Background" Value="{Binding Converter={StaticResource IdToColorConverter}}"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsPreviewing}" Value="True">
                                             <Setter Property="Background" Value="White"/>
@@ -423,6 +432,21 @@
                             DragEnter="SectionHeader_DragEnter" DragLeave="SectionHeader_DragLeave"
                             MouseRightButtonUp="SectionHeader_RightClick">
                     <DockPanel>
+                        <!-- Flèche d'état : ▾ ouverte, ▸ repliée (suit l'Expander qui contient cet en-tête). -->
+                        <TextBlock DockPanel.Dock="Left" FontSize="12" Width="14" Opacity="0.85" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextBrush}" ToolTip="Cliquer pour plier/déplier">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="▾"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsExpanded, RelativeSource={RelativeSource AncestorType=Expander}}" Value="False">
+                                            <Setter Property="Text" Value="▸"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
                         <Border Width="18" Height="18" CornerRadius="9" DockPanel.Dock="Left" Margin="4,0,4,0"
                                 Visibility="{Binding HasIcon, Converter={StaticResource BoolToVisibilityConverter}}">
                             <Border.Background>
@@ -468,14 +492,6 @@
                                        Cursor="SizeAll" ToolTip="Glisser pour réordonner"
                                        Foreground="{DynamicResource TextBrush}"
                                        Visibility="{Binding IsReorderable, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsManageable, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <Button Content="✎" Width="22" Height="20" Margin="2,0" FontSize="10"
-                                        Click="RenameCategory_Click" Tag="{Binding}"
-                                        Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                                <Button Content="🗑" Width="22" Height="20" Margin="2,0" FontSize="10"
-                                        Click="DeleteCategory_Click" Tag="{Binding}"
-                                        Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                            </StackPanel>
                         </StackPanel>
                     </DockPanel>
                     </Border>
@@ -660,7 +676,7 @@
                         </Grid.ColumnDefinitions>
                         <Button Grid.Column="0" Content="🏠 Accueil" Click="NavHome_Click" Height="28" FontSize="12"
                                 ToolTip="Revenir en haut de la liste"
-                                Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                                Style="{StaticResource PrimaryButtonStyle}"/>
                         <Button Grid.Column="2" Content="★ Favoris" Click="NavFavorites_Click" Height="28" FontSize="12"
                                 ToolTip="Aller aux favoris"
                                 Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
@@ -742,23 +758,13 @@
                             <Grid x:Name="SidebarStatusHost" Margin="0,0,0,2"/>
                             <TextBlock x:Name="SidebarConnectionText" Text="🔴 Non connecté" FontSize="11" Opacity="0.75"
                                        Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis" Margin="0,0,0,8"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <!-- Équivalent du slider de la barre d'outils classique (MainVolumePanel), qui
-                                     reste masqué en thème moderne pour ne pas le dupliquer — voir ApplyTheme(). -->
-                                <TextBlock Grid.Column="0" Text="🔊" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource TextBrush}"/>
-                                <Slider x:Name="SidebarVolumeSlider" Grid.Column="1" Minimum="0" Maximum="1.5" Value="1.0"
-                                        ValueChanged="VolumeSlider_ValueChanged" ToolTip="Volume d'écoute local (aperçu uniquement, jamais envoyé à Discord)"/>
-                                <TextBlock x:Name="SidebarVolumeLabel" Grid.Column="2" Text="100%" FontSize="10" Opacity="0.7" Width="30"
-                                           TextAlignment="Right" VerticalAlignment="Center" Margin="4,0,6,0" Foreground="{DynamicResource TextBrush}"/>
-                                <Button Grid.Column="3" Content="⚙" Click="SettingsButton_Click" Width="28" Height="28" ToolTip="Paramètres"
-                                        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                            </Grid>
+                            <Button Click="SettingsButton_Click" ToolTip="Paramètres (volume, apparence, serveur…)"
+                                    Style="{StaticResource ToolbarButtonStyle}" Margin="0" HorizontalContentAlignment="Left">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE713;" Style="{StaticResource ToolbarIcon}" Opacity="0.85"/>
+                                    <TextBlock Text="Paramètres" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -793,62 +799,48 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="🔍" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource TextBrush}"/>
+                    <TextBlock Grid.Column="0" Text="&#xE721;" Style="{StaticResource ToolbarIcon}" Margin="0,0,8,0" Opacity="0.6" Foreground="{DynamicResource TextBrush}"/>
                     <TextBox x:Name="SearchBox" Grid.Column="1" Height="28" HorizontalAlignment="Stretch"
                              TextChanged="SearchBox_TextChanged"
                              ToolTip="Rechercher un son par son nom"/>
                 </Grid>
 
-                <StackPanel x:Name="MainVolumePanel" Grid.Column="2" Orientation="Horizontal"
-                            Margin="0,0,12,0" VerticalAlignment="Center">
-                    <TextBlock Text="🔊" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource TextBrush}"/>
-                    <Slider x:Name="MainVolumeSlider" Width="80" Minimum="0" Maximum="1.5" Value="1.0"
-                            ValueChanged="VolumeSlider_ValueChanged" ToolTip="Volume d'écoute local (aperçu uniquement, jamais envoyé à Discord)"/>
-                    <TextBlock x:Name="MainVolumeLabel" Text="100%" FontSize="11" Opacity="0.7" Width="34"
-                               VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{DynamicResource TextBrush}"/>
-                </StackPanel>
-
                 <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="RefreshButton" Content="⟳" ToolTip="Actualiser le catalogue" Width="34" Height="30" Padding="0" Margin="0,0,6,0"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource TextBrush}" Click="RefreshButton_Click"/>
-                    <Button x:Name="JoinVoiceButton" Height="30" Padding="10,0" Margin="0,0,6,0"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource TextBrush}" Click="JoinVoiceButton_Click"
+                    <Button x:Name="RefreshButton" ToolTip="Actualiser le catalogue" Width="34" Padding="0"
+                            Style="{StaticResource ToolbarButtonStyle}" Click="RefreshButton_Click">
+                        <TextBlock Text="&#xE72C;" Style="{StaticResource ToolbarIcon}"/>
+                    </Button>
+                    <Button x:Name="JoinVoiceButton" Click="JoinVoiceButton_Click" Style="{StaticResource ToolbarButtonStyle}"
                             ToolTip="Rejoindre mon vocal : fait rejoindre le bot au salon vocal où vous êtes actuellement">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🔊"/>
-                            <TextBlock x:Name="JoinVoiceLabel" Text=" Vocal"/>
+                            <TextBlock Text="&#xE767;" Style="{StaticResource ToolbarIcon}" Foreground="{DynamicResource AccentBrush}"/>
+                            <TextBlock x:Name="JoinVoiceLabel" Text="Vocal" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="StopAllButton" Height="30" Padding="10,0" Margin="0,0,6,0"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource TextBrush}" Click="StopAllButton_Click"
+                    <Button x:Name="StopAllButton" Click="StopAllButton_Click" Style="{StaticResource ToolbarButtonStyle}"
                             ToolTip="Stop tout : coupe les sons en cours">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⏹"/>
-                            <TextBlock x:Name="StopAllLabel" Text=" Stop"/>
+                            <TextBlock Text="&#xE71A;" Style="{StaticResource ToolbarIcon}" Foreground="#F87171"/>
+                            <TextBlock x:Name="StopAllLabel" Text="Stop" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="SettingsButton" Content="⚙" ToolTip="Paramètres" Width="34" Height="30" Padding="0" Margin="0,0,6,0"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource TextBrush}" Click="SettingsButton_Click"/>
-                    <Button x:Name="AddCategoryButton" Height="30" Padding="10,0" Margin="0,0,6,0"
-                            Click="AddCategoryButton_Click" ToolTip="Nouvelle catégorie"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                            BorderThickness="1" BorderBrush="{DynamicResource TextBrush}">
+                    <Button x:Name="SettingsButton" ToolTip="Paramètres" Width="34" Padding="0"
+                            Style="{StaticResource ToolbarButtonStyle}" Click="SettingsButton_Click">
+                        <TextBlock Text="&#xE713;" Style="{StaticResource ToolbarIcon}"/>
+                    </Button>
+                    <Button x:Name="AddCategoryButton" Click="AddCategoryButton_Click" ToolTip="Nouvelle catégorie"
+                            Style="{StaticResource ToolbarButtonStyle}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="+"/>
-                            <TextBlock x:Name="AddCategoryLabel" Text=" Catégorie"/>
-                            <TextBlock Text=" ▾"/>
+                            <TextBlock Text="&#xE8EC;" Style="{StaticResource ToolbarIcon}"/>
+                            <TextBlock x:Name="AddCategoryLabel" Text="Catégorie" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="&#xE70D;" Style="{StaticResource ToolbarIcon}" FontSize="9" Margin="6,1,0,0" Opacity="0.6"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="AddSoundButton" Height="30" Padding="12,0"
-                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"
+                    <Button x:Name="AddSoundButton" Margin="0" Style="{StaticResource ToolbarPrimaryButtonStyle}"
                             Click="AddSoundButton_Click" ToolTip="Ajouter un son (ou glissez des fichiers audio dans la fenêtre)">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="+"/>
-                            <TextBlock x:Name="AddSoundLabel" Text=" Ajouter un son"/>
+                            <TextBlock Text="&#xE710;" Style="{StaticResource ToolbarIcon}"/>
+                            <TextBlock x:Name="AddSoundLabel" Text="Ajouter un son" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>

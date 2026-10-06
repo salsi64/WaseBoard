@@ -40,6 +40,25 @@ namespace WaseBoard.Services
             (byte)Math.Round(color.G + (255 - color.G) * amount),
             (byte)Math.Round(color.B + (255 - color.B) * amount));
 
+        /// <summary>Décale la teinte d'une couleur (en degrés) en gardant saturation et luminosité : sert à dériver, de
+        /// l'accent de la palette, une couleur voisine pour les dégradés (accent → accent proche).</summary>
+        public static Color ShiftHue(Color color, double degrees)
+        {
+            double r = color.R / 255.0, g = color.G / 255.0, b = color.B / 255.0;
+            double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), d = max - min;
+            double h = d == 0 ? 0
+                : max == r ? 60 * (((g - b) / d) % 6)
+                : max == g ? 60 * ((b - r) / d + 2)
+                : 60 * ((r - g) / d + 4);
+            double s = max == 0 ? 0 : d / max, v = max;
+
+            h = ((h + degrees) % 360 + 360) % 360;
+            double c = v * s, x = c * (1 - Math.Abs((h / 60) % 2 - 1)), m = v - c;
+            var (r1, g1, b1) = h < 60 ? (c, x, 0.0) : h < 120 ? (x, c, 0.0) : h < 180 ? (0.0, c, x)
+                : h < 240 ? (0.0, x, c) : h < 300 ? (x, 0.0, c) : (c, 0.0, x);
+            return Color.FromRgb((byte)Math.Round((r1 + m) * 255), (byte)Math.Round((g1 + m) * 255), (byte)Math.Round((b1 + m) * 255));
+        }
+
         /// <summary>Couleur de texte lisible posé sur un fond d'accent : sombre sur un accent clair, blanche sur un accent foncé.</summary>
         public static Color OnAccent(Color accent)
         {

@@ -9,6 +9,11 @@ Wants=network-online.target
 Type=simple
 User=VOTRE_USER
 WorkingDirectory=/home/VOTRE_USER/waseboard-server
+# NetworkManager peut signaler le réseau "en ligne" une seconde avant que la résolution DNS vers
+# Discord ne soit vraiment utilisable juste après un redémarrage (constaté au boot) ; on attend que
+# discord.com soit résolvable (30s max) avant de lancer le bot, pour éviter l'erreur "Network is
+# unreachable" au tout premier démarrage.
+ExecStartPre=/bin/sh -c "for i in $(seq 1 30); do getent hosts discord.com >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1"
 ExecStart=/home/VOTRE_USER/waseboard-server/venv/bin/python3 server.py
 Restart=on-failure
 RestartSec=5

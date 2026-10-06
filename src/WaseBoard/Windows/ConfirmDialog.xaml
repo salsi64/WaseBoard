@@ -5,10 +5,10 @@
         Title="Confirmer"
         FontFamily="Segoe UI Emoji, Segoe UI" SizeToContent="Height" Width="380"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource BgBrush}"
+        Background="{DynamicResource SurfaceBrush}"
         chrome:WindowChromeBehavior.Enable="True"
         ResizeMode="NoResize">
-    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource BgBrush}">
+    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource SurfaceBrush}">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="36"/>
@@ -20,9 +20,9 @@
                            TextWrapping="Wrap" FontSize="13" Margin="0,4,0,20"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="Non" Padding="16,6" Margin="0,0,8,0" Click="No_Click" IsCancel="True"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
+                            Style="{StaticResource SecondaryButtonStyle}"/>
                     <Button Content="Oui" Padding="16,6" Click="Yes_Click" IsDefault="True"
-                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                            Style="{StaticResource PrimaryButtonStyle}"/>
                 </StackPanel>
             </StackPanel>
         </Grid>

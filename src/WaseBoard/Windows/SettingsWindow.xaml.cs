@@ -151,6 +151,12 @@ namespace WaseBoard.Windows
             UpdateThemeButtons();
         }
 
+        private void FlatThemeButton_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedTheme = "Flat";
+            UpdateThemeButtons();
+        }
+
         private void UpdateThemeButtons()
         {
             var accent = (System.Windows.Media.Brush)FindResource("AccentBrush");
@@ -158,6 +164,7 @@ namespace WaseBoard.Windows
 
             ClassicThemeButton.Background = _selectedTheme == "Classic" ? accent : transparent;
             ModernThemeButton.Background = _selectedTheme == "Modern" ? accent : transparent;
+            FlatThemeButton.Background = _selectedTheme == "Flat" ? accent : transparent;
         }
 
         /// <summary>Une carte par palette (fond, panneau, accent et nom dans ses propres couleurs), construite

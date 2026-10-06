@@ -131,14 +131,28 @@ namespace WaseBoard.Services
         /// masqué l'accent de la nouvelle palette. Reste modifiable ensuite dans Paramètres > Apparence.</summary>
         private void MigrateAppearance()
         {
-            if (Settings.PaletteId is not null) return;
-            Settings.PaletteId = PalettePresets.DefaultId;
-            Settings.FollowSystemAccent = false;
-            // L'ancien écran d'Apparence enregistrait toujours le fond violet par défaut, même sans
-            // personnalisation : ce n'est pas un vrai choix, et il masquerait la nouvelle palette.
-            if (string.Equals(Settings.BackgroundColorHex, "#1E1E2E", StringComparison.OrdinalIgnoreCase))
-                Settings.BackgroundColorHex = null;
-            SaveSettings();
+            var changed = false;
+
+            // Flat devient le thème par défaut : l'ancien défaut (Moderne) bascule une seule fois, un choix Classique reste.
+            if (!Settings.FlatThemeApplied)
+            {
+                if (Settings.UiTheme == "Modern") Settings.UiTheme = "Flat";
+                Settings.FlatThemeApplied = true;
+                changed = true;
+            }
+
+            if (Settings.PaletteId is null)
+            {
+                Settings.PaletteId = PalettePresets.DefaultId;
+                Settings.FollowSystemAccent = false;
+                // L'ancien écran d'Apparence enregistrait toujours le fond violet par défaut, même sans
+                // personnalisation : ce n'est pas un vrai choix, et il masquerait la nouvelle palette.
+                if (string.Equals(Settings.BackgroundColorHex, "#1E1E2E", StringComparison.OrdinalIgnoreCase))
+                    Settings.BackgroundColorHex = null;
+                changed = true;
+            }
+
+            if (changed) SaveSettings();
         }
 
         private void LoadFromDisk()
@@ -275,6 +289,15 @@ namespace WaseBoard.Services
         {
             item.Volume = volume;
             Settings.SoundVolumes[item.Id] = volume;
+            SaveSettings();
+        }
+
+        /// <summary>Choisit la couleur d'un son ("#RRGGBB") ; null = retour à la couleur automatique.</summary>
+        public void SetColor(SoundItem item, string? hex)
+        {
+            item.ColorHex = hex;
+            if (string.IsNullOrEmpty(hex)) Settings.SoundColors.Remove(item.Id);
+            else Settings.SoundColors[item.Id] = hex;
             SaveSettings();
         }
 
@@ -440,7 +463,7 @@ namespace WaseBoard.Services
             }
         }
 
-        /// <summary>Modifie en un seul appel le nom, l'emoji et/ou la portion gardée d'un son (fenêtre « Redécouper »).
+        /// <summary>Modifie en un seul appel le nom, l'emoji et/ou la portion gardée d'un son (fenêtre « Éditer »).
         /// `trim` : null = ne pas toucher à la découpe ; (null, null) = retirer la découpe (le son entier est toujours
         /// là côté serveur) ; (début, fin) = nouvelle portion. Met à jour le SoundItem en cas de succès.</summary>
         public async Task<bool> UpdateSoundDetailsAsync(SoundItem item, string? name, string? emoji,
@@ -560,6 +583,7 @@ namespace WaseBoard.Services
                     item.IsFavorite = Settings.FavoriteSoundIds.Contains(entry.id);
                     item.Hotkey = Settings.SoundHotkeys.TryGetValue(entry.id, out var hk) ? hk : null;
                     item.Volume = Settings.SoundVolumes.TryGetValue(entry.id, out var vol) ? vol : 1.0f;
+                    item.ColorHex = Settings.SoundColors.TryGetValue(entry.id, out var color) ? color : null;
                     return item;
                 }).ToList();
 
@@ -572,10 +596,61 @@ namespace WaseBoard.Services
             }
         }
 
+        /// <summary>Extensions de fichier audio acceptées par le serveur (même liste que server.py).</summary>
+        public static readonly string[] SupportedExtensions = { ".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma" };
+
+        /// <summary>Fichier « .sha » à côté d'un fichier en cache : le hash serveur du contenu téléchargé. Sert à détecter
+        /// qu'un son a été REMPLACÉ depuis (le hash du catalogue change, le fichier en cache n'est plus le bon).</summary>
+        private static string HashSidecarPath(string cachePath) => cachePath + ".sha";
+
+        private bool IsCachedFileCurrent(SoundItem item, string cachePath)
+        {
+            if (string.IsNullOrEmpty(item.ContentHash)) return true; // ancien son sans hash : on ne peut pas savoir
+            try
+            {
+                var sidecar = HashSidecarPath(cachePath);
+                if (File.Exists(sidecar))
+                    return string.Equals(File.ReadAllText(sidecar).Trim(), item.ContentHash, StringComparison.OrdinalIgnoreCase);
+
+                // Cache d'avant le suivi des versions : on l'authentifie une fois, par son vrai contenu.
+                if (string.Equals(ComputeFileHash(cachePath), item.ContentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.WriteAllText(sidecar, item.ContentHash);
+                    return true;
+                }
+                return false;
+            }
+            catch
+            {
+                return true; // en cas de doute on garde le fichier plutôt que de re-télécharger en boucle
+            }
+        }
+
+        /// <summary>Supprime un fichier du cache et son marqueur de version ; false si le fichier est verrouillé (en cours de lecture).</summary>
+        private static bool TryDeleteCachedFile(string cachePath)
+        {
+            try
+            {
+                if (File.Exists(cachePath)) File.Delete(cachePath);
+                var sidecar = HashSidecarPath(cachePath);
+                if (File.Exists(sidecar)) File.Delete(sidecar);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public async Task<string?> GetOrDownloadCachedFileAsync(SoundItem item)
         {
             var cachePath = Path.Combine(_cacheFolder, item.Id + item.Extension);
-            if (File.Exists(cachePath)) return cachePath;
+            if (File.Exists(cachePath))
+            {
+                if (IsCachedFileCurrent(item, cachePath)) return cachePath;
+                // Périmé : le fichier de ce son a été remplacé. On retélécharge ; si l'ancien est verrouillé, on le garde pour cette fois.
+                if (!TryDeleteCachedFile(cachePath)) return cachePath;
+            }
 
             try
             {
@@ -588,8 +663,15 @@ namespace WaseBoard.Services
                     return null;
                 }
 
-                await using var fileStream = File.Create(cachePath);
-                await response.Content.CopyToAsync(fileStream);
+                await using (var fileStream = File.Create(cachePath))
+                    await response.Content.CopyToAsync(fileStream);
+                if (!string.IsNullOrEmpty(item.ContentHash))
+                    try { File.WriteAllText(HashSidecarPath(cachePath), item.ContentHash); } catch { /* le marqueur est facultatif */ }
+
+                // Le son a pu changer d'extension (remplacé par un autre format) : on retire les copies orphelines.
+                foreach (var ext in SupportedExtensions)
+                    if (!string.Equals(ext, item.Extension, StringComparison.OrdinalIgnoreCase))
+                        TryDeleteCachedFile(Path.Combine(_cacheFolder, item.Id + ext));
                 return cachePath;
             }
             catch (Exception ex)
@@ -651,6 +733,63 @@ namespace WaseBoard.Services
             }
         }
 
+        /// <summary>Remplace le fichier audio d'un son EXISTANT (le son garde son identité : nom, emoji, favoris, catégories,
+        /// volume, raccourci...). Le serveur retire la découpe (elle visait l'ancien fichier) et n'en garde pas l'ancienne
+        /// version. Met à jour le SoundItem et invalide le fichier en cache en cas de succès.</summary>
+        public async Task<bool> ReplaceSoundFileAsync(SoundItem item, string localFilePath)
+        {
+            LastErrorDetail = null;
+            try
+            {
+                using var request = CreateRequest(HttpMethod.Put, $"/sounds/{item.Id}/file");
+                using var form = new MultipartFormDataContent();
+                using var fileStream = File.OpenRead(localFilePath);
+                using var fileContent = new StreamContent(fileStream);
+                form.Add(fileContent, "file", Path.GetFileName(localFilePath));
+                request.Content = form;
+
+                using var response = await SendAsync(request);
+                if (!response.IsSuccessStatusCode)
+                {
+                    // 405 : une instance qui n'a pas encore la route de remplacement (PUT refusé sur /sounds/{id}/file).
+                    LastErrorDetail = response.StatusCode == HttpStatusCode.MethodNotAllowed
+                        ? "Ce serveur ne gère pas encore le remplacement de fichier : il faut le mettre à jour."
+                        : await ReadServerErrorAsync(response, $"Remplacement échoué ({(int)response.StatusCode}).");
+                    return false;
+                }
+
+                var entry = JsonSerializer.Deserialize<CatalogEntry>(await response.Content.ReadAsStringAsync());
+                var oldCachePath = Path.Combine(_cacheFolder, item.Id + item.Extension);
+                TryDeleteCachedFile(oldCachePath);
+
+                if (entry is not null)
+                {
+                    item.Extension = entry.extension;
+                    item.ContentHash = entry.hash;
+                }
+
+                // On vient d'envoyer ce fichier : inutile de le retélécharger, il devient directement la version en cache.
+                try
+                {
+                    var newCachePath = Path.Combine(_cacheFolder, item.Id + item.Extension);
+                    File.Copy(localFilePath, newCachePath, overwrite: true);
+                    if (!string.IsNullOrEmpty(item.ContentHash)) File.WriteAllText(HashSidecarPath(newCachePath), item.ContentHash);
+                }
+                catch { /* sera simplement retéléchargé à la demande */ }
+
+                item.TrimStartMs = null;
+                item.TrimEndMs = null;
+                item.WaveformPeaks = null;
+                item.DurationMs = 0;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastErrorDetail = ex.Message;
+                return false;
+            }
+        }
+
         public async Task<bool> DeleteSoundAsync(SoundItem item)
         {
             LastErrorDetail = null;
@@ -665,12 +804,12 @@ namespace WaseBoard.Services
                     return false;
                 }
 
-                var cachePath = Path.Combine(_cacheFolder, item.Id + item.Extension);
-                if (File.Exists(cachePath)) File.Delete(cachePath);
+                TryDeleteCachedFile(Path.Combine(_cacheFolder, item.Id + item.Extension));
 
                 Settings.FavoriteSoundIds.Remove(item.Id);
                 Settings.SoundHotkeys.Remove(item.Id);
                 Settings.SoundVolumes.Remove(item.Id);
+                Settings.SoundColors.Remove(item.Id);
                 Settings.SoundOrder.Remove(item.Id);
                 foreach (var list in Settings.Categories.Values) list.Remove(item.Id);
                 SaveSettings();
@@ -748,6 +887,22 @@ namespace WaseBoard.Services
             Unreachable
         }
 
+        /// <summary>Fonctionnalités annoncées par le serveur dans /status (champ "features") ; null tant qu'aucune réponse n'a été
+        /// lue. Un serveur plus ancien n'envoie pas le champ : ensemble vide, et le client n'y propose pas les actions récentes.</summary>
+        public HashSet<string>? ServerFeatures { get; private set; }
+
+        /// <summary>Le serveur gère-t-il cette fonctionnalité ? Vrai tant qu'on ne sait pas encore (on tente, l'erreur est explicite).</summary>
+        public bool ServerSupports(string feature) => ServerFeatures is null || ServerFeatures.Contains(feature);
+
+        private void ReadServerFeatures(JsonElement root)
+        {
+            var features = new HashSet<string>(StringComparer.Ordinal);
+            if (root.TryGetProperty("features", out var list) && list.ValueKind == JsonValueKind.Array)
+                foreach (var item in list.EnumerateArray())
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { } name) features.Add(name);
+            ServerFeatures = features;
+        }
+
         public async Task<(ServerStatusResult Result, string? Channel)> GetServerStatusAsync()
         {
             LastErrorDetail = null;
@@ -767,6 +922,7 @@ namespace WaseBoard.Services
 
                 var json = await response.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
+                ReadServerFeatures(doc.RootElement);
                 var connected = doc.RootElement.TryGetProperty("connected", out var c) && c.GetBoolean();
                 string? channel = doc.RootElement.TryGetProperty("channel", out var ch) && ch.ValueKind == JsonValueKind.String
                     ? ch.GetString() : null;
@@ -810,6 +966,7 @@ namespace WaseBoard.Services
                 }
                 using (doc)
                 {
+                    ReadServerFeatures(doc.RootElement);
                     var connected = doc.RootElement.TryGetProperty("connected", out var c) && c.GetBoolean();
                     string? channel = doc.RootElement.TryGetProperty("channel", out var ch) && ch.ValueKind == JsonValueKind.String ? ch.GetString() : null;
                     string? guildId = doc.RootElement.TryGetProperty("guild_id", out var gi) && gi.ValueKind == JsonValueKind.String ? gi.GetString() : null;

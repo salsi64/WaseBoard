@@ -6,11 +6,11 @@
         Title="Choisir un emoji"
         FontFamily="Segoe UI Emoji, Segoe UI" Height="420" Width="380"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource BgBrush}"
+        Background="{DynamicResource SurfaceBrush}"
         chrome:WindowChromeBehavior.Enable="True"
         ResizeMode="NoResize"
         TextOptions.TextFormattingMode="Display">
-    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource BgBrush}">
+    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource SurfaceBrush}">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="36"/>
@@ -28,11 +28,11 @@
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="RemoveButton" Content="Retirer l'emoji" Padding="10,6" Margin="0,0,8,0" Click="Remove_Click"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
+                            Style="{StaticResource SecondaryButtonStyle}"/>
                     <Button x:Name="CancelButton" Content="Annuler" Padding="10,6" Margin="0,0,8,0" Click="Cancel_Click"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
+                            Style="{StaticResource SecondaryButtonStyle}"/>
                     <Button x:Name="OkButton" Content="Valider" Padding="16,6" Click="Ok_Click" IsDefault="True"
-                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                            Style="{StaticResource PrimaryButtonStyle}"/>
                 </StackPanel>
             </StackPanel>
         </Grid>

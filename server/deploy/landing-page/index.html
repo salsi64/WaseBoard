@@ -4,11 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WaseBoard</title>
+<meta name="description" content="Soundboard partagé pour Discord : cliquez un son, il joue sur vos enceintes et dans le vocal, pour tout le monde.">
 <style>
   :root {
     --bg: #0F1624;
     --panel: #182236;
+    --panel-hi: #1E2C45;
     --accent: #38BDF8;
+    --accent-2: #F472B6;
+    --accent-3: #34D399;
+    --accent-4: #FBBF24;
     --on-accent: #0B1220;
     --text: #EAF0FA;
     --text-dim: #B8C4D9;
@@ -17,53 +22,68 @@
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    background: var(--bg);
+    background:
+      radial-gradient(600px 300px at 50% -10%, #1C2B47 0%, transparent 70%),
+      var(--bg);
     color: var(--text);
     font-family: "Segoe UI", -apple-system, sans-serif;
     line-height: 1.6;
   }
   .wrap {
-    max-width: 720px;
+    max-width: 760px;
     margin: 0 auto;
     padding: 48px 20px 80px;
   }
   header {
     text-align: center;
-    margin-bottom: 36px;
+    margin-bottom: 8px;
   }
-  header .emoji {
-    font-size: 48px;
-  }
-  h1 {
-    font-size: 32px;
-    margin: 8px 0 4px;
-  }
+  header .emoji { font-size: 48px; }
+  h1 { font-size: 32px; margin: 8px 0 4px; }
   .tagline {
     color: var(--text-dim);
     font-size: 15px;
     max-width: 480px;
     margin: 0 auto;
   }
+
+  /* égaliseur décoratif */
+  .eq { display: flex; justify-content: center; gap: 4px; align-items: flex-end; height: 22px; margin: 14px 0 22px; }
+  .eq span {
+    width: 4px; border-radius: 2px; opacity: .9;
+    animation: bounce 1.1s ease-in-out infinite;
+  }
+  .eq span:nth-child(1) { height: 6px;  background: var(--accent);   animation-delay: 0s; }
+  .eq span:nth-child(2) { height: 16px; background: var(--accent-2); animation-delay: .1s; }
+  .eq span:nth-child(3) { height: 22px; background: var(--accent-4); animation-delay: .2s; }
+  .eq span:nth-child(4) { height: 12px; background: var(--accent-3); animation-delay: .3s; }
+  .eq span:nth-child(5) { height: 18px; background: var(--accent-2); animation-delay: .4s; }
+  @keyframes bounce { 0%, 100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
+  @media (prefers-reduced-motion: reduce) { .eq span { animation: none; } }
+
+  .hero-shot {
+    display: block;
+    max-width: 100%;
+    width: 100%;
+    border-radius: 14px;
+    border: 1px solid var(--track);
+    box-shadow: 0 20px 60px -20px #000A;
+    margin: 28px 0;
+  }
+
   .card {
     background: var(--panel);
     border-radius: 12px;
     padding: 24px 28px;
     margin-bottom: 20px;
   }
-  .card h2 {
-    margin-top: 0;
-    font-size: 18px;
-  }
-  .card p, .card li {
-    font-size: 14px;
-    color: var(--text-dim);
-  }
-  ol, ul {
-    padding-left: 20px;
-    margin-bottom: 0;
-  }
+  .card h2 { margin-top: 0; font-size: 18px; }
+  .card h3 { font-size: 15px; margin: 0 0 6px; }
+  .card p, .card li { font-size: 14px; color: var(--text-dim); }
+  ol, ul { padding-left: 20px; margin-bottom: 0; }
   li { margin-bottom: 8px; }
   li:last-child { margin-bottom: 0; }
+
   a.button {
     display: inline-block;
     text-decoration: none;
@@ -73,8 +93,9 @@
     font-size: 14px;
   }
   a.button.primary { background: var(--accent); color: var(--on-accent); }
-  a.button.secondary { background: var(--panel); color: var(--text); border: 1px solid var(--track); }
+  a.button.secondary { background: var(--panel-hi); color: var(--text); border: 1px solid var(--track); }
   a.button:hover { opacity: 0.85; }
+  a.button.block { display: block; text-align: center; margin-top: 16px; }
   a.link { color: var(--accent); }
   code {
     background: var(--track);
@@ -90,6 +111,47 @@
     justify-content: center;
     flex-wrap: wrap;
   }
+
+  /* diagramme d'architecture */
+  .diagram { width: 100%; height: auto; margin: 4px 0 12px; }
+  .diagram .box { fill: var(--panel-hi); stroke: var(--track); }
+  .diagram text { fill: var(--text); font-family: inherit; font-size: 13px; }
+  .diagram .sub { fill: var(--text-dim); font-size: 11px; }
+  .diagram .flow { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 5; fill: none; animation: dash 1.2s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -20; } }
+  @media (prefers-reduced-motion: reduce) { .diagram .flow { animation: none; } }
+
+  /* choix du mode d'installation */
+  .choice-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .choice {
+    background: var(--panel);
+    border-radius: 12px;
+    padding: 22px 24px;
+    border: 1px solid var(--track);
+    display: flex;
+    flex-direction: column;
+  }
+  .choice.recommended {
+    --card-accent: var(--accent);
+    border-color: var(--card-accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--card-accent) 25%, transparent);
+    position: relative;
+  }
+  .choice.accent { --card-accent: var(--accent); border-color: var(--card-accent); }
+  .badge {
+    position: absolute; top: -11px; left: 20px;
+    background: var(--card-accent, var(--accent)); color: var(--on-accent);
+    font-size: 11px; font-weight: 700; letter-spacing: .02em;
+    padding: 3px 10px; border-radius: 999px;
+  }
+  .choice p, .choice li { font-size: 13.5px; }
+  .choice .spacer { flex: 1; }
+
   .note {
     font-size: 12px;
     color: var(--text-dim);
@@ -97,49 +159,105 @@
     text-align: center;
     margin-top: 40px;
   }
+  .actions-hint {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin: -14px 0 28px;
+  }
+  .section-label {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin: 36px 0 -4px;
+  }
+
+  /* apparition progressive au scroll (dégradée proprement si JS coupé) */
+  html.js .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+  html.js .reveal.in { opacity: 1; transform: none; }
 </style>
 </head>
 <body>
+  <script>document.documentElement.classList.add('js');</script>
   <div class="wrap">
     <header>
       <div class="emoji">🎛️</div>
       <h1>WaseBoard</h1>
       <div class="tagline">Soundboard partagé pour Discord — cliquez un son, il joue à la fois sur vos enceintes et dans le vocal, pour tout le monde, sans jamais passer par votre micro.</div>
+      <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
     </header>
 
+    <img class="hero-shot reveal" src="hero.png" alt="Capture d'écran de l'application WaseBoard : liste de sons colorés par catégorie, favoris, et plusieurs serveurs Discord connectés en même temps">
+
     <div class="actions">
-      <a class="button primary" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter WaseBoard à mon serveur</a>
-      <a class="button secondary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger le client Windows</a>
+      <a class="button primary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger le client Windows</a>
+      <a class="button secondary" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter WaseBoard à mon serveur</a>
       <a class="button secondary" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord WaseBoard</a>
     </div>
+    <div class="actions-hint">La plupart des gens n'ont besoin que du premier bouton — voir ci-dessous.</div>
 
-    <div class="card">
-      <h2>Comment ça marche</h2>
-      <p>Cette page est le point d'accès d'une instance de <strong>WaseBoard</strong> : une application Windows (le client, que vous installez) qui se connecte à un serveur hébergeant le catalogue de sons partagé et un bot Discord. Quand vous cliquez un son, il joue en même temps sur vos propres enceintes et par le bot dans votre salon vocal.</p>
-    </div>
-
-    <div class="card">
-      <h2>Utiliser cette instance sur votre serveur</h2>
-      <p>Pas besoin d'héberger quoi que ce soit : en cliquant « ➕ Ajouter WaseBoard à mon serveur » ci-dessus, le bot rejoint votre Discord avec un catalogue de sons propre à votre serveur, isolé des autres.</p>
-      <p>Vos membres n'ont rien de spécial à faire ensuite : télécharger le client et se connecter avec Discord suffit. Un admin peut taper <code>/bot-setup</code> dans Discord pour poster un panneau d'accueil (démarrer, rejoindre le vocal, aide, liens utiles) dans un salon. Guide complet : <a class="link" href="https://github.com/salsi64/WaseBoard/blob/master/docs/FAQ-utilisateurs.md">docs/FAQ-utilisateurs.md</a>.</p>
-      <p style="opacity:.8;">Instance gratuite, à usage raisonnable : quelques plafonds s'appliquent (nombre de sons, taille des fichiers) pour que ça reste disponible pour tous. Besoin de plus ? Hébergez <a class="link" href="#self-host">votre propre instance</a>, sans limite.</p>
-    </div>
-
-    <div class="card">
-      <h2>Rejoindre un serveur existant</h2>
-      <p>Le bot est déjà sur votre serveur Discord (quelqu'un l'a ajouté avant vous) ?</p>
+    <div class="choice recommended reveal" style="--card-accent: var(--accent-2); margin-bottom: 20px;">
+      <span class="badge">LE PLUS FRÉQUENT</span>
+      <h3>🙋 Vous voulez juste utiliser WaseBoard</h3>
+      <p>Le bot est presque sûrement déjà sur votre serveur Discord :</p>
       <ol>
-        <li>Installer le client (bouton ci-dessus) — il se connecte automatiquement à cette instance, rien à saisir.</li>
-        <li>Se connecter avec votre compte Discord quand l'application le demande : ça sert uniquement à afficher votre avatar et à retrouver votre salon vocal.</li>
+        <li>Téléchargez le client ci-dessus</li>
+        <li>Connectez-vous avec Discord</li>
       </ol>
-      <p style="opacity:.8;">Vous rejoignez plutôt un serveur WaseBoard auto-hébergé (pas celui-ci) ? Dans l'application, cliquez « Vous avez votre propre serveur WaseBoard ? » au premier lancement, ou changez l'adresse dans Paramètres.</p>
+      <p style="opacity:.8; margin-top:12px; margin-bottom:0;">C'est tout, rien d'autre à saisir. Vous rejoignez plutôt un autre serveur WaseBoard auto-hébergé ? Cliquez « Vous avez votre propre serveur WaseBoard ? » au premier lancement.</p>
     </div>
 
-    <div class="card" id="self-host">
-      <h2>Héberger votre propre serveur</h2>
-      <p>WaseBoard est open-source et fait pour être auto-hébergé : chaque groupe héberge sa propre instance, il n'y a pas de serveur central fourni avec le projet.</p>
-      <p>Le plus simple : <code>git clone</code> le dépôt, puis lancer l'assistant Docker (<code>./setup.sh</code> ou <code>.\setup.ps1</code>) — il vous guide pour créer l'application bot Discord, vérifie la configuration et démarre tout, en une quinzaine de minutes.</p>
-      <p>Guide complet (installation Docker ou manuelle, HTTPS, sécurité, dépannage) : <a class="link" href="https://github.com/salsi64/WaseBoard/blob/master/server/README.md">server/README.md</a> sur le dépôt GitHub.</p>
+    <div class="section-label">Vous administrez un serveur Discord ?</div>
+
+    <div class="card reveal">
+      <h2>Comment ça marche</h2>
+      <p>Le <strong>bot Discord</strong> et l'<strong>application Windows</strong> se connectent tous les deux au même endroit : un « serveur WaseBoard », qui héberge le catalogue de sons et fait le lien entre les deux.</p>
+      <svg class="diagram" viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schéma : votre serveur Discord et l'application WaseBoard se connectent tous les deux à un serveur WaseBoard central">
+        <rect class="box" x="8" y="30" width="162" height="60" rx="12"/>
+        <text x="89" y="55" text-anchor="middle">💬 Votre Discord</text>
+        <text class="sub" x="89" y="72" text-anchor="middle">salon vocal</text>
+
+        <rect class="box" x="219" y="30" width="162" height="60" rx="12"/>
+        <text x="300" y="55" text-anchor="middle">🖥️ Serveur</text>
+        <text class="sub" x="300" y="72" text-anchor="middle">WaseBoard</text>
+
+        <rect class="box" x="430" y="30" width="162" height="60" rx="12"/>
+        <text x="511" y="55" text-anchor="middle">🎛️ Application</text>
+        <text class="sub" x="511" y="72" text-anchor="middle">Windows</text>
+
+        <path class="flow" d="M170 60 H219"/>
+        <path class="flow" d="M381 60 H430"/>
+      </svg>
+      <p style="opacity:.85;">Celui de cette page est <strong>public et gratuit</strong> — inutile d'en installer un, sauf si vous voulez le vôtre.</p>
+    </div>
+
+    <div class="choice-grid reveal">
+      <div class="choice recommended" style="--card-accent: var(--accent);">
+        <span class="badge">RECOMMANDÉ</span>
+        <h3>⚡ Utiliser l'instance publique</h3>
+        <p>Ajoutez le bot à votre Discord, téléchargez le client, connectez-vous — c'est tout.</p>
+        <ul>
+          <li>Gratuit, en ligne dès maintenant</li>
+          <li>Aucune compétence technique requise</li>
+          <li>Bibliothèque de sons propre à chaque serveur</li>
+        </ul>
+        <div class="spacer"></div>
+        <a class="button primary block" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter à mon serveur</a>
+      </div>
+      <div class="choice accent" style="--card-accent: var(--accent-3);">
+        <h3>🏠 Héberger mon propre serveur</h3>
+        <p>Open-source, sans serveur central imposé : la vôtre, sans limite, avec un contrôle total des données.</p>
+        <ul>
+          <li>Assistant Docker guidé (~15 min)</li>
+          <li>Aucun plafond : c'est votre machine</li>
+          <li>Votre application Discord, vos données</li>
+        </ul>
+        <div class="spacer"></div>
+        <a class="button secondary block" href="https://github.com/salsi64/WaseBoard/blob/master/server/README.md">📖 Guide d'installation</a>
+      </div>
     </div>
 
     <div class="note">
@@ -149,5 +267,24 @@
       <a class="link" href="/terms.html">Conditions d'utilisation</a>
     </div>
   </div>
+
+  <script>
+    (function () {
+      var targets = document.querySelectorAll('.reveal');
+      if (!('IntersectionObserver' in window) || !targets.length) {
+        targets.forEach(function (el) { el.classList.add('in'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in');
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.15 });
+      targets.forEach(function (el) { io.observe(el); });
+    })();
+  </script>
 </body>
 </html>

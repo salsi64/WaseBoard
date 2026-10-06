@@ -5,11 +5,11 @@
         Title="Définir un raccourci"
         FontFamily="Segoe UI Emoji, Segoe UI" Height="180" Width="380"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource BgBrush}"
+        Background="{DynamicResource SurfaceBrush}"
         chrome:WindowChromeBehavior.Enable="True"
         ResizeMode="NoResize"
         PreviewKeyDown="Window_PreviewKeyDown">
-    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource BgBrush}">
+    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource SurfaceBrush}">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="36"/>
@@ -19,15 +19,15 @@
             <StackPanel Grid.Row="1" Margin="20,4,20,20" VerticalAlignment="Center">
                 <TextBlock Text="Appuyez sur la combinaison de touches souhaitée"
                            Foreground="{DynamicResource TextBrush}" TextWrapping="Wrap" Margin="0,0,0,12"/>
-                <Border Background="{DynamicResource PanelBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,16">
+                <Border Background="{DynamicResource CardBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,16">
                     <TextBlock x:Name="CapturedText" Text="En attente..." FontSize="18" FontWeight="Bold"
                                Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center"/>
                 </Border>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="Annuler" Padding="12,6" Margin="0,0,8,0" Click="Cancel_Click"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
+                            Style="{StaticResource SecondaryButtonStyle}"/>
                     <Button x:Name="ConfirmButton" Content="Valider" Padding="16,6" IsEnabled="False" Click="Confirm_Click"
-                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                            Style="{StaticResource PrimaryButtonStyle}"/>
                 </StackPanel>
             </StackPanel>
         </Grid>

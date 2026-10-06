@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thème Flat — Éditer le son</title>
+<style>
+  :root {
+    --bg-app: #0A0D16;
+    --bg-modal: #141A2C;
+    --bg-panel: #1A2138;
+    --bg-field: #0F1424;
+    --border: #2B3352;
+    --border-soft: #232A46;
+    --purple: #8B5CF6;
+    --blue: #4F8CFF;
+    --grad: linear-gradient(135deg, var(--purple), var(--blue));
+    --text: #F1F3FA;
+    --text-dim: #8991AE;
+    --text-faint: #5B6382;
+    --danger: #F87171;
+    --success: #34D399;
+    --c1:#F472B6; --c2:#38BDF8; --c3:#34D399; --c4:#FBBF24;
+    --c5:#F87171; --c6:#A78BFA; --c7:#22D3EE; --c8:#94A3B8;
+    --chosen: var(--purple);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg-app); color: var(--text);
+    font-family: "Segoe UI", -apple-system, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 30px 14px;
+  }
+
+  /* ---- toile de fond : aperçu grille façon thème Flat (pills + waveform) ---- */
+  .backdrop {
+    position: fixed; inset: 0; z-index: 0;
+    padding: 40px; filter: blur(1.5px) brightness(.55); pointer-events: none;
+  }
+  .backdrop .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 14px; }
+  .backdrop .row { display: flex; flex-wrap: wrap; gap: 10px; max-width: 640px; }
+  .pill {
+    display: inline-flex; flex-direction: column; gap: 4px;
+    background: var(--bg-panel); border: 1px solid var(--border-soft);
+    border-radius: 999px; padding: 10px 18px; min-width: 90px;
+  }
+  .pill .lbl { font-size: 12.5px; font-weight: 600; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+  .pill .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .pill .wave { display:flex; align-items:flex-end; gap:2px; height:10px; padding: 0 2px; }
+  .pill .wave span { width:2px; background: currentColor; opacity:.55; border-radius:1px; animation: wv 1s ease-in-out infinite; }
+
+  /* ---- overlay + modale ---- */
+  .overlay {
+    position: fixed; inset: 0; background: #05070Cb3; backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center; z-index: 10;
+    transition: opacity .25s ease; padding: 16px;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .modal {
+    width: 420px; max-width: 100%; background: var(--bg-modal);
+    border: 1px solid var(--border); border-radius: 22px;
+    box-shadow: 0 30px 80px -20px #000A, 0 0 0 1px #ffffff08 inset;
+    padding: 22px 22px 18px;
+    transform: translateY(0) scale(1); transition: transform .2s ease, opacity .2s ease;
+  }
+  .overlay.hidden .modal { transform: translateY(8px) scale(.98); opacity: 0; }
+
+  .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+  .modal-head h2 { font-size: 16.5px; margin: 0; font-weight: 700; }
+  .xbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--border-soft);
+    background: var(--bg-field); color: var(--text-dim); cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .xbtn:hover { color: var(--text); border-color: var(--border); }
+
+  .top-row { display: flex; gap: 14px; align-items: center; margin-bottom: 20px; position: relative; }
+  .thumb-wrap { position: relative; flex-shrink: 0; }
+  .thumb {
+    width: 64px; height: 64px; border-radius: 18px; background: var(--grad);
+    display: flex; align-items: center; justify-content: center; font-size: 28px;
+    cursor: pointer; border: none; position: relative; overflow: visible;
+    box-shadow: 0 8px 24px -8px #8B5CF680;
+  }
+  .star-badge {
+    position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--bg-panel); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center;
+    font-size: 11px; cursor: pointer; color: var(--text-faint);
+  }
+  .star-badge.active { color: var(--c4); border-color: var(--c4); }
+  .edit-hint { position:absolute; bottom:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:var(--bg-field); border:1px solid var(--border); font-size:10px; display:flex; align-items:center; justify-content:center; }
+
+  .field { flex: 1; min-width: 0; }
+  label.flabel { display: block; font-size: 11.5px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 7px; }
+  label.flabel .opt { text-transform: none; font-weight: 400; color: var(--text-faint); letter-spacing: 0; }
+  input[type=text], select {
+    width: 100%; background: var(--bg-field); border: 1px solid var(--border-soft); color: var(--text);
+    border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none; font-family: inherit;
+  }
+  input[type=text]:focus, select:focus { border-color: var(--purple); }
+  select { appearance: none; -webkit-appearance:none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238991AE'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position: right 12px center; padding-right: 30px; cursor:pointer; }
+
+  /* émoji picker */
+  .emoji-pop {
+    position: absolute; top: 72px; left: 0; width: 260px; background: var(--bg-panel);
+    border: 1px solid var(--border); border-radius: 14px; padding: 10px; z-index: 20;
+    box-shadow: 0 20px 50px -15px #000C; display: none;
+  }
+  .emoji-pop.open { display: block; }
+  .emoji-pop input { width: 100%; margin-bottom: 8px; }
+  .emoji-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; max-height: 150px; overflow-y: auto; }
+  .emoji-grid button {
+    background: none; border: none; font-size: 18px; padding: 6px 0; border-radius: 8px; cursor: pointer;
+  }
+  .emoji-grid button:hover { background: var(--bg-field); }
+
+  .section { margin-bottom: 18px; }
+
+  .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+  .swatch {
+    width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer;
+    position: relative; display: flex; align-items: center; justify-content: center; color: #0B1220; font-size: 13px;
+  }
+  .swatch.selected { border-color: var(--text); }
+  .swatch.selected::after { content: '✓'; font-weight: 800; }
+
+  .cat-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 7px; }
+
+  /* catégorie : déclencheur + popover (serveur -> catégories -> créer) */
+  .cat-wrap { position: relative; }
+  .cat-trigger {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg-field); border: 1px solid var(--border-soft); color: var(--text);
+    border-radius: 10px; padding: 10px 12px; font-size: 14px; cursor: pointer; font-family: inherit; text-align: left;
+  }
+  .cat-trigger .chev { color: var(--text-faint); font-size: 11px; }
+  .cat-trigger:hover { border-color: var(--border); }
+  .cat-pop {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--bg-panel);
+    border: 1px solid var(--border); border-radius: 14px; padding: 8px; z-index: 20;
+    box-shadow: 0 20px 50px -15px #000C; display: none;
+  }
+  .cat-pop.open { display: block; }
+  .cat-server {
+    display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--text-dim);
+    padding: 6px 8px 8px; border-bottom: 1px solid var(--border-soft); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .03em;
+  }
+  .cat-list { max-height: 180px; overflow-y: auto; }
+  .cat-item {
+    display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: none;
+    color: var(--text); font-size: 14px; padding: 8px; border-radius: 8px; cursor: pointer; text-align: left; font-family: inherit;
+  }
+  .cat-item:hover { background: var(--bg-field); }
+  .cat-item .check { color: var(--purple); opacity: 0; font-weight: 800; }
+  .cat-item.selected .check { opacity: 1; }
+  .cat-add {
+    border-top: 1px solid var(--border-soft); margin-top: 4px; padding-top: 6px;
+  }
+  .cat-add button {
+    width: 100%; background: none; border: none; color: var(--purple); font-weight: 700; font-size: 13px;
+    padding: 8px; border-radius: 8px; cursor: pointer; text-align: left; font-family: inherit;
+  }
+  .cat-add button:hover { background: var(--bg-field); }
+  .cat-add-input { display: flex; gap: 6px; padding-top: 6px; border-top: 1px solid var(--border-soft); margin-top: 4px; }
+  .cat-add-input input {
+    flex: 1; background: var(--bg-field); border: 1px solid var(--border-soft); color: var(--text);
+    border-radius: 8px; padding: 7px 9px; font-size: 13px; font-family: inherit; outline: none;
+  }
+  .cat-add-input input:focus { border-color: var(--purple); }
+  .cat-add-input button {
+    width: 30px; border-radius: 8px; border: 1px solid var(--border-soft); background: var(--bg-field); color: var(--text);
+    cursor: pointer; font-size: 13px;
+  }
+  .cat-add-input button.confirm { background: var(--grad); color: white; border: none; }
+
+  /* gain / amplification */
+  .gain-row { display: flex; align-items: center; gap: 10px; }
+  .step-btn {
+    width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; background: var(--bg-field);
+    border: 1px solid var(--border-soft); color: var(--text); cursor: pointer; font-size: 15px; line-height: 1;
+  }
+  .step-btn:hover { border-color: var(--border); }
+  .gain-slider-wrap { position: relative; flex: 1; display: flex; align-items: center; }
+  .gain-tick { position: absolute; left: 50%; width: 2px; height: 8px; background: var(--border); transform: translateX(-1px); pointer-events: none; }
+  input[type=range]#gainSlider {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px;
+    background: var(--border-soft); outline: none; margin: 0;
+  }
+  input[type=range]#gainSlider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--grad);
+    cursor: pointer; border: 2px solid #0E1424; box-shadow: 0 0 0 1px var(--purple);
+  }
+  input[type=range]#gainSlider::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%; background: var(--blue); cursor: pointer; border: 2px solid #0E1424;
+  }
+
+  /* trim */
+  .trim-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .time-chip { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; background: var(--bg-field); border: 1px solid var(--border-soft); padding: 3px 9px; border-radius: 7px; }
+  .vol-btn { background: var(--bg-field); border: 1px solid var(--border-soft); color: var(--text-dim); width: 28px; height: 28px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .timeline { position: relative; height: 56px; background: var(--bg-field); border: 1px solid var(--border-soft); border-radius: 12px; overflow: hidden; }
+  .wave-static { position: absolute; inset: 0; display: flex; align-items: center; gap: 2px; padding: 0 8px; }
+  .wave-static span { flex: 1; background: var(--border); border-radius: 2px; }
+  .trim-select { position: absolute; top: 0; bottom: 0; background: linear-gradient(180deg, #8B5CF633, #4F8CFF22); border-left: 2px solid var(--purple); border-right: 2px solid var(--blue); }
+  .trim-select .wave-static span { background: linear-gradient(180deg, var(--purple), var(--blue)); opacity:.85; }
+  .handle {
+    position: absolute; top: 0; bottom: 0; width: 14px; margin-left: -7px; cursor: ew-resize;
+    display: flex; align-items: center; justify-content: center; z-index: 2;
+  }
+  .handle::before { content: ''; width: 4px; height: 26px; border-radius: 3px; background: var(--text); opacity: .9; }
+  .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; opacity: 0; pointer-events: none; }
+  .play-btn {
+    margin-top: 10px; display: inline-flex; align-items: center; gap: 7px; background: var(--bg-field);
+    border: 1px solid var(--border-soft); color: var(--text); padding: 7px 13px; border-radius: 9px; cursor: pointer; font-size: 13px;
+  }
+
+  .file-row {
+    display: flex; align-items: center; gap: 10px; background: var(--bg-field); border: 1px solid var(--border-soft);
+    border-radius: 12px; padding: 10px 12px;
+  }
+  .file-icon { width: 34px; height: 34px; border-radius: 9px; background: var(--bg-panel); display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+  .file-name { flex: 1; font-size: 13.5px; }
+  .file-sub { font-size: 11.5px; color: var(--text-faint); }
+  .icon-btn { background: none; border: none; color: var(--text-faint); cursor: pointer; font-size: 15px; width: 28px; height:28px; border-radius:7px; }
+  .icon-btn:hover { color: var(--danger); background: #F8717122; }
+  .replace-row { display: none; align-items: center; justify-content: center; border: 1.5px dashed var(--border); border-radius: 12px; padding: 16px; color: var(--text-dim); font-size: 13px; gap: 8px; }
+  .replace-row button { background: var(--grad); border: none; color: white; padding: 7px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+
+  .footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; align-items: center; }
+  .toast { font-size: 12.5px; color: var(--success); opacity: 0; transition: opacity .2s ease; margin-right: auto; }
+  .toast.show { opacity: 1; }
+  .btn { padding: 11px 20px; border-radius: 11px; font-weight: 700; font-size: 13.5px; border: none; cursor: pointer; }
+  .btn.ghost { background: var(--bg-field); border: 1px solid var(--border-soft); color: var(--text); }
+  .btn.ghost:hover { border-color: var(--border); }
+  .btn.primary { background: var(--grad); color: white; }
+  .btn.primary:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.primary:not(:disabled):hover { filter: brightness(1.08); }
+
+  .reopen { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 5;
+    background: var(--bg-panel); border: 1px solid var(--border); color: var(--text-dim); font-size: 13px;
+    padding: 9px 16px; border-radius: 999px; cursor: pointer; display: none; }
+  .reopen.show { display: block; }
+
+  @keyframes wv { 0%, 100% { height: 30%; } 50% { height: 100%; } }
+</style>
+</head>
+<body>
+
+  <div class="backdrop">
+    <div class="label">Aperçu grille — thème Flat (pills conservées)</div>
+    <div class="row">
+      <div class="pill" style="color:var(--c1)"><span class="lbl"><span class="dot" style="background:var(--c1)"></span>💥 Explosion</span></div>
+      <div class="pill" style="color:var(--c2)"><span class="lbl"><span class="dot" style="background:var(--c2)"></span>🏆 Victoire</span><span class="wave"><span style="height:40%;animation-delay:0s"></span><span style="height:90%;animation-delay:.1s"></span><span style="height:60%;animation-delay:.2s"></span><span style="height:100%;animation-delay:.3s"></span><span style="height:50%;animation-delay:.4s"></span></span></div>
+      <div class="pill" style="color:var(--c3)"><span class="lbl"><span class="dot" style="background:var(--c3)"></span>👏 Applaudissements</span></div>
+      <div class="pill" style="color:var(--c4)"><span class="lbl"><span class="dot" style="background:var(--c4)"></span>🚨 Alerte</span></div>
+      <div class="pill" style="color:var(--c6)"><span class="lbl"><span class="dot" style="background:var(--c6)"></span>😂 Rire</span></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>Éditer le son</h2>
+        <button class="xbtn" id="closeBtn">✕</button>
+      </div>
+
+      <div class="top-row">
+        <div class="thumb-wrap">
+          <button class="thumb" id="thumbBtn">
+            <span id="thumbEmoji">💥</span>
+            <span class="edit-hint">✏️</span>
+          </button>
+          <button class="star-badge" id="starBtn" title="Favori">★</button>
+
+          <div class="emoji-pop" id="emojiPop">
+            <input type="text" id="emojiSearch" placeholder="Rechercher un émoji…">
+            <div class="emoji-grid" id="emojiGrid"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="flabel">Nom</label>
+          <input type="text" id="nameInput" value="Explosion">
+        </div>
+      </div>
+
+      <div class="section">
+        <label class="flabel">Couleur</label>
+        <div class="swatches" id="swatches"></div>
+      </div>
+
+      <div class="section">
+        <div class="cat-row">
+          <label class="flabel" style="margin-bottom:0;">Catégorie</label>
+        </div>
+        <div class="cat-wrap">
+          <button class="cat-trigger" id="catTrigger" type="button">
+            <span id="catTriggerLabel">Effets</span>
+            <span class="chev">▾</span>
+          </button>
+          <div class="cat-pop" id="catPop">
+            <div class="cat-server">🖥️ <span>WaseBoard</span></div>
+            <div class="cat-list" id="catList"></div>
+            <div class="cat-add" id="catAddRow">
+              <button type="button" id="catAddBtn">+ Nouvelle catégorie</button>
+            </div>
+            <div class="cat-add-input" id="catAddInputRow" style="display:none;">
+              <input type="text" id="catNewInput" placeholder="Nom de la catégorie">
+              <button type="button" class="confirm" id="catConfirmBtn">✓</button>
+              <button type="button" id="catCancelBtn">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="trim-top">
+          <label class="flabel" style="margin-bottom:0;">Volume</label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="time-chip" id="gainChip">100%</span>
+            <button class="vol-btn" id="gainResetBtn" title="Réinitialiser (100%)" style="visibility:hidden;">↺</button>
+          </div>
+        </div>
+        <div class="gain-row">
+          <button class="step-btn" id="gainMinus" type="button" title="Réduire">−</button>
+          <div class="gain-slider-wrap">
+            <span class="gain-tick"></span>
+            <input type="range" id="gainSlider" min="0" max="200" value="100" step="5">
+          </div>
+          <button class="step-btn" id="gainPlus" type="button" title="Amplifier">+</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="trim-top">
+          <label class="flabel" style="margin-bottom:0;">Trim (s)</label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="time-chip" id="timeChip">0.0s – 3.8s</span>
+            <button class="vol-btn" id="volBtn">🔊</button>
+          </div>
+        </div>
+        <div class="timeline" id="timeline">
+          <div class="wave-static" id="waveStatic"></div>
+          <div class="trim-select" id="trimSelect">
+            <div class="wave-static" id="waveSelect"></div>
+          </div>
+          <div class="playhead" id="playhead"></div>
+          <div class="handle" id="handleStart" style="left:0%"></div>
+          <div class="handle" id="handleEnd" style="left:100%"></div>
+        </div>
+        <button class="play-btn" id="playBtn">▶ <span>Écouter l'extrait</span></button>
+      </div>
+
+      <div class="section">
+        <label class="flabel">Son</label>
+        <div class="file-row" id="fileRow">
+          <div class="file-icon">🎵</div>
+          <div style="flex:1; min-width:0;">
+            <div class="file-name" id="fileName">explosion.mp3</div>
+            <div class="file-sub">128 kbps · 3.8s</div>
+          </div>
+          <button class="icon-btn" id="deleteFileBtn" title="Supprimer">🗑</button>
+        </div>
+        <div class="replace-row" id="replaceRow">
+          <span>Aucun fichier</span>
+          <button id="pickFileBtn">Choisir un fichier</button>
+          <input type="file" id="fileInput" accept="audio/*" style="display:none">
+        </div>
+      </div>
+
+      <div class="footer">
+        <span class="toast" id="toast">Enregistré ✓</span>
+        <button class="btn ghost" id="cancelBtn">Annuler</button>
+        <button class="btn primary" id="saveBtn" disabled>Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <button class="reopen" id="reopenBtn">↻ Rouvrir la modale</button>
+
+<script>
+(function () {
+  const EMOJIS = ["💥","🔥","💣","⚡","✨","🎉","🎊","🏆","🥇","👏","😂","🤣","😱","😭","😡","💀","👻","🤡","😎","🥳",
+    "🚨","🚀","🛸","🔔","📯","🥁","🎺","🎸","🎵","🎶","🔊","📢","🗣️","💬","❤️","💙","💚","💜","🧡","💛",
+    "⭐","🌟","☄️","🌈","🍺","🍻","🍕","🥳","😈","🧨","🔫","🛑","⚠️","✅","❌","🙄","😏","😬","🫠","🤖"];
+
+  const state = {
+    name: "Explosion", emoji: "💥", fav: false, color: null,
+    category: "Effets", start: 0, end: 100, hasFile: true, fileName: "explosion.mp3", gain: 100,
+  };
+  let snapshot = JSON.parse(JSON.stringify(state));
+  const DURATION = 3.8;
+
+  const $ = (id) => document.getElementById(id);
+  const thumbEmoji = $("thumbEmoji"), starBtn = $("starBtn"), nameInput = $("nameInput");
+  const swatchesEl = $("swatches");
+  const timeline = $("timeline"), handleStart = $("handleStart"), handleEnd = $("handleEnd");
+  const trimSelect = $("trimSelect"), timeChip = $("timeChip"), waveStatic = $("waveStatic"), waveSelect = $("waveSelect");
+  const fileRow = $("fileRow"), replaceRow = $("replaceRow"), fileNameEl = $("fileName"), fileInput = $("fileInput");
+  const saveBtn = $("saveBtn"), cancelBtn = $("cancelBtn"), toast = $("toast");
+  const overlay = $("overlay"), closeBtn = $("closeBtn"), reopenBtn = $("reopenBtn");
+
+  // ---- barres de waveform statiques (déterministes) ----
+  const bars = [40,70,30,90,55,100,45,65,80,35,60,95,50,70,40,85,30,75,55,90,40,60,100,45,70,35,80,50,65,90];
+  function renderBars(container) {
+    container.innerHTML = "";
+    bars.forEach(h => { const s = document.createElement("span"); s.style.height = h + "%"; container.appendChild(s); });
+  }
+  renderBars(waveStatic); renderBars(waveSelect);
+
+  // ---- émojis ----
+  const emojiPop = $("emojiPop"), emojiGrid = $("emojiGrid"), emojiSearch = $("emojiSearch");
+  function renderEmojis(list) {
+    emojiGrid.innerHTML = "";
+    list.forEach(e => {
+      const b = document.createElement("button");
+      b.textContent = e;
+      b.onclick = () => { state.emoji = e; thumbEmoji.textContent = e; closeEmojiPop(); refreshDirty(); };
+      emojiGrid.appendChild(b);
+    });
+  }
+  renderEmojis(EMOJIS);
+  function openEmojiPop() { emojiPop.classList.add("open"); emojiSearch.value=""; renderEmojis(EMOJIS); emojiSearch.focus(); }
+  function closeEmojiPop() { emojiPop.classList.remove("open"); }
+  $("thumbBtn").addEventListener("click", (e) => { e.stopPropagation(); emojiPop.classList.contains("open") ? closeEmojiPop() : openEmojiPop(); });
+  emojiSearch.addEventListener("input", () => {
+    const q = emojiSearch.value.trim();
+    renderEmojis(q ? EMOJIS.filter((_, i) => true) : EMOJIS); // recherche simple (démo) : garde tout si pas de correspondance par nom
+    if (q && !"😀".includes(q)) { /* pas de table de noms complète dans cette démo */ }
+  });
+  document.addEventListener("click", (e) => { if (!emojiPop.contains(e.target)) closeEmojiPop(); });
+
+  // ---- favori ----
+  starBtn.addEventListener("click", () => { state.fav = !state.fav; starBtn.classList.toggle("active", state.fav); refreshDirty(); });
+
+  // ---- nom ----
+  nameInput.addEventListener("input", () => { state.name = nameInput.value; refreshDirty(); });
+
+  // ---- couleurs ----
+  const COLORS = ["c1","c2","c3","c4","c5","c6","c7","c8"];
+  COLORS.forEach(c => {
+    const b = document.createElement("button");
+    b.className = "swatch"; b.style.background = `var(--${c})`; b.dataset.c = c;
+    b.addEventListener("click", () => {
+      state.color = c;
+      document.querySelectorAll(".swatch").forEach(s => s.classList.remove("selected"));
+      b.classList.add("selected");
+      document.documentElement.style.setProperty("--chosen", `var(--${c})`);
+      $("thumbBtn").style.background = `linear-gradient(135deg, var(--${c}), var(--blue))`;
+      refreshDirty();
+    });
+    swatchesEl.appendChild(b);
+  });
+
+  // ---- catégorie : serveur (contexte) -> catégories -> créer ----
+  let CATEGORIES = ["Effets", "Mèmes", "Alertes", "Musique"];
+  const catTrigger = $("catTrigger"), catTriggerLabel = $("catTriggerLabel"), catPop = $("catPop"), catList = $("catList");
+  const catAddRow = $("catAddRow"), catAddBtn = $("catAddBtn"), catAddInputRow = $("catAddInputRow"), catNewInput = $("catNewInput");
+
+  function renderCatList() {
+    catList.innerHTML = "";
+    const options = [{ v: "", label: "Aucune" }, ...CATEGORIES.map(c => ({ v: c, label: c }))];
+    options.forEach(opt => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "cat-item" + (state.category === opt.v ? " selected" : "");
+      b.innerHTML = `<span>${opt.label}</span><span class="check">✓</span>`;
+      b.addEventListener("click", () => {
+        state.category = opt.v;
+        catTriggerLabel.textContent = opt.v || "Aucune";
+        closeCatPop(); refreshDirty();
+      });
+      catList.appendChild(b);
+    });
+  }
+  function openCatPop() { catPop.classList.add("open"); renderCatList(); }
+  function closeCatPop() { catPop.classList.remove("open"); catAddInputRow.style.display = "none"; catAddRow.style.display = "block"; }
+  catTrigger.addEventListener("click", (e) => { e.stopPropagation(); catPop.classList.contains("open") ? closeCatPop() : openCatPop(); });
+
+  catAddBtn.addEventListener("click", () => {
+    catAddRow.style.display = "none"; catAddInputRow.style.display = "flex";
+    catNewInput.value = ""; catNewInput.focus();
+  });
+  $("catCancelBtn").addEventListener("click", () => { catAddInputRow.style.display = "none"; catAddRow.style.display = "block"; });
+  function confirmNewCategory() {
+    const name = catNewInput.value.trim();
+    if (!name) return;
+    const exists = CATEGORIES.some(c => c.toLowerCase() === name.toLowerCase());
+    if (!exists) CATEGORIES.push(name);
+    state.category = name;
+    catTriggerLabel.textContent = name;
+    closeCatPop(); refreshDirty();
+  }
+  $("catConfirmBtn").addEventListener("click", confirmNewCategory);
+  catNewInput.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmNewCategory(); if (e.key === "Escape") { catAddInputRow.style.display = "none"; catAddRow.style.display = "block"; } });
+  document.addEventListener("click", (e) => { if (!catPop.contains(e.target) && !catTrigger.contains(e.target)) closeCatPop(); });
+
+  // ---- volume / gain ----
+  const gainSlider = $("gainSlider"), gainChip = $("gainChip"), gainResetBtn = $("gainResetBtn");
+  function applyGainVisuals() {
+    gainChip.textContent = state.gain + "%";
+    gainResetBtn.style.visibility = state.gain === 100 ? "hidden" : "visible";
+    const factor = 0.4 + (state.gain / 200) * 1.2; // 0% -> x0.4 · 100% -> x1.0 · 200% -> x1.6
+    waveStatic.style.transform = `scaleY(${factor})`;
+    waveSelect.style.transform = `scaleY(${factor})`;
+  }
+  function setGain(v) {
+    state.gain = Math.min(200, Math.max(0, Math.round(v / 5) * 5));
+    gainSlider.value = state.gain;
+    applyGainVisuals(); refreshDirty();
+  }
+  gainSlider.addEventListener("input", () => setGain(parseInt(gainSlider.value, 10)));
+  $("gainMinus").addEventListener("click", () => setGain(state.gain - 5));
+  $("gainPlus").addEventListener("click", () => setGain(state.gain + 5));
+  gainResetBtn.addEventListener("click", () => setGain(100));
+
+  // ---- trim : poignées déplaçables ----
+  function pctToTime(p) { return (p / 100 * DURATION).toFixed(1); }
+  function updateTrimVisuals() {
+    handleStart.style.left = state.start + "%";
+    handleEnd.style.left = state.end + "%";
+    trimSelect.style.left = state.start + "%";
+    trimSelect.style.width = (state.end - state.start) + "%";
+    timeChip.textContent = `${pctToTime(state.start)}s – ${pctToTime(state.end)}s`;
+  }
+  function dragHandle(handle, isStart) {
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      const move = (ev) => {
+        const rect = timeline.getBoundingClientRect();
+        let pct = Math.min(100, Math.max(0, ((ev.clientX - rect.left) / rect.width) * 100));
+        if (isStart) { state.start = Math.min(pct, state.end - 3); if (state.start < 0) state.start = 0; }
+        else { state.end = Math.max(pct, state.start + 3); if (state.end > 100) state.end = 100; }
+        updateTrimVisuals(); refreshDirty();
+      };
+      const up = () => { document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", up); };
+      document.addEventListener("pointermove", move); document.addEventListener("pointerup", up);
+    });
+  }
+  dragHandle(handleStart, true); dragHandle(handleEnd, false);
+  updateTrimVisuals();
+
+  // ---- lecture (démo visuelle du playhead) ----
+  const playhead = $("playhead"), playBtn = $("playBtn");
+  let playing = false, raf = null;
+  playBtn.addEventListener("click", () => {
+    playing = !playing;
+    playBtn.innerHTML = playing ? "⏸ <span>Lecture…</span>" : "▶ <span>Écouter l'extrait</span>";
+    if (playing) { playhead.style.opacity = 1; animatePlayhead(); } else { playhead.style.opacity = 0; cancelAnimationFrame(raf); }
+  });
+  function animatePlayhead() {
+    const start = performance.now();
+    const spanPct = state.end - state.start;
+    const spanSec = spanPct / 100 * DURATION;
+    function step(now) {
+      if (!playing) return;
+      const t = ((now - start) / 1000) % spanSec;
+      const pct = state.start + (t / spanSec) * spanPct;
+      playhead.style.left = pct + "%";
+      raf = requestAnimationFrame(step);
+    }
+    raf = requestAnimationFrame(step);
+  }
+  $("volBtn").addEventListener("click", () => { $("volBtn").textContent = $("volBtn").textContent === "🔊" ? "🔇" : "🔊"; });
+
+  // ---- fichier son ----
+  $("deleteFileBtn").addEventListener("click", () => {
+    state.hasFile = false; fileRow.style.display = "none"; replaceRow.style.display = "flex"; refreshDirty();
+  });
+  $("pickFileBtn").addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) {
+      state.hasFile = true; state.fileName = fileInput.files[0].name;
+      fileNameEl.textContent = state.fileName;
+      fileRow.style.display = "flex"; replaceRow.style.display = "none"; refreshDirty();
+    }
+  });
+
+  // ---- dirty-state (Enregistrer actif seulement si modifié) ----
+  function refreshDirty() {
+    const dirty = JSON.stringify(state) !== JSON.stringify(snapshot);
+    saveBtn.disabled = !dirty;
+  }
+
+  saveBtn.addEventListener("click", () => {
+    snapshot = JSON.parse(JSON.stringify(state));
+    saveBtn.disabled = true;
+    toast.classList.add("show");
+    setTimeout(() => toast.classList.remove("show"), 1600);
+  });
+
+  cancelBtn.addEventListener("click", () => {
+    Object.assign(state, snapshot);
+    nameInput.value = state.name;
+    thumbEmoji.textContent = state.emoji;
+    starBtn.classList.toggle("active", state.fav);
+    catTriggerLabel.textContent = state.category || "Aucune";
+    gainSlider.value = state.gain; applyGainVisuals();
+    updateTrimVisuals();
+    if (state.color) {
+      document.querySelectorAll(".swatch").forEach(s => s.classList.toggle("selected", s.dataset.c === state.color));
+      $("thumbBtn").style.background = `linear-gradient(135deg, var(--${state.color}), var(--blue))`;
+    }
+    refreshDirty();
+  });
+
+  applyGainVisuals();
+
+  // ---- fermeture / réouverture (démo autonome) ----
+  closeBtn.addEventListener("click", () => { overlay.classList.add("hidden"); reopenBtn.classList.add("show"); });
+  reopenBtn.addEventListener("click", () => { overlay.classList.remove("hidden"); reopenBtn.classList.remove("show"); });
+})();
+</script>
+</body>
+</html>
