@@ -440,7 +440,7 @@ namespace WaseBoard.Services
             }
         }
 
-        /// <summary>Modifie en un seul appel le nom, l'emoji et/ou la portion gardée d'un son (fenêtre « Redécouper »).
+        /// <summary>Modifie en un seul appel le nom, l'emoji et/ou la portion gardée d'un son (fenêtre « Éditer »).
         /// `trim` : null = ne pas toucher à la découpe ; (null, null) = retirer la découpe (le son entier est toujours
         /// là côté serveur) ; (début, fin) = nouvelle portion. Met à jour le SoundItem en cas de succès.</summary>
         public async Task<bool> UpdateSoundDetailsAsync(SoundItem item, string? name, string? emoji,

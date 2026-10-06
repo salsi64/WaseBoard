@@ -10,7 +10,7 @@ using WaseBoard.Services;
 
 namespace WaseBoard.Windows
 {
-    /// <summary>Ajout d'un nouveau son, ou modification d'un son existant (« Redécouper »).</summary>
+    /// <summary>Ajout d'un nouveau son, ou modification d'un son existant (« Éditer »).</summary>
     public enum TrimWindowMode { Add, Edit }
 
     /// <summary>
@@ -59,8 +59,8 @@ namespace WaseBoard.Windows
 
             if (mode == TrimWindowMode.Edit)
             {
-                Title = "Redécouper le son";
-                ChromeTitleBar.TitleText = "Redécouper le son";
+                Title = "Éditer le son";
+                ChromeTitleBar.TitleText = "Éditer le son";
                 ConfirmButton.Content = "Enregistrer";
                 HintText.Text = "Le son complet est conservé : déplacez les poignées pour changer la partie jouée, ou « Tout garder » pour retrouver le son entier.";
             }

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:chrome="clr-namespace:WaseBoard.Windows.Chrome"
         xmlns:local="clr-namespace:WaseBoard.Windows"
-        Title="Découper le son"
+        Title="Éditer le son"
         FontFamily="Segoe UI Emoji, Segoe UI" Width="780" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource BgBrush}"
@@ -17,7 +17,7 @@
             <RowDefinition Height="36"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <chrome:TitleBarControl x:Name="ChromeTitleBar" Grid.Row="0" TitleText="Découper le son" ShowMinMax="False"/>
+        <chrome:TitleBarControl x:Name="ChromeTitleBar" Grid.Row="0" TitleText="Éditer le son" ShowMinMax="False"/>
         <Grid Grid.Row="1" Margin="20,4,20,18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -81,7 +81,7 @@
             <TextBlock x:Name="TimeLabel" Foreground="{DynamicResource TextBrush}" Opacity="0.8" FontSize="12"
                        Text="Début : 0:00 — Fin : 0:00 — Durée sélectionnée : 0:00"/>
             <TextBlock x:Name="HintText" Foreground="{DynamicResource TextBrush}" Opacity="0.6" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"
-                       Text="Faites glisser les poignées pour ne garder qu'une partie. Le son complet est conservé : vous pourrez le recouper plus tard (clic droit › Redécouper)."/>
+                       Text="Faites glisser les poignées pour ne garder qu'une partie. Le son complet est conservé : vous pourrez le modifier plus tard (clic droit › Éditer)."/>
         </StackPanel>
 
         <local:EmojiPaletteControl x:Name="Palette" Grid.Row="4" Height="126" Margin="0,0,0,14"/>

@@ -1090,7 +1090,7 @@ namespace WaseBoard
                 {
                     var proceed = ConfirmDialog.Show(this,
                         $"Ce fichier est identique à « {hashMatch.Name} », déjà présent dans le catalogue.\n" +
-                        "Pour une autre portion du même son, vous pouvez aussi recouper l'existant (clic droit › Redécouper).\nL'ajouter quand même ?");
+                        "Pour une autre portion du même son, vous pouvez aussi modifier l'existant (clic droit › Éditer).\nL'ajouter quand même ?");
                     if (!proceed) continue;
                 }
                 else if (nameMatch is not null)
@@ -1230,7 +1230,7 @@ namespace WaseBoard
                 }
             };
 
-            var retrimItem = new MenuItem { Header = item.IsTrimmed ? "✂ Redécouper…" : "✂ Découper…" };
+            var retrimItem = new MenuItem { Header = "✏ Éditer…" };
             retrimItem.Click += async (_, _) => await EditSoundAsync(item);
 
             var hotkeyItem = new MenuItem { Header = string.IsNullOrEmpty(item.Hotkey) ? "Définir un raccourci..." : $"Modifier le raccourci ({item.Hotkey})" };
@@ -1323,7 +1323,7 @@ namespace WaseBoard
             menu.IsOpen = true;
         }
 
-        /// <summary>« Redécouper… » : rouvre la fenêtre de découpe sur le son COMPLET (gardé par le serveur) avec la portion
+        /// <summary>« Éditer… » : rouvre la fenêtre d'édition sur le son COMPLET (gardé par le serveur) avec la portion
         /// actuelle déjà placée ; nom et emoji sont modifiables au passage. Un seul appel au serveur pour tout enregistrer.</summary>
         private async Task EditSoundAsync(SoundItem item)
         {

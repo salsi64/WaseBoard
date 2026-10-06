@@ -112,7 +112,7 @@ namespace WaseBoard.Models
                 var kept = Fmt(_trimEndMs!.Value - _trimStartMs!.Value);
                 var range = $"{Fmt(_trimStartMs.Value)} → {Fmt(_trimEndMs.Value)}";
                 var total = _durationMs > 0 ? $" sur {Fmt(_durationMs)}" : "";
-                return gestures + $"\n✂ Découpé : {range}{total} (durée jouée {kept}) — clic droit › Redécouper";
+                return gestures + $"\n✂ Découpé : {range}{total} (durée jouée {kept}) — clic droit › Éditer";
             }
         }
 
