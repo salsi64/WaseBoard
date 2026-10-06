@@ -10,6 +10,7 @@
         <local:UriToBitmapImageConverter x:Key="UriToBitmapImageConverter"/>
         <local:EmojiToImageSourceConverter x:Key="EmojiToImageSourceConverter"/>
         <local:IdToColorConverter x:Key="IdToColorConverter"/>
+        <local:SoundTintConverter x:Key="SoundTintConverter"/>
         <local:CountToVisibilityConverter x:Key="CountToVisibilityConverter"/>
         <local:WaveformPeaksToPathConverter x:Key="WaveformPeaksToPathConverter"/>
         <local:StringNotEmptyConverter x:Key="StringNotEmptyConverter"/>

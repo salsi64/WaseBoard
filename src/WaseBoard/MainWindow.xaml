@@ -50,7 +50,10 @@
                                 <Border.Effect><BlurEffect Radius="16"/></Border.Effect>
                             </Border>
                             <Border x:Name="CardBorder" Background="{DynamicResource PanelBrush}" CornerRadius="10" BorderThickness="2" BorderBrush="Transparent" Height="68">
-                                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="4,3,4,2"/>
+                                <Grid>
+                                    <Border CornerRadius="8" IsHitTestVisible="False" Background="{Binding Converter={StaticResource SoundTintConverter}}"/>
+                                    <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="4,3,4,2"/>
+                                </Grid>
                             </Border>
                             <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="10" BorderThickness="2" IsHitTestVisible="False"
                                     BorderBrush="{Binding Converter={StaticResource IdToColorConverter}}"/>
@@ -197,8 +200,13 @@
                                 <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
                             </Border>
                             <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="18" Height="54"
-                                    BorderThickness="2" BorderBrush="{DynamicResource PillBorderBrush}" Padding="4,3,15,4">
-                                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                    BorderThickness="2" BorderBrush="{DynamicResource PillBorderBrush}">
+                                <Grid>
+                                    <!-- Teinte légère de la couleur choisie (rien si aucune couleur choisie) -->
+                                    <Border x:Name="PillTint" CornerRadius="16" IsHitTestVisible="False"
+                                            Background="{Binding Converter={StaticResource SoundTintConverter}}"/>
+                                    <ContentPresenter x:Name="PillContent" Margin="4,3,15,4" HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                                </Grid>
                             </Border>
                             <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="18" BorderThickness="2" IsHitTestVisible="False"
                                     BorderBrush="{Binding Converter={StaticResource IdToColorConverter}}"/>
@@ -213,7 +221,8 @@
                             <DataTrigger Binding="{Binding Source={x:Static local:ThemeState.Options}, Path=ShowWaveforms}" Value="False">
                                 <Setter TargetName="PillBorder" Property="Height" Value="40"/>
                                 <Setter TargetName="PillBorder" Property="CornerRadius" Value="20"/>
-                                <Setter TargetName="PillBorder" Property="Padding" Value="4,0,4,0"/>
+                                <Setter TargetName="PillContent" Property="Margin" Value="4,0,4,0"/>
+                                <Setter TargetName="PillTint" Property="CornerRadius" Value="18"/>
                                 <Setter TargetName="Ring" Property="CornerRadius" Value="20"/>
                                 <Setter TargetName="Halo" Property="CornerRadius" Value="24"/>
                             </DataTrigger>
