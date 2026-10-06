@@ -11,7 +11,9 @@
     --panel: #182236;
     --panel-hi: #1E2C45;
     --accent: #38BDF8;
-    --accent-dim: #38BDF833;
+    --accent-2: #F472B6;
+    --accent-3: #34D399;
+    --accent-4: #FBBF24;
     --on-accent: #0B1220;
     --text: #EAF0FA;
     --text-dim: #B8C4D9;
@@ -48,14 +50,14 @@
   /* égaliseur décoratif */
   .eq { display: flex; justify-content: center; gap: 4px; align-items: flex-end; height: 22px; margin: 14px 0 22px; }
   .eq span {
-    width: 4px; border-radius: 2px; background: var(--accent); opacity: .55;
+    width: 4px; border-radius: 2px; opacity: .9;
     animation: bounce 1.1s ease-in-out infinite;
   }
-  .eq span:nth-child(1) { height: 6px;  animation-delay: 0s; }
-  .eq span:nth-child(2) { height: 16px; animation-delay: .1s; }
-  .eq span:nth-child(3) { height: 22px; animation-delay: .2s; }
-  .eq span:nth-child(4) { height: 12px; animation-delay: .3s; }
-  .eq span:nth-child(5) { height: 18px; animation-delay: .4s; }
+  .eq span:nth-child(1) { height: 6px;  background: var(--accent);   animation-delay: 0s; }
+  .eq span:nth-child(2) { height: 16px; background: var(--accent-2); animation-delay: .1s; }
+  .eq span:nth-child(3) { height: 22px; background: var(--accent-4); animation-delay: .2s; }
+  .eq span:nth-child(4) { height: 12px; background: var(--accent-3); animation-delay: .3s; }
+  .eq span:nth-child(5) { height: 18px; background: var(--accent-2); animation-delay: .4s; }
   @keyframes bounce { 0%, 100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
   @media (prefers-reduced-motion: reduce) { .eq span { animation: none; } }
 
@@ -134,10 +136,16 @@
     display: flex;
     flex-direction: column;
   }
-  .choice.recommended { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim); position: relative; }
+  .choice.recommended {
+    --card-accent: var(--accent);
+    border-color: var(--card-accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--card-accent) 25%, transparent);
+    position: relative;
+  }
+  .choice.accent { --card-accent: var(--accent); border-color: var(--card-accent); }
   .badge {
     position: absolute; top: -11px; left: 20px;
-    background: var(--accent); color: var(--on-accent);
+    background: var(--card-accent, var(--accent)); color: var(--on-accent);
     font-size: 11px; font-weight: 700; letter-spacing: .02em;
     padding: 3px 10px; border-radius: 999px;
   }
@@ -191,23 +199,22 @@
     </div>
     <div class="actions-hint">La plupart des gens n'ont besoin que du premier bouton — voir ci-dessous.</div>
 
-    <div class="choice recommended reveal" style="margin-bottom: 20px;">
-      <span class="badge">C'EST VOUS ?</span>
+    <div class="choice recommended reveal" style="--card-accent: var(--accent-2); margin-bottom: 20px;">
+      <span class="badge">LE PLUS FRÉQUENT</span>
       <h3>🙋 Vous voulez juste utiliser WaseBoard</h3>
-      <p>Si quelqu'un a déjà ajouté le bot sur votre serveur Discord (le cas le plus fréquent), vous n'avez besoin de rien d'autre :</p>
+      <p>Le bot est presque sûrement déjà sur votre serveur Discord :</p>
       <ol>
         <li>Téléchargez le client ci-dessus</li>
-        <li>Connectez-vous avec votre compte Discord quand l'application le demande</li>
+        <li>Connectez-vous avec Discord</li>
       </ol>
-      <p style="margin-top:12px;">C'est tout — l'application se connecte automatiquement à la bonne instance, rien à saisir. La connexion Discord sert uniquement à afficher votre avatar et à retrouver votre salon vocal.</p>
-      <p style="opacity:.8; margin-bottom:0;">Vous rejoignez plutôt un serveur WaseBoard auto-hébergé (pas l'instance publique) ? Au premier lancement, cliquez « Vous avez votre propre serveur WaseBoard ? », ou changez l'adresse plus tard dans Paramètres.</p>
+      <p style="opacity:.8; margin-top:12px; margin-bottom:0;">C'est tout, rien d'autre à saisir. Vous rejoignez plutôt un autre serveur WaseBoard auto-hébergé ? Cliquez « Vous avez votre propre serveur WaseBoard ? » au premier lancement.</p>
     </div>
 
     <div class="section-label">Vous administrez un serveur Discord ?</div>
 
     <div class="card reveal">
       <h2>Comment ça marche</h2>
-      <p>WaseBoard, c'est deux morceaux qui se connectent au même endroit : le <strong>bot Discord</strong> (dans votre salon vocal) et l'<strong>application Windows</strong> (sur votre PC). Ce point commun s'appelle un « serveur WaseBoard » — c'est lui qui héberge le catalogue de sons et fait le lien entre les deux.</p>
+      <p>Le <strong>bot Discord</strong> et l'<strong>application Windows</strong> se connectent tous les deux au même endroit : un « serveur WaseBoard », qui héberge le catalogue de sons et fait le lien entre les deux.</p>
       <svg class="diagram" viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schéma : votre serveur Discord et l'application WaseBoard se connectent tous les deux à un serveur WaseBoard central">
         <rect class="box" x="8" y="30" width="162" height="60" rx="12"/>
         <text x="89" y="55" text-anchor="middle">💬 Votre Discord</text>
@@ -224,25 +231,25 @@
         <path class="flow" d="M170 60 H219"/>
         <path class="flow" d="M381 60 H430"/>
       </svg>
-      <p style="opacity:.85;">Ce serveur, il en existe déjà un <strong>public et gratuit</strong> (celui de cette page) : vous n'avez besoin d'en installer un vous-même que si vous voulez le vôtre, en totale indépendance. Les deux cas sont expliqués ci-dessous.</p>
+      <p style="opacity:.85;">Celui de cette page est <strong>public et gratuit</strong> — inutile d'en installer un, sauf si vous voulez le vôtre.</p>
     </div>
 
     <div class="choice-grid reveal">
-      <div class="choice recommended">
+      <div class="choice recommended" style="--card-accent: var(--accent);">
         <span class="badge">RECOMMANDÉ</span>
         <h3>⚡ Utiliser l'instance publique</h3>
-        <p>Rien à installer côté serveur : ajoutez le bot à votre Discord, téléchargez le client, connectez-vous — c'est tout. Chaque serveur Discord obtient sa propre bibliothèque de sons, isolée des autres.</p>
+        <p>Ajoutez le bot à votre Discord, téléchargez le client, connectez-vous — c'est tout.</p>
         <ul>
           <li>Gratuit, en ligne dès maintenant</li>
           <li>Aucune compétence technique requise</li>
-          <li>Usage raisonnable : quelques plafonds (nb. de sons, taille) pour que ça reste disponible pour tous</li>
+          <li>Bibliothèque de sons propre à chaque serveur</li>
         </ul>
         <div class="spacer"></div>
         <a class="button primary block" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter à mon serveur</a>
       </div>
-      <div class="choice">
+      <div class="choice accent" style="--card-accent: var(--accent-3);">
         <h3>🏠 Héberger mon propre serveur</h3>
-        <p>WaseBoard est open-source : il n'y a pas de serveur central imposé par le projet. Chaque groupe peut héberger la sienne, sans limite et avec un contrôle total des données.</p>
+        <p>Open-source, sans serveur central imposé : la vôtre, sans limite, avec un contrôle total des données.</p>
         <ul>
           <li>Assistant Docker guidé (~15 min)</li>
           <li>Aucun plafond : c'est votre machine</li>
