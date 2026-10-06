@@ -72,7 +72,7 @@ namespace WaseBoard.Models
         public string? BackgroundColorHex { get; set; }
 
         /// <summary>Thème d'interface : "Classic" (barre d'outils classique), "Modern" (barre latérale, boutons en pilule)
-        /// ou "Flat" (disposition moderne + palette bleu nuit/violet imposée).</summary>
+        /// ou "Flat" (disposition moderne + style d'interface Flat ; indépendant de la palette de couleurs).</summary>
         public string UiTheme { get; set; } = "Modern";
 
         /// <summary>Si vrai, la palette clair/sombre suit automatiquement le thème Windows (ignore BackgroundColorHex).</summary>

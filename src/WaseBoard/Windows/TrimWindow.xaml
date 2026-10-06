@@ -4,13 +4,32 @@
         xmlns:chrome="clr-namespace:WaseBoard.Windows.Chrome"
         xmlns:local="clr-namespace:WaseBoard.Windows"
         Title="Éditer le son"
-        FontFamily="Segoe UI Emoji, Segoe UI" Width="780" SizeToContent="Height"
+        FontFamily="Segoe UI Emoji, Segoe UI" Width="540" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource BgBrush}"
         chrome:WindowChromeBehavior.Enable="True"
         ResizeMode="NoResize"
         TextOptions.TextFormattingMode="Display"
         Closing="Window_Closing">
+    <Window.Resources>
+        <!-- Libellé de section en petites capitales façon éditeur audio -->
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Opacity" Value="0.65"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+        <!-- Petit bouton carré (− / + / ↺) -->
+        <Style x:Key="StepButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+        </Style>
+    </Window.Resources>
+
     <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource BgBrush}">
     <Grid>
         <Grid.RowDefinitions>
@@ -18,97 +37,209 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
         <chrome:TitleBarControl x:Name="ChromeTitleBar" Grid.Row="0" TitleText="Éditer le son" ShowMinMax="False"/>
-        <Grid Grid.Row="1" Margin="20,4,20,18">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
 
-        <!-- Nom + emoji sur une seule ligne : le choix de l'emoji se fait ici, plus dans une 2ᵉ fenêtre après l'envoi -->
-        <Grid Grid.Row="0" Margin="0,0,0,12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="Nom du son :" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <TextBox x:Name="NameBox" Grid.Column="1" Height="30" Margin="0,0,20,0"/>
-            <TextBlock Grid.Column="2" Text="Emoji :" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <Border Grid.Column="3" Width="34" Height="34" CornerRadius="17" Margin="0,0,8,0" Background="{DynamicResource PanelBrush}">
-                <Image x:Name="EmojiPreview" Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="HighQuality"/>
+        <StackPanel Grid.Row="1" Margin="22,6,22,20">
+
+            <!-- Vignette (emoji + favori) et nom -->
+            <Grid Margin="0,0,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0" Width="76" Height="76" VerticalAlignment="Top">
+                    <Button x:Name="ThumbButton" Width="68" Height="68" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                            Click="ThumbButton_Click" Cursor="Hand" ToolTip="Choisir un emoji">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border CornerRadius="20" Background="{DynamicResource AccentBrush}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <Grid>
+                            <Image x:Name="EmojiPreview" Width="38" Height="38" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <TextBlock x:Name="EmojiPlaceholder" Text="＋" FontSize="26" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource OnAccentBrush}" Opacity="0.7"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="FavoriteButton" Width="26" Height="26" HorizontalAlignment="Right" VerticalAlignment="Top"
+                            Click="FavoriteButton_Click" Cursor="Hand" ToolTip="Favori" Visibility="Collapsed">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border CornerRadius="13" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <TextBlock x:Name="FavoriteGlyph" Text="☆" FontSize="14" Foreground="{DynamicResource TextBrush}" Opacity="0.7"/>
+                    </Button>
+                </Grid>
+
+                <StackPanel Grid.Column="1" Margin="18,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="NOM" Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="NameBox" Height="36" FontSize="14" VerticalContentAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Sections propres à un son existant : catégories et volume (masquées à l'ajout) -->
+            <StackPanel x:Name="EditOnlyPanel" Visibility="Collapsed">
+                <StackPanel Margin="0,0,0,18">
+                    <TextBlock Text="CATÉGORIES" Style="{StaticResource FieldLabel}"/>
+                    <Button x:Name="CategoryTrigger" Click="CategoryTrigger_Click" Height="36" Padding="12,0"
+                            HorizontalContentAlignment="Stretch" Background="{DynamicResource PanelBrush}" Foreground="{DynamicResource TextBrush}">
+                        <Grid>
+                            <TextBlock x:Name="CategoryTriggerText" Text="Aucune" VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                            <TextBlock Text="▾" Opacity="0.55" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                        </Grid>
+                    </Button>
+                    <Popup x:Name="CategoryPopup" PlacementTarget="{Binding ElementName=CategoryTrigger}" Placement="Bottom"
+                           StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" Closed="CategoryPopup_Closed">
+                        <Border Margin="0,6,16,16" Width="320" Background="{DynamicResource PanelBrush}"
+                                BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1" CornerRadius="14" Padding="8">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.5"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto">
+                                    <StackPanel x:Name="CategoryList"/>
+                                </ScrollViewer>
+                                <Border BorderBrush="{DynamicResource TrackBrush}" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="0,6,0,0">
+                                    <StackPanel>
+                                        <Button x:Name="NewCategoryButton" Content="+ Nouvelle catégorie" Click="NewCategoryButton_Click"
+                                                HorizontalContentAlignment="Left" Padding="10,7" Background="Transparent" BorderThickness="0"
+                                                Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold"/>
+                                        <Grid x:Name="NewCategoryRow" Visibility="Collapsed">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="NewCategoryBox" Height="32" KeyDown="NewCategoryBox_KeyDown"/>
+                                            <Button Grid.Column="1" Content="✓" Width="32" Height="32" Margin="6,0,0,0" Padding="0" Click="NewCategoryConfirm_Click"
+                                                    Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                                            <Button Grid.Column="2" Content="✕" Width="32" Height="32" Margin="6,0,0,0" Padding="0" Click="NewCategoryCancel_Click"
+                                                    Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </StackPanel>
+
+                <StackPanel Margin="0,0,0,18">
+                    <Grid Margin="0,0,0,6">
+                        <TextBlock Text="VOLUME" Style="{StaticResource FieldLabel}" Margin="0" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="ResetVolumeButton" Content="↺" Style="{StaticResource StepButton}" Width="26" Height="26" Margin="0,0,8,0"
+                                    ToolTip="Revenir à 100 %" Click="ResetVolume_Click" Visibility="Hidden"/>
+                            <Border Background="{DynamicResource PanelBrush}" CornerRadius="8" Padding="10,3">
+                                <TextBlock x:Name="VolumeChip" Text="100%" FontSize="12" Foreground="{DynamicResource TextBrush}"/>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Content="−" Style="{StaticResource StepButton}" ToolTip="Réduire" Click="VolumeMinus_Click"/>
+                        <Slider x:Name="VolumeSlider" Grid.Column="1" Minimum="0" Maximum="200" Value="100" SmallChange="5" LargeChange="10"
+                                TickFrequency="5" IsSnapToTickEnabled="True" Margin="12,0" VerticalAlignment="Center"
+                                ValueChanged="VolumeSlider_ValueChanged"/>
+                        <Button Grid.Column="2" Content="+" Style="{StaticResource StepButton}" ToolTip="Amplifier" Click="VolumePlus_Click"/>
+                    </Grid>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Découpe -->
+            <Grid Margin="0,0,0,6">
+                <TextBlock Text="DÉCOUPE" Style="{StaticResource FieldLabel}" Margin="0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TimeLabel" HorizontalAlignment="Right" VerticalAlignment="Center" FontSize="12"
+                           Foreground="{DynamicResource TextBrush}" Opacity="0.8" Text="0:00 → 0:00"/>
+            </Grid>
+
+            <TextBlock x:Name="LoadingText" Text="Analyse du fichier audio..."
+                       Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
+
+            <Border Background="{DynamicResource PanelBrush}" CornerRadius="12" Height="110" Margin="0,0,0,6">
+                <Canvas x:Name="WaveformCanvas" Width="496" Height="110" ClipToBounds="True">
+                    <!-- Zones grisées avant/après la sélection -->
+                    <Rectangle x:Name="LeftMaskRect" Fill="#99000000" Height="110" Canvas.Top="0"/>
+                    <Rectangle x:Name="RightMaskRect" Fill="#99000000" Height="110" Canvas.Top="0"/>
+
+                    <!-- Poignées de découpe : capsule claire, zone de saisie élargie -->
+                    <Thumb x:Name="StartHandle" Width="14" Height="110" Canvas.Top="0"
+                           DragDelta="StartHandle_DragDelta" Cursor="SizeWE">
+                        <Thumb.Template>
+                            <ControlTemplate TargetType="Thumb">
+                                <Grid Background="Transparent" Width="14" Height="110">
+                                    <Border Width="4" Height="44" CornerRadius="2" Background="{DynamicResource TextBrush}"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Grid>
+                            </ControlTemplate>
+                        </Thumb.Template>
+                    </Thumb>
+                    <Thumb x:Name="EndHandle" Width="14" Height="110" Canvas.Top="0"
+                           DragDelta="EndHandle_DragDelta" Cursor="SizeWE">
+                        <Thumb.Template>
+                            <ControlTemplate TargetType="Thumb">
+                                <Grid Background="Transparent" Width="14" Height="110">
+                                    <Border Width="4" Height="44" CornerRadius="2" Background="{DynamicResource TextBrush}"
+                                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Grid>
+                            </ControlTemplate>
+                        </Thumb.Template>
+                    </Thumb>
+                </Canvas>
             </Border>
-            <TextBox x:Name="EmojiBox" Grid.Column="4" Width="64" Height="30" FontSize="16" HorizontalContentAlignment="Center"
-                     FontFamily="Segoe UI Emoji, Segoe UI" TextChanged="EmojiBox_TextChanged"
-                     ToolTip="Choisissez dans la grille ci-dessous, ou collez un emoji"/>
-        </Grid>
 
-        <TextBlock x:Name="LoadingText" Grid.Row="1" Text="Analyse du fichier audio..."
-                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
-
-        <Border Grid.Row="2" Background="{DynamicResource PanelBrush}" CornerRadius="6" Height="150" Margin="0,0,0,4">
-            <Canvas x:Name="WaveformCanvas" Width="736" Height="150" ClipToBounds="True">
-                <!-- Zones grisées avant/après la sélection -->
-                <Rectangle x:Name="LeftMaskRect" Fill="#99000000" Height="150" Canvas.Top="0"/>
-                <Rectangle x:Name="RightMaskRect" Fill="#99000000" Height="150" Canvas.Top="0"/>
-
-                <!-- Poignées de découpe (couleur d'accent de la palette) -->
-                <Thumb x:Name="StartHandle" Width="10" Height="150" Canvas.Top="0"
-                       DragDelta="StartHandle_DragDelta" Cursor="SizeWE">
-                    <Thumb.Template>
-                        <ControlTemplate TargetType="Thumb">
-                            <Rectangle Fill="{DynamicResource AccentBrush}" Width="10" Height="150"/>
-                        </ControlTemplate>
-                    </Thumb.Template>
-                </Thumb>
-                <Thumb x:Name="EndHandle" Width="10" Height="150" Canvas.Top="0"
-                       DragDelta="EndHandle_DragDelta" Cursor="SizeWE">
-                    <Thumb.Template>
-                        <ControlTemplate TargetType="Thumb">
-                            <Rectangle Fill="{DynamicResource AccentBrush}" Width="10" Height="150"/>
-                        </ControlTemplate>
-                    </Thumb.Template>
-                </Thumb>
-            </Canvas>
-        </Border>
-
-        <StackPanel Grid.Row="3" Margin="0,4,0,12">
-            <TextBlock x:Name="TimeLabel" Foreground="{DynamicResource TextBrush}" Opacity="0.8" FontSize="12"
-                       Text="Début : 0:00 — Fin : 0:00 — Durée sélectionnée : 0:00"/>
-            <TextBlock x:Name="HintText" Foreground="{DynamicResource TextBrush}" Opacity="0.6" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"
+            <TextBlock x:Name="HintText" Foreground="{DynamicResource TextBrush}" Opacity="0.6" FontSize="11" Margin="0,0,0,18" TextWrapping="Wrap"
                        Text="Faites glisser les poignées pour ne garder qu'une partie. Le son complet est conservé : vous pourrez le modifier plus tard (clic droit › Éditer)."/>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" Grid.Column="0">
+                    <Button x:Name="PreviewButton" Content="▶ Aperçu" Padding="14,8" Margin="0,0,8,0"
+                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
+                            BorderBrush="{DynamicResource TrackBrush}" Click="PreviewButton_Click"/>
+                    <Button x:Name="ResetButton" Content="Tout garder" Padding="14,8"
+                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
+                            BorderBrush="{DynamicResource TrackBrush}" Click="ResetButton_Click"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Grid.Column="1">
+                    <Button Content="Annuler" Padding="16,8" Margin="0,0,8,0" Click="Cancel_Click"
+                            Background="{DynamicResource PanelBrush}" Foreground="{DynamicResource TextBrush}"/>
+                    <Button x:Name="ConfirmButton" Content="Ajouter le son" Padding="20,8" Click="Confirm_Click" FontWeight="SemiBold"
+                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                </StackPanel>
+            </Grid>
         </StackPanel>
 
-        <local:EmojiPaletteControl x:Name="Palette" Grid.Row="4" Height="126" Margin="0,0,0,14"/>
-
-        <Grid Grid.Row="5">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-
-            <StackPanel Orientation="Horizontal" Grid.Column="0">
-                <Button x:Name="PreviewButton" Content="▶ Aperçu" Padding="14,8" Margin="0,0,8,0"
-                        Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                        BorderBrush="{DynamicResource TextBrush}" Click="PreviewButton_Click"/>
-                <Button x:Name="ResetButton" Content="Tout garder" Padding="14,8"
-                        Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                        BorderBrush="{DynamicResource TextBrush}" Click="ResetButton_Click"/>
-            </StackPanel>
-
-            <StackPanel Orientation="Horizontal" Grid.Column="1">
-                <Button Content="Annuler" Padding="14,8" Margin="0,0,8,0" Click="Cancel_Click"
-                        Background="Transparent" Foreground="{DynamicResource TextBrush}"/>
-                <Button x:Name="ConfirmButton" Content="Ajouter le son" Padding="18,8" Click="Confirm_Click"
-                        Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
-            </StackPanel>
-        </Grid>
-        </Grid>
+        <!-- Sélecteur d'emoji : s'ouvre sous la vignette (le champ texte reste là pour coller un emoji) -->
+        <Popup x:Name="EmojiPopup" PlacementTarget="{Binding ElementName=ThumbButton}" Placement="Bottom"
+               StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" Closed="EmojiPopup_Closed">
+            <Border Margin="0,6,16,16" Width="340" Background="{DynamicResource PanelBrush}"
+                    BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1" CornerRadius="14" Padding="10">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.5"/>
+                </Border.Effect>
+                <StackPanel>
+                    <TextBox x:Name="EmojiBox" Height="32" FontSize="15" HorizontalContentAlignment="Left" Margin="0,0,0,8"
+                             FontFamily="Segoe UI Emoji, Segoe UI" TextChanged="EmojiBox_TextChanged"
+                             ToolTip="Choisissez dans la grille ci-dessous, ou collez un emoji"/>
+                    <local:EmojiPaletteControl x:Name="Palette" Height="170"/>
+                </StackPanel>
+            </Border>
+        </Popup>
     </Grid>
     </Border>
 </Window>

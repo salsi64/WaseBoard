@@ -25,10 +25,6 @@ namespace WaseBoard.Services
             new PalettePreset("Amber", "Ambre", Hex("#17140F"), Hex("#241F16"), Hex("#3A3326"), Hex("#F7F2E8"), Hex("#F59E0B")),
         };
 
-        /// <summary>Palette imposée par le thème d'interface « Flat » (hors de All : elle n'est pas un choix de palette).</summary>
-        public static readonly PalettePreset Flat =
-            new("Flat", "Flat", Hex("#0D1220"), Hex("#161D30"), Hex("#2A3352"), Hex("#F1F3FA"), Hex("#8B5CF6"));
-
         public static PalettePreset Get(string? id) =>
             All.FirstOrDefault(p => p.Id == id) ?? All.First(p => p.Id == DefaultId);
 

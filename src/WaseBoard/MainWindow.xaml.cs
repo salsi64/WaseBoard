@@ -285,7 +285,7 @@ namespace WaseBoard
         private void ApplyColorScheme()
         {
             var settings = _library.Settings;
-            var preset = settings.UiTheme == "Flat" ? PalettePresets.Flat : PalettePresets.Get(settings.PaletteId);
+            var preset = PalettePresets.Get(settings.PaletteId);
 
             var snapshot = settings.FollowSystemTheme || settings.FollowSystemAccent ? RegistryThemeWatcher.ReadCurrent() : null;
             _lastSystemTheme = snapshot;
@@ -308,9 +308,9 @@ namespace WaseBoard
             res["OnAccentBrush"] = new SolidColorBrush(PalettePresets.OnAccent(accent));
         }
 
-        /// <summary>Bascule thème classique/moderne/flat (flat = disposition moderne + sa propre palette, voir
-        /// ApplyColorScheme). Paramètres/volume de la barre d'outils sont masqués en moderne (déjà dans la barre
-        /// latérale), seule voie d'accès en classique.</summary>
+        /// <summary>Bascule thème classique/moderne/flat (flat = disposition moderne + style d'interface Flat ; la
+        /// palette de couleurs reste un choix indépendant). Paramètres/volume de la barre d'outils sont masqués en
+        /// moderne (déjà dans la barre latérale), seule voie d'accès en classique.</summary>
         private void ApplyTheme()
         {
             var isModern = _library.Settings.UiTheme is "Modern" or "Flat";
@@ -1339,14 +1339,69 @@ namespace WaseBoard
 
             TimeSpan? start = item.TrimStartMs is { } s ? TimeSpan.FromMilliseconds(s) : null;
             TimeSpan? end = item.TrimEndMs is { } e ? TimeSpan.FromMilliseconds(e) : null;
-            var window = new TrimWindow(localPath, item.Name, TrimWindowMode.Edit, start, end, item.Emoji) { Owner = this };
+            var localCategories = _library.GetCategoriesInOrder();
+            var extras = new EditExtras
+            {
+                Volume = item.Volume,
+                IsFavorite = item.IsFavorite,
+                LocalCategories = localCategories,
+                SelectedLocalCategories = localCategories
+                    .Where(c => _library.Settings.Categories.TryGetValue(c, out var ids) && ids.Contains(item.Id)).ToList(),
+                SharedCategories = _sharedCategories.Where(s => CanShareTo(s, item))
+                    .Select(s => new SharedCategoryChoice
+                    {
+                        GuildId = s.GuildId,
+                        GuildName = StripSharedPrefix(s.GuildName),
+                        IsMember = s.SoundIds.Contains(item.Id) || item.GuildId == s.GuildId,
+                        Locked = item.GuildId == s.GuildId
+                    }).ToList()
+            };
+            var window = new TrimWindow(localPath, item.Name, TrimWindowMode.Edit, start, end, item.Emoji, extras) { Owner = this };
             if (window.ShowDialog() != true) return;
+
+            // Réglages locaux (volume, favori, catégories personnelles) : appliqués tout de suite, sans serveur.
+            var localChanged = false;
+            if (Math.Abs(window.ResultVolume - item.Volume) > 0.001f)
+            {
+                _library.SetVolume(item, window.ResultVolume);
+                localChanged = true;
+            }
+            if (window.ResultFavorite != item.IsFavorite)
+            {
+                _library.ToggleFavorite(item);
+                localChanged = true;
+            }
+            var wantedLocal = new HashSet<string>(window.ResultLocalCategories);
+            foreach (var category in _library.GetCategoriesInOrder().Concat(wantedLocal).Distinct())
+            {
+                var isMember = _library.Settings.Categories.TryGetValue(category, out var ids) && ids.Contains(item.Id);
+                if (wantedLocal.Contains(category) && !isMember) { _library.AddSoundToCategory(category, item); localChanged = true; }
+                else if (!wantedLocal.Contains(category) && isMember) { _library.RemoveSoundFromCategory(category, item); localChanged = true; }
+            }
+
+            // Catégories partagées des serveurs : une requête par changement (le serveur re-vérifie les droits).
+            var sharedFailed = false;
+            var sharedChanged = false;
+            foreach (var choice in window.ResultSharedCategories.Where(c => !c.Locked))
+            {
+                var wasMember = _sharedCategories.FirstOrDefault(s => s.GuildId == choice.GuildId)?.SoundIds.Contains(item.Id) ?? false;
+                if (choice.IsMember == wasMember) continue;
+                sharedChanged = true;
+                if (!await _library.SetSharedCategorySoundAsync(choice.GuildId, item, choice.IsMember)) sharedFailed = true;
+            }
+            if (sharedChanged) await RefreshSharedCategoriesAsync();
+            if (sharedFailed)
+                ToastService.Show("Une catégorie de serveur n'a pas pu être modifiée. " + _library.LastErrorDetail, ToastKind.Warning);
 
             var newName = window.ResultName != item.Name ? window.ResultName : null;
             var newEmoji = window.ResultEmoji != (item.Emoji ?? "") ? window.ResultEmoji : null;
             var trimChanged = window.ResultTrimStartMs != item.TrimStartMs || window.ResultTrimEndMs != item.TrimEndMs;
             (int?, int?)? newTrim = trimChanged ? (window.ResultTrimStartMs, window.ResultTrimEndMs) : null;
-            if (newName is null && newEmoji is null && newTrim is null) return;
+            if (newName is null && newEmoji is null && newTrim is null)
+            {
+                if (localChanged) RefreshSections();
+                return;
+            }
 
             if (await _library.UpdateSoundDetailsAsync(item, newName, newEmoji, newTrim))
             {

@@ -95,8 +95,6 @@
                         <TextBlock Text="Apparence" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12"/>
 
                         <TextBlock Text="Palette" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
-                        <TextBlock x:Name="PaletteFlatHint" Text="Le thème Flat impose sa propre palette (bleu nuit + violet)." FontSize="11" Opacity="0.7"
-                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8" Visibility="Collapsed"/>
                         <WrapPanel x:Name="PaletteList" Margin="0,0,0,16"/>
 
                         <CheckBox x:Name="FollowSystemThemeCheckBox" Content="Suivre le thème clair/sombre de Windows"
