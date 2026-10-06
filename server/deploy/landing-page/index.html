@@ -151,6 +151,21 @@
     text-align: center;
     margin-top: 40px;
   }
+  .actions-hint {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin: -14px 0 28px;
+  }
+  .section-label {
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin: 36px 0 -4px;
+  }
 
   /* apparition progressive au scroll (dégradée proprement si JS coupé) */
   html.js .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
@@ -170,10 +185,25 @@
     <img class="hero-shot reveal" src="hero.png" alt="Capture d'écran de l'application WaseBoard : liste de sons colorés par catégorie, favoris, et plusieurs serveurs Discord connectés en même temps">
 
     <div class="actions">
-      <a class="button primary" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter WaseBoard à mon serveur</a>
-      <a class="button secondary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger le client Windows</a>
+      <a class="button primary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger le client Windows</a>
+      <a class="button secondary" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter WaseBoard à mon serveur</a>
       <a class="button secondary" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord WaseBoard</a>
     </div>
+    <div class="actions-hint">La plupart des gens n'ont besoin que du premier bouton — voir ci-dessous.</div>
+
+    <div class="choice recommended reveal" style="margin-bottom: 20px;">
+      <span class="badge">C'EST VOUS ?</span>
+      <h3>🙋 Vous voulez juste utiliser WaseBoard</h3>
+      <p>Si quelqu'un a déjà ajouté le bot sur votre serveur Discord (le cas le plus fréquent), vous n'avez besoin de rien d'autre :</p>
+      <ol>
+        <li>Téléchargez le client ci-dessus</li>
+        <li>Connectez-vous avec votre compte Discord quand l'application le demande</li>
+      </ol>
+      <p style="margin-top:12px;">C'est tout — l'application se connecte automatiquement à la bonne instance, rien à saisir. La connexion Discord sert uniquement à afficher votre avatar et à retrouver votre salon vocal.</p>
+      <p style="opacity:.8; margin-bottom:0;">Vous rejoignez plutôt un serveur WaseBoard auto-hébergé (pas l'instance publique) ? Au premier lancement, cliquez « Vous avez votre propre serveur WaseBoard ? », ou changez l'adresse plus tard dans Paramètres.</p>
+    </div>
+
+    <div class="section-label">Vous administrez un serveur Discord ?</div>
 
     <div class="card reveal">
       <h2>Comment ça marche</h2>
@@ -221,12 +251,6 @@
         <div class="spacer"></div>
         <a class="button secondary block" href="https://github.com/salsi64/WaseBoard/blob/master/server/README.md">📖 Guide d'installation</a>
       </div>
-    </div>
-
-    <div class="card reveal">
-      <h2>Cas particuliers</h2>
-      <p><strong>Le bot est déjà sur votre serveur Discord</strong> (ajouté par quelqu'un d'autre) ? Téléchargez simplement le client ci-dessus et connectez-vous avec Discord — il se connecte automatiquement à la bonne instance, rien à saisir.</p>
-      <p style="margin-bottom:0;"><strong>Vous rejoignez plutôt un serveur WaseBoard auto-hébergé</strong> (pas celui-ci) ? Dans l'application, cliquez « Vous avez votre propre serveur WaseBoard ? » au premier lancement, ou changez l'adresse dans Paramètres.</p>
     </div>
 
     <div class="note">
