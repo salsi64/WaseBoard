@@ -35,6 +35,9 @@ namespace WaseBoard.Windows
         /// <summary>Faux pour qui n'est ni l'auteur du son ni admin de son serveur : la fenêtre ne propose alors que les
         /// réglages LOCAUX (favori, couleur, volume, catégories) ; nom, emoji, découpe, fichier et suppression sont partagés.</summary>
         public bool CanEditShared { get; init; } = true;
+
+        /// <summary>Le serveur gère le remplacement de fichier (annoncé par /status). Faux sur un serveur pas encore mis à jour.</summary>
+        public bool CanReplaceFile { get; init; } = true;
         public float Volume { get; init; } = 1f;
         public bool IsFavorite { get; init; }
         public string? ColorHex { get; init; }
@@ -180,6 +183,11 @@ namespace WaseBoard.Windows
                     BuildSwatches();
                     ApplyThumbColor();
 
+                    if (!extras.CanReplaceFile)
+                    {
+                        ReplaceFileButton.IsEnabled = false;
+                        ReplaceFileButton.ToolTip = "Ce serveur doit d'abord être mis à jour pour permettre de remplacer le fichier d'un son";
+                    }
                     _originalFileName = extras.FileName;
                     FileNameText.Text = extras.FileName;
 

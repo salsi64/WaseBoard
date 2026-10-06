@@ -887,6 +887,22 @@ namespace WaseBoard.Services
             Unreachable
         }
 
+        /// <summary>Fonctionnalités annoncées par le serveur dans /status (champ "features") ; null tant qu'aucune réponse n'a été
+        /// lue. Un serveur plus ancien n'envoie pas le champ : ensemble vide, et le client n'y propose pas les actions récentes.</summary>
+        public HashSet<string>? ServerFeatures { get; private set; }
+
+        /// <summary>Le serveur gère-t-il cette fonctionnalité ? Vrai tant qu'on ne sait pas encore (on tente, l'erreur est explicite).</summary>
+        public bool ServerSupports(string feature) => ServerFeatures is null || ServerFeatures.Contains(feature);
+
+        private void ReadServerFeatures(JsonElement root)
+        {
+            var features = new HashSet<string>(StringComparer.Ordinal);
+            if (root.TryGetProperty("features", out var list) && list.ValueKind == JsonValueKind.Array)
+                foreach (var item in list.EnumerateArray())
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { } name) features.Add(name);
+            ServerFeatures = features;
+        }
+
         public async Task<(ServerStatusResult Result, string? Channel)> GetServerStatusAsync()
         {
             LastErrorDetail = null;
@@ -906,6 +922,7 @@ namespace WaseBoard.Services
 
                 var json = await response.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
+                ReadServerFeatures(doc.RootElement);
                 var connected = doc.RootElement.TryGetProperty("connected", out var c) && c.GetBoolean();
                 string? channel = doc.RootElement.TryGetProperty("channel", out var ch) && ch.ValueKind == JsonValueKind.String
                     ? ch.GetString() : null;
@@ -949,6 +966,7 @@ namespace WaseBoard.Services
                 }
                 using (doc)
                 {
+                    ReadServerFeatures(doc.RootElement);
                     var connected = doc.RootElement.TryGetProperty("connected", out var c) && c.GetBoolean();
                     string? channel = doc.RootElement.TryGetProperty("channel", out var ch) && ch.ValueKind == JsonValueKind.String ? ch.GetString() : null;
                     string? guildId = doc.RootElement.TryGetProperty("guild_id", out var gi) && gi.ValueKind == JsonValueKind.String ? gi.GetString() : null;

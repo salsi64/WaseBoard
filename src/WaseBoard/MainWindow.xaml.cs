@@ -1263,6 +1263,7 @@ namespace WaseBoard
             var extras = new EditExtras
             {
                 CanEditShared = canEdit,
+                CanReplaceFile = _library.ServerSupports("replace_file"),
                 Volume = item.Volume,
                 IsFavorite = item.IsFavorite,
                 ColorHex = item.ColorHex,
