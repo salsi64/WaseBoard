@@ -758,23 +758,13 @@
                             <Grid x:Name="SidebarStatusHost" Margin="0,0,0,2"/>
                             <TextBlock x:Name="SidebarConnectionText" Text="🔴 Non connecté" FontSize="11" Opacity="0.75"
                                        Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis" Margin="0,0,0,8"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <!-- Équivalent du slider de la barre d'outils classique (MainVolumePanel), qui
-                                     reste masqué en thème moderne pour ne pas le dupliquer — voir ApplyTheme(). -->
-                                <TextBlock Grid.Column="0" Text="🔊" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource TextBrush}"/>
-                                <Slider x:Name="SidebarVolumeSlider" Grid.Column="1" Minimum="0" Maximum="1.5" Value="1.0"
-                                        ValueChanged="VolumeSlider_ValueChanged" ToolTip="Volume d'écoute local (aperçu uniquement, jamais envoyé à Discord)"/>
-                                <TextBlock x:Name="SidebarVolumeLabel" Grid.Column="2" Text="100%" FontSize="10" Opacity="0.7" Width="30"
-                                           TextAlignment="Right" VerticalAlignment="Center" Margin="4,0,6,0" Foreground="{DynamicResource TextBrush}"/>
-                                <Button Grid.Column="3" Content="⚙" Click="SettingsButton_Click" Width="28" Height="28" ToolTip="Paramètres"
-                                        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                            </Grid>
+                            <Button Click="SettingsButton_Click" ToolTip="Paramètres (volume, apparence, serveur…)"
+                                    Style="{StaticResource ToolbarButtonStyle}" Margin="0" HorizontalContentAlignment="Left">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE713;" Style="{StaticResource ToolbarIcon}" Opacity="0.85"/>
+                                    <TextBlock Text="Paramètres" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -809,62 +799,48 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="🔍" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource TextBrush}"/>
+                    <TextBlock Grid.Column="0" Text="&#xE721;" Style="{StaticResource ToolbarIcon}" Margin="0,0,8,0" Opacity="0.6" Foreground="{DynamicResource TextBrush}"/>
                     <TextBox x:Name="SearchBox" Grid.Column="1" Height="28" HorizontalAlignment="Stretch"
                              TextChanged="SearchBox_TextChanged"
                              ToolTip="Rechercher un son par son nom"/>
                 </Grid>
 
-                <StackPanel x:Name="MainVolumePanel" Grid.Column="2" Orientation="Horizontal"
-                            Margin="0,0,12,0" VerticalAlignment="Center">
-                    <TextBlock Text="🔊" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource TextBrush}"/>
-                    <Slider x:Name="MainVolumeSlider" Width="80" Minimum="0" Maximum="1.5" Value="1.0"
-                            ValueChanged="VolumeSlider_ValueChanged" ToolTip="Volume d'écoute local (aperçu uniquement, jamais envoyé à Discord)"/>
-                    <TextBlock x:Name="MainVolumeLabel" Text="100%" FontSize="11" Opacity="0.7" Width="34"
-                               VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{DynamicResource TextBrush}"/>
-                </StackPanel>
-
                 <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="RefreshButton" Content="⟳" ToolTip="Actualiser le catalogue" Width="34" Height="30" Padding="0" Margin="0,0,6,0"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource OutlineBrush}" Click="RefreshButton_Click"/>
-                    <Button x:Name="JoinVoiceButton" Height="30" Padding="10,0" Margin="0,0,6,0"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource OutlineBrush}" Click="JoinVoiceButton_Click"
+                    <Button x:Name="RefreshButton" ToolTip="Actualiser le catalogue" Width="34" Padding="0"
+                            Style="{StaticResource ToolbarButtonStyle}" Click="RefreshButton_Click">
+                        <TextBlock Text="&#xE72C;" Style="{StaticResource ToolbarIcon}"/>
+                    </Button>
+                    <Button x:Name="JoinVoiceButton" Click="JoinVoiceButton_Click" Style="{StaticResource ToolbarButtonStyle}"
                             ToolTip="Rejoindre mon vocal : fait rejoindre le bot au salon vocal où vous êtes actuellement">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="🔊"/>
-                            <TextBlock x:Name="JoinVoiceLabel" Text=" Vocal"/>
+                            <TextBlock Text="&#xE767;" Style="{StaticResource ToolbarIcon}" Foreground="{DynamicResource AccentBrush}"/>
+                            <TextBlock x:Name="JoinVoiceLabel" Text="Vocal" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="StopAllButton" Height="30" Padding="10,0" Margin="0,0,6,0"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource OutlineBrush}" Click="StopAllButton_Click"
+                    <Button x:Name="StopAllButton" Click="StopAllButton_Click" Style="{StaticResource ToolbarButtonStyle}"
                             ToolTip="Stop tout : coupe les sons en cours">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⏹"/>
-                            <TextBlock x:Name="StopAllLabel" Text=" Stop"/>
+                            <TextBlock Text="&#xE71A;" Style="{StaticResource ToolbarIcon}" Foreground="#F87171"/>
+                            <TextBlock x:Name="StopAllLabel" Text="Stop" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="SettingsButton" Content="⚙" ToolTip="Paramètres" Width="34" Height="30" Padding="0" Margin="0,0,6,0"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource OutlineBrush}" Click="SettingsButton_Click"/>
-                    <Button x:Name="AddCategoryButton" Height="30" Padding="10,0" Margin="0,0,6,0"
-                            Click="AddCategoryButton_Click" ToolTip="Nouvelle catégorie"
-                            Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                            BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}">
+                    <Button x:Name="SettingsButton" ToolTip="Paramètres" Width="34" Padding="0"
+                            Style="{StaticResource ToolbarButtonStyle}" Click="SettingsButton_Click">
+                        <TextBlock Text="&#xE713;" Style="{StaticResource ToolbarIcon}"/>
+                    </Button>
+                    <Button x:Name="AddCategoryButton" Click="AddCategoryButton_Click" ToolTip="Nouvelle catégorie"
+                            Style="{StaticResource ToolbarButtonStyle}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="+"/>
-                            <TextBlock x:Name="AddCategoryLabel" Text=" Catégorie"/>
-                            <TextBlock Text=" ▾"/>
+                            <TextBlock Text="&#xE8EC;" Style="{StaticResource ToolbarIcon}"/>
+                            <TextBlock x:Name="AddCategoryLabel" Text="Catégorie" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="&#xE70D;" Style="{StaticResource ToolbarIcon}" FontSize="9" Margin="6,1,0,0" Opacity="0.6"/>
                         </StackPanel>
                     </Button>
-                    <Button x:Name="AddSoundButton" Height="30" Padding="12,0"
-                            Style="{StaticResource PrimaryButtonStyle}"
+                    <Button x:Name="AddSoundButton" Margin="0" Style="{StaticResource ToolbarPrimaryButtonStyle}"
                             Click="AddSoundButton_Click" ToolTip="Ajouter un son (ou glissez des fichiers audio dans la fenêtre)">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="+"/>
-                            <TextBlock x:Name="AddSoundLabel" Text=" Ajouter un son"/>
+                            <TextBlock Text="&#xE710;" Style="{StaticResource ToolbarIcon}"/>
+                            <TextBlock x:Name="AddSoundLabel" Text="Ajouter un son" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </StackPanel>

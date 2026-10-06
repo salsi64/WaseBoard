@@ -131,14 +131,28 @@ namespace WaseBoard.Services
         /// masqué l'accent de la nouvelle palette. Reste modifiable ensuite dans Paramètres > Apparence.</summary>
         private void MigrateAppearance()
         {
-            if (Settings.PaletteId is not null) return;
-            Settings.PaletteId = PalettePresets.DefaultId;
-            Settings.FollowSystemAccent = false;
-            // L'ancien écran d'Apparence enregistrait toujours le fond violet par défaut, même sans
-            // personnalisation : ce n'est pas un vrai choix, et il masquerait la nouvelle palette.
-            if (string.Equals(Settings.BackgroundColorHex, "#1E1E2E", StringComparison.OrdinalIgnoreCase))
-                Settings.BackgroundColorHex = null;
-            SaveSettings();
+            var changed = false;
+
+            // Flat devient le thème par défaut : l'ancien défaut (Moderne) bascule une seule fois, un choix Classique reste.
+            if (!Settings.FlatThemeApplied)
+            {
+                if (Settings.UiTheme == "Modern") Settings.UiTheme = "Flat";
+                Settings.FlatThemeApplied = true;
+                changed = true;
+            }
+
+            if (Settings.PaletteId is null)
+            {
+                Settings.PaletteId = PalettePresets.DefaultId;
+                Settings.FollowSystemAccent = false;
+                // L'ancien écran d'Apparence enregistrait toujours le fond violet par défaut, même sans
+                // personnalisation : ce n'est pas un vrai choix, et il masquerait la nouvelle palette.
+                if (string.Equals(Settings.BackgroundColorHex, "#1E1E2E", StringComparison.OrdinalIgnoreCase))
+                    Settings.BackgroundColorHex = null;
+                changed = true;
+            }
+
+            if (changed) SaveSettings();
         }
 
         private void LoadFromDisk()

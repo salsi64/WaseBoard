@@ -160,9 +160,6 @@ namespace WaseBoard
             var hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             hwndSource?.AddHook(DeepLinkHwndHook);
 
-            MainVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
-            SidebarVolumeSlider.Value = _library.Settings.LocalPlaybackVolume;
-            UpdateMainVolumeLabel();
 
             // La connexion Discord est désormais obligatoire (OAuth2) : tant qu'elle est absente,
             // l'assistant se rouvre à CHAQUE lancement, pas seulement au premier — mais
@@ -357,7 +354,6 @@ namespace WaseBoard
             SidebarColumn.Width = new GridLength(isModern ? (_sidebarCollapsed ? 60 : 230) : 0);
             TitleText.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
             SettingsButton.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
-            MainVolumePanel.Visibility = isModern ? Visibility.Collapsed : Visibility.Visible;
 
             // Thème moderne : « En ce moment » et le statut serveur vivent dans la barre latérale, la
             // barre du haut (qui ne servait qu'à ça) disparaît et rend ses 40 px aux sons.
@@ -401,7 +397,7 @@ namespace WaseBoard
             JoinVoiceLabel.Visibility = labels;
             StopAllLabel.Visibility = labels;
             AddCategoryLabel.Visibility = labels;
-            AddSoundLabel.Text = compact ? " Son" : " Ajouter un son";
+            AddSoundLabel.Text = compact ? "Son" : "Ajouter un son";
             // Le titre de l'application est déjà dans la barre de titre de la fenêtre : on le retire en premier.
             TitleText.Visibility = !ThemeState.IsModern && !compact ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -748,29 +744,6 @@ namespace WaseBoard
             await Task.WhenAll(tasks);
         }
 
-        /// <summary>
-        /// Partagé par les deux sliders de volume (classique/moderne, voir ApplyTheme()) : garde
-        /// l'autre à jour même si un seul est visible, pour un changement de thème en session.
-        /// </summary>
-        private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (!_settingsReady) return; // évite d'écraser settings.json pendant InitializeComponent(), voir _settingsReady
-            _library.Settings.LocalPlaybackVolume = (float)e.NewValue;
-            _library.SaveSettings();
-
-            if (!ReferenceEquals(sender, MainVolumeSlider)) MainVolumeSlider.Value = e.NewValue;
-            if (!ReferenceEquals(sender, SidebarVolumeSlider)) SidebarVolumeSlider.Value = e.NewValue;
-
-            UpdateMainVolumeLabel();
-        }
-
-        private void UpdateMainVolumeLabel()
-        {
-            var text = $"{(int)(MainVolumeSlider.Value * 100)}%";
-            if (MainVolumeLabel is not null) MainVolumeLabel.Text = text;
-            if (SidebarVolumeLabel is not null) SidebarVolumeLabel.Text = text;
-        }
-
         /// <summary>Pastille de statut serveur : pulse pendant la connexion, fixe une fois résolue.</summary>
         private void SetStatusDot(Color color, bool pulsing)
         {
@@ -918,7 +891,7 @@ namespace WaseBoard
                 var guildSounds = Sounds.Where(s => s.GuildId == shared.GuildId || idSet.Contains(s.Id));
                 sections.Add(new SectionViewModel
                 {
-                    Name = "🌐 " + shared.GuildName,
+                    Name = shared.GuildName,
                     CategoryKey = shared.GuildId,
                     Sounds = new ObservableCollection<SoundItem>(SortAllSounds(Filtered(guildSounds))),
                     IsManageable = false, // catégorie automatique : pas de renommage/suppression manuel
@@ -934,7 +907,7 @@ namespace WaseBoard
             SectionsItemsControl.ItemsSource = sections;
 
             // Navigation de la barre latérale : une entrée par section réellement affichée. Pour
-            // les catégories partagées, l'icône du serveur Discord remplace l'emoji 🌐 générique.
+            // les catégories partagées, l'icône du serveur Discord est affichée à côté du nom (pas d'emoji générique).
             // Favoris a son propre bouton (à côté d'Accueil) : seules les catégories et les serveurs ont des groupes.
             var navItems = sections
                 .Select((s, i) =>

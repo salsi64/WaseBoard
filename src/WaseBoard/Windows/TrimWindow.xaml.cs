@@ -509,7 +509,7 @@ namespace WaseBoard.Windows
                 foreach (var shared in _sharedChoices)
                 {
                     var s = shared;
-                    CategoryList.Children.Add(CreateCategoryRow("🌐 " + s.GuildName, s.IsMember, s.Locked,
+                    CategoryList.Children.Add(CreateCategoryRow(s.GuildName, s.IsMember, s.Locked,
                         s.Locked ? "Serveur d'origine du son : il en fait toujours partie" : null,
                         () => { s.IsMember = !s.IsMember; BuildCategoryList(); }));
                 }
@@ -570,7 +570,7 @@ namespace WaseBoard.Windows
 
         private void UpdateCategoryTriggerText()
         {
-            var names = _sharedChoices.Where(s => s.IsMember).Select(s => "🌐 " + s.GuildName)
+            var names = _sharedChoices.Where(s => s.IsMember).Select(s => s.GuildName)
                 .Concat(_localCategories.Where(_selectedLocal.Contains)).ToList();
             CategoryTriggerText.Text = names.Count == 0 ? "Aucune" : names.Count == 1 ? names[0] : $"{names[0]} +{names.Count - 1}";
         }
