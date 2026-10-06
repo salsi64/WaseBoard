@@ -40,7 +40,19 @@ L'icône 📣 à gauche d'un bouton fait un **aperçu local** (chez vous seuleme
 
 « + Ajouter un son » (ou glisser-déposer un fichier dans la fenêtre) : donnez-lui un nom, un emoji, et
 découpez si besoin la partie à garder. Le fichier d'origine reste toujours intact : vous (ou un admin)
-pourrez recouper différemment plus tard sans le renvoyer (clic droit sur le son › *Redécouper*).
+pourrez recouper différemment plus tard sans le renvoyer (clic droit sur le son › *Éditer*).
+
+## Modifier un son
+
+Clic droit sur un son › **Éditer…** ouvre une seule fenêtre pour tout régler :
+
+- **Nom, emoji, découpe** et **remplacement du fichier audio** (« Remplacer… ») : réservés à l'auteur du son et
+  aux admins du serveur, car ces réglages sont partagés. Remplacer le fichier garde le nom, l'emoji, les catégories
+  et vos réglages ; la découpe repart du fichier entier.
+- **Couleur, favori, catégories, volume** : à vous seul, pour tous les sons. Le volume va de 0 à 200 %.
+
+Sur un son qui n'est pas le vôtre, la fenêtre s'appelle « Personnaliser le son » et ne propose que ces réglages locaux.
+Les catégories personnelles se renomment ou se suppriment par clic droit sur leur titre.
 
 ## FAQ
 

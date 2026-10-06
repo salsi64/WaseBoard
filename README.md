@@ -43,10 +43,11 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 - **Favoris**, **catégories personnelles** et **catégorie automatique par serveur Discord**,
   glisser-déposer pour classer/réorganiser, recherche en temps réel.
 - **Emoji obligatoire par son**, en 3D brillante (Fluent Emoji), palette prédéfinie ou personnalisée.
-- **Découpe waveform** non destructive : le son complet est conservé, on peut recouper plus tard
-  (clic droit › Redécouper), et choisir l'emoji dans la même fenêtre.
-- **Raccourcis clavier globaux**, thème clair/sombre et interface classique ou moderne
-  (barre latérale), au choix. La forme d'onde des boutons est optionnelle : masquée, les boutons
+- **Fenêtre « Éditer le son »** (clic droit › Éditer) : nom, emoji, couleur du bouton, catégories, volume propre
+  à chaque son, favori, **découpe waveform** non destructive (le son complet est conservé, on recoupe quand on
+  veut) et **remplacement du fichier audio** sans perdre le reste (nom, catégories, réglages).
+- **Raccourcis clavier globaux**, thème clair/sombre et interface **Flat** (par défaut), moderne ou classique,
+  au choix, avec des palettes de couleurs indépendantes. La forme d'onde des boutons est optionnelle : masquée, les boutons
   tiennent sur une seule ligne et l'avatar de la personne qui joue reste affiché à droite du nom.
 - **Identification automatique** (connexion Discord) : votre compte suffit, WaseBoard retrouve
   tout seul votre salon vocal — rien à choisir manuellement.
