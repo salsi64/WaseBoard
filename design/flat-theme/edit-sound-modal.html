@@ -126,6 +126,74 @@
 
   .cat-row { display: flex; align-items: baseline; gap: 6px; margin-bottom: 7px; }
 
+  /* catégorie : déclencheur + popover (serveur -> catégories -> créer) */
+  .cat-wrap { position: relative; }
+  .cat-trigger {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg-field); border: 1px solid var(--border-soft); color: var(--text);
+    border-radius: 10px; padding: 10px 12px; font-size: 14px; cursor: pointer; font-family: inherit; text-align: left;
+  }
+  .cat-trigger .chev { color: var(--text-faint); font-size: 11px; }
+  .cat-trigger:hover { border-color: var(--border); }
+  .cat-pop {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--bg-panel);
+    border: 1px solid var(--border); border-radius: 14px; padding: 8px; z-index: 20;
+    box-shadow: 0 20px 50px -15px #000C; display: none;
+  }
+  .cat-pop.open { display: block; }
+  .cat-server {
+    display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: var(--text-dim);
+    padding: 6px 8px 8px; border-bottom: 1px solid var(--border-soft); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .03em;
+  }
+  .cat-list { max-height: 180px; overflow-y: auto; }
+  .cat-item {
+    display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: none;
+    color: var(--text); font-size: 14px; padding: 8px; border-radius: 8px; cursor: pointer; text-align: left; font-family: inherit;
+  }
+  .cat-item:hover { background: var(--bg-field); }
+  .cat-item .check { color: var(--purple); opacity: 0; font-weight: 800; }
+  .cat-item.selected .check { opacity: 1; }
+  .cat-add {
+    border-top: 1px solid var(--border-soft); margin-top: 4px; padding-top: 6px;
+  }
+  .cat-add button {
+    width: 100%; background: none; border: none; color: var(--purple); font-weight: 700; font-size: 13px;
+    padding: 8px; border-radius: 8px; cursor: pointer; text-align: left; font-family: inherit;
+  }
+  .cat-add button:hover { background: var(--bg-field); }
+  .cat-add-input { display: flex; gap: 6px; padding-top: 6px; border-top: 1px solid var(--border-soft); margin-top: 4px; }
+  .cat-add-input input {
+    flex: 1; background: var(--bg-field); border: 1px solid var(--border-soft); color: var(--text);
+    border-radius: 8px; padding: 7px 9px; font-size: 13px; font-family: inherit; outline: none;
+  }
+  .cat-add-input input:focus { border-color: var(--purple); }
+  .cat-add-input button {
+    width: 30px; border-radius: 8px; border: 1px solid var(--border-soft); background: var(--bg-field); color: var(--text);
+    cursor: pointer; font-size: 13px;
+  }
+  .cat-add-input button.confirm { background: var(--grad); color: white; border: none; }
+
+  /* gain / amplification */
+  .gain-row { display: flex; align-items: center; gap: 10px; }
+  .step-btn {
+    width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; background: var(--bg-field);
+    border: 1px solid var(--border-soft); color: var(--text); cursor: pointer; font-size: 15px; line-height: 1;
+  }
+  .step-btn:hover { border-color: var(--border); }
+  .gain-slider-wrap { position: relative; flex: 1; display: flex; align-items: center; }
+  .gain-tick { position: absolute; left: 50%; width: 2px; height: 8px; background: var(--border); transform: translateX(-1px); pointer-events: none; }
+  input[type=range]#gainSlider {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px;
+    background: var(--border-soft); outline: none; margin: 0;
+  }
+  input[type=range]#gainSlider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--grad);
+    cursor: pointer; border: 2px solid #0E1424; box-shadow: 0 0 0 1px var(--purple);
+  }
+  input[type=range]#gainSlider::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%; background: var(--blue); cursor: pointer; border: 2px solid #0E1424;
+  }
+
   /* trim */
   .trim-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
   .time-chip { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; background: var(--bg-field); border: 1px solid var(--border-soft); padding: 3px 9px; border-radius: 7px; }
@@ -225,13 +293,42 @@
           <label class="flabel" style="margin-bottom:0;">Catégorie</label>
           <span class="flabel opt">(non obligatoire)</span>
         </div>
-        <select id="catSelect">
-          <option value="">Aucune</option>
-          <option value="effets" selected>Effets</option>
-          <option value="memes">Mèmes</option>
-          <option value="alertes">Alertes</option>
-          <option value="musique">Musique</option>
-        </select>
+        <div class="cat-wrap">
+          <button class="cat-trigger" id="catTrigger" type="button">
+            <span id="catTriggerLabel">Effets</span>
+            <span class="chev">▾</span>
+          </button>
+          <div class="cat-pop" id="catPop">
+            <div class="cat-server">🖥️ <span>WaseBoard</span></div>
+            <div class="cat-list" id="catList"></div>
+            <div class="cat-add" id="catAddRow">
+              <button type="button" id="catAddBtn">+ Nouvelle catégorie</button>
+            </div>
+            <div class="cat-add-input" id="catAddInputRow" style="display:none;">
+              <input type="text" id="catNewInput" placeholder="Nom de la catégorie">
+              <button type="button" class="confirm" id="catConfirmBtn">✓</button>
+              <button type="button" id="catCancelBtn">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="trim-top">
+          <label class="flabel" style="margin-bottom:0;">Volume</label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="time-chip" id="gainChip">100%</span>
+            <button class="vol-btn" id="gainResetBtn" title="Réinitialiser (100%)" style="visibility:hidden;">↺</button>
+          </div>
+        </div>
+        <div class="gain-row">
+          <button class="step-btn" id="gainMinus" type="button" title="Réduire">−</button>
+          <div class="gain-slider-wrap">
+            <span class="gain-tick"></span>
+            <input type="range" id="gainSlider" min="0" max="200" value="100" step="5">
+          </div>
+          <button class="step-btn" id="gainPlus" type="button" title="Amplifier">+</button>
+        </div>
       </div>
 
       <div class="section">
@@ -289,14 +386,14 @@
 
   const state = {
     name: "Explosion", emoji: "💥", fav: false, color: null,
-    category: "effets", start: 0, end: 100, hasFile: true, fileName: "explosion.mp3",
+    category: "Effets", start: 0, end: 100, hasFile: true, fileName: "explosion.mp3", gain: 100,
   };
   let snapshot = JSON.parse(JSON.stringify(state));
   const DURATION = 3.8;
 
   const $ = (id) => document.getElementById(id);
   const thumbEmoji = $("thumbEmoji"), starBtn = $("starBtn"), nameInput = $("nameInput");
-  const swatchesEl = $("swatches"), catSelect = $("catSelect");
+  const swatchesEl = $("swatches");
   const timeline = $("timeline"), handleStart = $("handleStart"), handleEnd = $("handleEnd");
   const trimSelect = $("trimSelect"), timeChip = $("timeChip"), waveStatic = $("waveStatic"), waveSelect = $("waveSelect");
   const fileRow = $("fileRow"), replaceRow = $("replaceRow"), fileNameEl = $("fileName"), fileInput = $("fileInput");
@@ -355,8 +452,66 @@
     swatchesEl.appendChild(b);
   });
 
-  // ---- catégorie ----
-  catSelect.addEventListener("change", () => { state.category = catSelect.value; refreshDirty(); });
+  // ---- catégorie : serveur (contexte) -> catégories -> créer ----
+  let CATEGORIES = ["Effets", "Mèmes", "Alertes", "Musique"];
+  const catTrigger = $("catTrigger"), catTriggerLabel = $("catTriggerLabel"), catPop = $("catPop"), catList = $("catList");
+  const catAddRow = $("catAddRow"), catAddBtn = $("catAddBtn"), catAddInputRow = $("catAddInputRow"), catNewInput = $("catNewInput");
+
+  function renderCatList() {
+    catList.innerHTML = "";
+    const options = [{ v: "", label: "Aucune" }, ...CATEGORIES.map(c => ({ v: c, label: c }))];
+    options.forEach(opt => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "cat-item" + (state.category === opt.v ? " selected" : "");
+      b.innerHTML = `<span>${opt.label}</span><span class="check">✓</span>`;
+      b.addEventListener("click", () => {
+        state.category = opt.v;
+        catTriggerLabel.textContent = opt.v || "Aucune";
+        closeCatPop(); refreshDirty();
+      });
+      catList.appendChild(b);
+    });
+  }
+  function openCatPop() { catPop.classList.add("open"); renderCatList(); }
+  function closeCatPop() { catPop.classList.remove("open"); catAddInputRow.style.display = "none"; catAddRow.style.display = "block"; }
+  catTrigger.addEventListener("click", (e) => { e.stopPropagation(); catPop.classList.contains("open") ? closeCatPop() : openCatPop(); });
+
+  catAddBtn.addEventListener("click", () => {
+    catAddRow.style.display = "none"; catAddInputRow.style.display = "flex";
+    catNewInput.value = ""; catNewInput.focus();
+  });
+  $("catCancelBtn").addEventListener("click", () => { catAddInputRow.style.display = "none"; catAddRow.style.display = "block"; });
+  function confirmNewCategory() {
+    const name = catNewInput.value.trim();
+    if (!name) return;
+    const exists = CATEGORIES.some(c => c.toLowerCase() === name.toLowerCase());
+    if (!exists) CATEGORIES.push(name);
+    state.category = name;
+    catTriggerLabel.textContent = name;
+    closeCatPop(); refreshDirty();
+  }
+  $("catConfirmBtn").addEventListener("click", confirmNewCategory);
+  catNewInput.addEventListener("keydown", (e) => { if (e.key === "Enter") confirmNewCategory(); if (e.key === "Escape") { catAddInputRow.style.display = "none"; catAddRow.style.display = "block"; } });
+  document.addEventListener("click", (e) => { if (!catPop.contains(e.target) && !catTrigger.contains(e.target)) closeCatPop(); });
+
+  // ---- volume / gain ----
+  const gainSlider = $("gainSlider"), gainChip = $("gainChip"), gainResetBtn = $("gainResetBtn");
+  function applyGainVisuals() {
+    gainChip.textContent = state.gain + "%";
+    gainResetBtn.style.visibility = state.gain === 100 ? "hidden" : "visible";
+    const factor = 0.4 + (state.gain / 200) * 1.2; // 0% -> x0.4 · 100% -> x1.0 · 200% -> x1.6
+    waveStatic.style.transform = `scaleY(${factor})`;
+    waveSelect.style.transform = `scaleY(${factor})`;
+  }
+  function setGain(v) {
+    state.gain = Math.min(200, Math.max(0, Math.round(v / 5) * 5));
+    gainSlider.value = state.gain;
+    applyGainVisuals(); refreshDirty();
+  }
+  gainSlider.addEventListener("input", () => setGain(parseInt(gainSlider.value, 10)));
+  $("gainMinus").addEventListener("click", () => setGain(state.gain - 5));
+  $("gainPlus").addEventListener("click", () => setGain(state.gain + 5));
+  gainResetBtn.addEventListener("click", () => setGain(100));
 
   // ---- trim : poignées déplaçables ----
   function pctToTime(p) { return (p / 100 * DURATION).toFixed(1); }
@@ -438,7 +593,8 @@
     nameInput.value = state.name;
     thumbEmoji.textContent = state.emoji;
     starBtn.classList.toggle("active", state.fav);
-    catSelect.value = state.category;
+    catTriggerLabel.textContent = state.category || "Aucune";
+    gainSlider.value = state.gain; applyGainVisuals();
     updateTrimVisuals();
     if (state.color) {
       document.querySelectorAll(".swatch").forEach(s => s.classList.toggle("selected", s.dataset.c === state.color));
@@ -446,6 +602,8 @@
     }
     refreshDirty();
   });
+
+  applyGainVisuals();
 
   // ---- fermeture / réouverture (démo autonome) ----
   closeBtn.addEventListener("click", () => { overlay.classList.add("hidden"); reopenBtn.classList.add("show"); });
