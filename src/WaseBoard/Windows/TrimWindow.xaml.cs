@@ -32,6 +32,9 @@ namespace WaseBoard.Windows
     /// (volume, couleur, favori, catégories personnelles), catégories partagées des serveurs et nom du fichier.</summary>
     public sealed class EditExtras
     {
+        /// <summary>Faux pour qui n'est ni l'auteur du son ni admin de son serveur : la fenêtre ne propose alors que les
+        /// réglages LOCAUX (favori, couleur, volume, catégories) ; nom, emoji, découpe, fichier et suppression sont partagés.</summary>
+        public bool CanEditShared { get; init; } = true;
         public float Volume { get; init; } = 1f;
         public bool IsFavorite { get; init; }
         public string? ColorHex { get; init; }
@@ -59,6 +62,7 @@ namespace WaseBoard.Windows
             "#F472B6", "#38BDF8", "#34D399", "#FBBF24", "#F87171", "#A78BFA", "#22D3EE", "#94A3B8"
         };
 
+        private bool _canEditShared = true;
         private string _sourceFilePath;
         private readonly string _originalSourcePath;
         private WaveformData? _originalData;
@@ -151,9 +155,23 @@ namespace WaseBoard.Windows
 
                 if (extras is not null)
                 {
+                    _canEditShared = extras.CanEditShared;
                     EditOnlyPanel.Visibility = Visibility.Visible;
-                    FilePanel.Visibility = Visibility.Visible;
+                    FilePanel.Visibility = extras.CanEditShared ? Visibility.Visible : Visibility.Collapsed;
                     FavoriteButton.Visibility = Visibility.Visible;
+
+                    if (!extras.CanEditShared)
+                    {
+                        // Son d'un autre : seuls les réglages locaux sont modifiables, le reste est partagé par tout le serveur.
+                        Title = "Personnaliser le son";
+                        HeadingText.Text = "Personnaliser le son";
+                        NameBox.IsReadOnly = true;
+                        NameBox.ToolTip = "Seuls l'auteur du son et les admins du serveur peuvent le renommer";
+                        ThumbButton.IsEnabled = false;
+                        ThumbButton.ToolTip = null;
+                        EditBadge.Visibility = Visibility.Collapsed;
+                        TrimPanel.Visibility = Visibility.Collapsed;
+                    }
 
                     _isFavorite = extras.IsFavorite;
                     UpdateFavoriteVisual();
@@ -191,6 +209,12 @@ namespace WaseBoard.Windows
 
         private async void TrimWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            if (!_canEditShared)
+            {
+                // Pas de découpe à proposer : inutile d'analyser le fichier (et de le télécharger).
+                LoadingText.Visibility = Visibility.Collapsed;
+                return;
+            }
             try
             {
                 var data = await Task.Run(() => AudioTrimService.ComputeWaveform(_sourceFilePath));

@@ -295,6 +295,37 @@ namespace WaseBoard
             ApplyPalette(preset, isLight, accent);
 
             if (!settings.FollowSystemTheme) ApplyBackgroundColor();
+
+            // Après le fond personnalisé : les jetons se calculent depuis les brosses FINALES.
+            ApplyThemeTokens(settings.UiTheme == "Flat");
+        }
+
+        /// <summary>Jetons de style : ce qui sépare le thème Flat des autres, indépendamment de la palette. Flat = champs « en
+        /// creux » (plus sombres que la fenêtre), fenêtres secondaires sur le panneau, boutons principaux en dégradé
+        /// d'accent, bordures douces, curseurs fins, liseré discret sur les pills. Classique/Moderne gardent leur rendu.</summary>
+        private static void ApplyThemeTokens(bool flat)
+        {
+            var res = Application.Current.Resources;
+            var bg = (Brush)res["BgBrush"];
+            var panel = (Brush)res["PanelBrush"];
+            var track = (Brush)res["TrackBrush"];
+            var text = (Brush)res["TextBrush"];
+            var accent = (Brush)res["AccentBrush"];
+            var gradient = (Brush)res["AccentGradientBrush"];
+
+            res["PrimaryBrush"] = flat ? gradient : accent;
+            res["FieldBrush"] = flat ? bg : panel;
+            res["OutlineBrush"] = flat ? track : text;
+            res["SurfaceBrush"] = flat ? panel : bg;
+            res["CardBrush"] = flat ? bg : panel;
+            res["SecondaryBrush"] = flat ? bg : Brushes.Transparent;
+            res["PillBorderBrush"] = flat ? track : Brushes.Transparent;
+            res["NavOutlineBrush"] = flat ? track : new SolidColorBrush(Color.FromRgb(0x70, 0x70, 0x70));
+            res["SliderThumbFill"] = flat ? gradient : Brushes.White;
+            res["SliderThumbStroke"] = flat ? panel : accent;
+            res["FieldRadius"] = new CornerRadius(flat ? 10 : 8);
+            res["SecondaryBorderThickness"] = new Thickness(flat ? 1 : 0);
+            res["SliderTrackHeight"] = flat ? 4.0 : 6.0;
         }
 
         private static void ApplyPalette(PalettePreset preset, bool isLight, Color accent)
@@ -1150,124 +1181,26 @@ namespace WaseBoard
                 PreviewLocal(item);
         }
 
+        /// <summary>Clic droit sur un son : « Éditer… » regroupe désormais tout ce qui se règle sur le son (nom, emoji,
+        /// favori, catégories, volume, couleur, découpe, fichier, suppression) ; le menu ne garde que ce qui dépend de
+        /// l'endroit où l'on a cliqué (retirer de cette section) et le raccourci clavier.</summary>
         private void SoundButton_RightClick(object sender, MouseButtonEventArgs e)
         {
             if (sender is not Button { Tag: SoundItem item } button) return;
 
             var menu = new ContextMenu();
 
-            var favoriteItem = new MenuItem { Header = item.IsFavorite ? "★ Retirer des favoris" : "☆ Ajouter aux favoris" };
-            favoriteItem.Click += (_, _) => { _library.ToggleFavorite(item); RefreshSections(); };
-
-            var categoryMenu = new MenuItem { Header = "Ajouter à une catégorie" };
-            foreach (var categoryName in _library.GetCategoriesInOrder())
-            {
-                var catItem = new MenuItem { Header = categoryName };
-                catItem.Click += (_, _) => { _library.AddSoundToCategory(categoryName, item); RefreshSections(); };
-                categoryMenu.Items.Add(catItem);
-            }
-            // Une catégorie partagée n'accepte que les sons de leur auteur, ou n'importe lesquels si
-            // vous êtes admin de ce serveur : les autres entrées ne sont simplement pas proposées.
-            foreach (var shared in _sharedCategories.Where(s => CanShareTo(s, item)))
-            {
-                var catItem = new MenuItem { Header = "🌐 " + shared.GuildName };
-                catItem.Click += async (_, _) =>
-                {
-                    if (!await _library.SetSharedCategorySoundAsync(shared.GuildId, item, true))
-                        ToastService.Show("Ajout à la catégorie impossible. " + _library.LastErrorDetail, ToastKind.Warning);
-                    await RefreshSharedCategoriesAsync();
-                };
-                categoryMenu.Items.Add(catItem);
-            }
-            categoryMenu.Items.Add(new Separator());
-            var newCategoryItem = new MenuItem { Header = "Nouvelle catégorie..." };
-            newCategoryItem.Click += (_, _) =>
-            {
-                var name = PromptDialog.Show(this, "Nom de la nouvelle catégorie :", "");
-                if (string.IsNullOrWhiteSpace(name)) return;
-                _library.CreateCategory(name.Trim());
-                _library.AddSoundToCategory(name.Trim(), item);
-                RefreshSections();
-            };
-            categoryMenu.Items.Add(newCategoryItem);
-
-            var emojiItem = new MenuItem { Header = string.IsNullOrEmpty(item.Emoji) ? "Choisir un emoji..." : $"Modifier l'emoji ({item.Emoji})" };
-            emojiItem.Click += async (_, _) =>
-            {
-                var picker = new EmojiPickerWindow(item.Emoji) { Owner = this };
-                if (picker.ShowDialog() != true || picker.Result is null) return;
-
-                var ok = await _library.SetEmojiAsync(item, picker.Result);
-                if (ok) RefreshSections();
-                else
-                {
-                    ToastService.Show(
-                        "Échec de l'assignation de l'emoji." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                        ToastKind.Warning);
-                }
-            };
-
-            var removeEmojiItem = new MenuItem { Header = "Retirer l'emoji", IsEnabled = !string.IsNullOrEmpty(item.Emoji) };
-            removeEmojiItem.Click += async (_, _) =>
-            {
-                var ok = await _library.SetEmojiAsync(item, null);
-                if (ok) RefreshSections();
-                else
-                {
-                    ToastService.Show(
-                        "Échec du retrait de l'emoji." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                        ToastKind.Warning);
-                }
-            };
-
-            var renameItem = new MenuItem { Header = "Renommer" };
-            renameItem.Click += async (_, _) =>
-            {
-                var newName = PromptDialog.Show(this, "Nouveau nom :", item.Name);
-                if (string.IsNullOrWhiteSpace(newName)) return;
-
-                var ok = await _library.RenameSoundAsync(item, newName.Trim());
-                if (ok) RefreshSections();
-                else
-                {
-                    ToastService.Show(
-                        "Renommage échoué." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                        ToastKind.Warning);
-                }
-            };
-
-            var retrimItem = new MenuItem { Header = "✏ Éditer…" };
-            retrimItem.Click += async (_, _) => await EditSoundAsync(item);
-
-            var hotkeyItem = new MenuItem { Header = string.IsNullOrEmpty(item.Hotkey) ? "Définir un raccourci..." : $"Modifier le raccourci ({item.Hotkey})" };
-            hotkeyItem.Click += (_, _) => AssignHotkey(item);
-
-            var removeHotkeyItem = new MenuItem { Header = "Retirer le raccourci", IsEnabled = !string.IsNullOrEmpty(item.Hotkey) };
-            removeHotkeyItem.Click += (_, _) =>
-            {
-                _library.SetHotkey(item, null);
-                ResyncHotkeys();
-            };
-
-            var deleteItem = new MenuItem { Header = "Supprimer" };
-            deleteItem.Click += async (_, _) =>
-            {
-                var confirm = ConfirmDialog.Show(this,
-                    $"Supprimer « {item.Name} » du catalogue partagé ?\nUn administrateur du serveur pourra le restaurer depuis la corbeille.");
-                if (!confirm) return;
-                await DeleteSoundAsync(item);
-            };
-
-            menu.Items.Add(favoriteItem);
-            menu.Items.Add(categoryMenu);
+            var editItem = new MenuItem { Header = "✏ Éditer…" };
+            editItem.Click += async (_, _) => await EditSoundAsync(item);
+            menu.Items.Add(editItem);
 
             // Retirer de la catégorie EXACTE d'où l'on a cliqué (pas "toutes les catégories"),
             // retrouvée en remontant l'arbre visuel jusqu'au conteneur de la section — un même
             // son étant potentiellement affiché dans plusieurs sections à la fois.
             var section = FindEnclosingSection(button);
             // Pas de "Retirer" pour un son dans sa guilde d'origine : ce n'est pas un ajout
-            // manuel à retirer (voir Supprimer, plus bas, pour l'effacer réellement). Dans une
-            // catégorie partagée, seuls l'auteur du son ou un admin du serveur peuvent le retirer.
+            // manuel à retirer (voir la suppression, dans la fenêtre « Éditer », pour l'effacer réellement).
+            // Dans une catégorie partagée, seuls l'auteur du son ou un admin du serveur peuvent le retirer.
             var isNativeToGuildSection = section is not null && section.IsShared && item.GuildId == section.CategoryKey;
             var canRemoveFromSection = section is not null
                 && (!section.IsShared || CanShareTo(_sharedCategories.FirstOrDefault(s => s.GuildId == section.CategoryKey), item));
@@ -1295,22 +1228,19 @@ namespace WaseBoard
                 menu.Items.Add(removeFromSectionItem);
             }
 
-            // Emoji, nom et suppression sont des données PARTAGÉES du catalogue : réservés à
-            // l'auteur du son et aux admins de sa guilde (le serveur le re-vérifie de toute façon).
-            if (item.CanEdit)
+            var hotkeyItem = new MenuItem { Header = string.IsNullOrEmpty(item.Hotkey) ? "Définir un raccourci..." : $"Modifier le raccourci ({item.Hotkey})" };
+            hotkeyItem.Click += (_, _) => AssignHotkey(item);
+
+            var removeHotkeyItem = new MenuItem { Header = "Retirer le raccourci", IsEnabled = !string.IsNullOrEmpty(item.Hotkey) };
+            removeHotkeyItem.Click += (_, _) =>
             {
-                menu.Items.Add(emojiItem);
-                menu.Items.Add(removeEmojiItem);
-                menu.Items.Add(renameItem);
-                menu.Items.Add(retrimItem);
-            }
+                _library.SetHotkey(item, null);
+                ResyncHotkeys();
+            };
+
+            menu.Items.Add(new Separator());
             menu.Items.Add(hotkeyItem);
             menu.Items.Add(removeHotkeyItem);
-            if (item.CanEdit)
-            {
-                menu.Items.Add(new Separator());
-                menu.Items.Add(deleteItem);
-            }
             menu.IsOpen = true;
         }
 
@@ -1338,13 +1268,20 @@ namespace WaseBoard
         /// actuelle déjà placée ; nom et emoji sont modifiables au passage. Un seul appel au serveur pour tout enregistrer.</summary>
         private async Task EditSoundAsync(SoundItem item)
         {
-            var localPath = await _library.GetOrDownloadCachedFileAsync(item);
-            if (localPath is null)
+            // Son d'un autre (ni auteur ni admin) : la fenêtre ne propose que les réglages locaux, sans besoin du fichier.
+            var canEdit = item.CanEdit;
+            var localPath = "";
+            if (canEdit)
             {
-                ToastService.Show(
-                    "Impossible de charger le son complet." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
-                    ToastKind.Warning);
-                return;
+                var downloaded = await _library.GetOrDownloadCachedFileAsync(item);
+                if (downloaded is null)
+                {
+                    ToastService.Show(
+                        "Impossible de charger le son complet." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                        ToastKind.Warning);
+                    return;
+                }
+                localPath = downloaded;
             }
 
             TimeSpan? start = item.TrimStartMs is { } s ? TimeSpan.FromMilliseconds(s) : null;
@@ -1352,6 +1289,7 @@ namespace WaseBoard
             var localCategories = _library.GetCategoriesInOrder();
             var extras = new EditExtras
             {
+                CanEditShared = canEdit,
                 Volume = item.Volume,
                 IsFavorite = item.IsFavorite,
                 ColorHex = item.ColorHex,
@@ -1432,6 +1370,12 @@ namespace WaseBoard
             if (sharedChanged) await RefreshSharedCategoriesAsync();
             if (sharedFailed)
                 ToastService.Show("Une catégorie de serveur n'a pas pu être modifiée. " + _library.LastErrorDetail, ToastKind.Warning);
+
+            if (!canEdit)
+            {
+                if (localChanged) RefreshSections();
+                return;
+            }
 
             var newName = window.ResultName != item.Name ? window.ResultName : null;
             var newEmoji = window.ResultEmoji != (item.Emoji ?? "") ? window.ResultEmoji : null;
@@ -1881,17 +1825,33 @@ namespace WaseBoard
             public string Name { get; set; } = "";
         }
 
-        /// <summary>Clic droit sur la barre d'une section : menu avec l'export, seule action disponible
-        /// pour toutes les sections (favoris, catégorie perso/partagée, tous les sons) — contrairement
-        /// à renommer/supprimer (boutons dédiés, ✎/🗑) qui restent réservés aux catégories personnelles.</summary>
+        /// <summary>Clic droit sur la barre d'une section : l'export est proposé pour toutes (favoris, catégorie
+        /// perso/partagée, tous les sons) ; renommer et supprimer seulement pour les catégories personnelles.</summary>
         private void SectionHeader_RightClick(object sender, MouseButtonEventArgs e)
         {
             if (sender is not FrameworkElement { Tag: SectionViewModel section }) return;
 
             var menu = new ContextMenu();
+            var canManage = section.IsManageable && !section.IsShared;
+
+            if (canManage)
+            {
+                var renameItem = new MenuItem { Header = "✎ Renommer..." };
+                renameItem.Click += (_, _) => RenameCategory(section);
+                menu.Items.Add(renameItem);
+            }
+
             var exportItem = new MenuItem { Header = "⬇ Exporter cette catégorie..." };
             exportItem.Click += (_, _) => ExportCategory(section);
             menu.Items.Add(exportItem);
+
+            if (canManage)
+            {
+                menu.Items.Add(new Separator());
+                var deleteItem = new MenuItem { Header = "🗑 Supprimer la catégorie..." };
+                deleteItem.Click += (_, _) => DeleteCategory(section);
+                menu.Items.Add(deleteItem);
+            }
             menu.IsOpen = true;
         }
 
@@ -1990,11 +1950,11 @@ namespace WaseBoard
 
         // Catégories partagées : créées automatiquement par serveur Discord (voir
         // RefreshSharedCategoriesAsync), non renommables/supprimables — rename/delete ci-dessous
-        // ne concernent que les catégories personnelles.
+        // ne concernent que les catégories personnelles (menu clic droit de leur en-tête).
 
-        private void RenameCategory_Click(object sender, RoutedEventArgs e)
+        private void RenameCategory(SectionViewModel section)
         {
-            if (sender is not Button { Tag: SectionViewModel section } || section.IsShared) return;
+            if (section.IsShared) return;
             var newName = PromptDialog.Show(this, "Nouveau nom de catégorie :", section.Name);
             if (string.IsNullOrWhiteSpace(newName)) return;
 
@@ -2002,9 +1962,9 @@ namespace WaseBoard
             RefreshSections();
         }
 
-        private void DeleteCategory_Click(object sender, RoutedEventArgs e)
+        private void DeleteCategory(SectionViewModel section)
         {
-            if (sender is not Button { Tag: SectionViewModel section } || section.IsShared) return;
+            if (section.IsShared) return;
 
             var confirm = ConfirmDialog.Show(this, $"Supprimer la catégorie « {section.Name} » ?");
             if (!confirm) return;

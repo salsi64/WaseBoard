@@ -197,7 +197,7 @@
                                 <Border.Effect><BlurEffect Radius="14"/></Border.Effect>
                             </Border>
                             <Border x:Name="PillBorder" Background="{DynamicResource PanelBrush}" CornerRadius="18" Height="54"
-                                    BorderThickness="2" BorderBrush="Transparent" Padding="4,3,15,4">
+                                    BorderThickness="2" BorderBrush="{DynamicResource PillBorderBrush}" Padding="4,3,15,4">
                                 <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                             </Border>
                             <Border x:Name="Ring" Visibility="Collapsed" CornerRadius="18" BorderThickness="2" IsHitTestVisible="False"
@@ -423,6 +423,21 @@
                             DragEnter="SectionHeader_DragEnter" DragLeave="SectionHeader_DragLeave"
                             MouseRightButtonUp="SectionHeader_RightClick">
                     <DockPanel>
+                        <!-- Flèche d'état : ▾ ouverte, ▸ repliée (suit l'Expander qui contient cet en-tête). -->
+                        <TextBlock DockPanel.Dock="Left" FontSize="12" Width="14" Opacity="0.85" VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextBrush}" ToolTip="Cliquer pour plier/déplier">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="▾"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsExpanded, RelativeSource={RelativeSource AncestorType=Expander}}" Value="False">
+                                            <Setter Property="Text" Value="▸"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
                         <Border Width="18" Height="18" CornerRadius="9" DockPanel.Dock="Left" Margin="4,0,4,0"
                                 Visibility="{Binding HasIcon, Converter={StaticResource BoolToVisibilityConverter}}">
                             <Border.Background>
@@ -468,14 +483,6 @@
                                        Cursor="SizeAll" ToolTip="Glisser pour réordonner"
                                        Foreground="{DynamicResource TextBrush}"
                                        Visibility="{Binding IsReorderable, Converter={StaticResource BoolToVisibilityConverter}}"/>
-                            <StackPanel Orientation="Horizontal" Visibility="{Binding IsManageable, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <Button Content="✎" Width="22" Height="20" Margin="2,0" FontSize="10"
-                                        Click="RenameCategory_Click" Tag="{Binding}"
-                                        Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                                <Button Content="🗑" Width="22" Height="20" Margin="2,0" FontSize="10"
-                                        Click="DeleteCategory_Click" Tag="{Binding}"
-                                        Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
-                            </StackPanel>
                         </StackPanel>
                     </DockPanel>
                     </Border>
@@ -660,7 +667,7 @@
                         </Grid.ColumnDefinitions>
                         <Button Grid.Column="0" Content="🏠 Accueil" Click="NavHome_Click" Height="28" FontSize="12"
                                 ToolTip="Revenir en haut de la liste"
-                                Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                                Style="{StaticResource PrimaryButtonStyle}"/>
                         <Button Grid.Column="2" Content="★ Favoris" Click="NavFavorites_Click" Height="28" FontSize="12"
                                 ToolTip="Aller aux favoris"
                                 Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="0"/>
@@ -811,10 +818,10 @@
                 <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="RefreshButton" Content="⟳" ToolTip="Actualiser le catalogue" Width="34" Height="30" Padding="0" Margin="0,0,6,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource TextBrush}" Click="RefreshButton_Click"/>
+                            BorderBrush="{DynamicResource OutlineBrush}" Click="RefreshButton_Click"/>
                     <Button x:Name="JoinVoiceButton" Height="30" Padding="10,0" Margin="0,0,6,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource TextBrush}" Click="JoinVoiceButton_Click"
+                            BorderBrush="{DynamicResource OutlineBrush}" Click="JoinVoiceButton_Click"
                             ToolTip="Rejoindre mon vocal : fait rejoindre le bot au salon vocal où vous êtes actuellement">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="🔊"/>
@@ -823,7 +830,7 @@
                     </Button>
                     <Button x:Name="StopAllButton" Height="30" Padding="10,0" Margin="0,0,6,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource TextBrush}" Click="StopAllButton_Click"
+                            BorderBrush="{DynamicResource OutlineBrush}" Click="StopAllButton_Click"
                             ToolTip="Stop tout : coupe les sons en cours">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="⏹"/>
@@ -832,11 +839,11 @@
                     </Button>
                     <Button x:Name="SettingsButton" Content="⚙" ToolTip="Paramètres" Width="34" Height="30" Padding="0" Margin="0,0,6,0"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
-                            BorderBrush="{DynamicResource TextBrush}" Click="SettingsButton_Click"/>
+                            BorderBrush="{DynamicResource OutlineBrush}" Click="SettingsButton_Click"/>
                     <Button x:Name="AddCategoryButton" Height="30" Padding="10,0" Margin="0,0,6,0"
                             Click="AddCategoryButton_Click" ToolTip="Nouvelle catégorie"
                             Background="Transparent" Foreground="{DynamicResource TextBrush}"
-                            BorderThickness="1" BorderBrush="{DynamicResource TextBrush}">
+                            BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="+"/>
                             <TextBlock x:Name="AddCategoryLabel" Text=" Catégorie"/>
@@ -844,7 +851,7 @@
                         </StackPanel>
                     </Button>
                     <Button x:Name="AddSoundButton" Height="30" Padding="12,0"
-                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"
+                            Style="{StaticResource PrimaryButtonStyle}"
                             Click="AddSoundButton_Click" ToolTip="Ajouter un son (ou glissez des fichiers audio dans la fenêtre)">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="+"/>

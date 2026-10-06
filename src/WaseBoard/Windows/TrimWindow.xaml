@@ -6,7 +6,7 @@
         Title="Éditer le son"
         FontFamily="Segoe UI Emoji, Segoe UI" Width="420" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource PanelBrush}"
+        Background="{DynamicResource SurfaceBrush}"
         chrome:WindowChromeBehavior.Enable="True"
         ResizeMode="NoResize"
         TextOptions.TextFormattingMode="Display"
@@ -22,7 +22,7 @@
         </Style>
         <!-- Champ « en creux » : plus sombre que la fenêtre -->
         <Style x:Key="FlatField" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-            <Setter Property="Background" Value="{DynamicResource BgBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource FieldBrush}"/>
             <Setter Property="Height" Value="38"/>
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="Padding" Value="12,0"/>
@@ -33,14 +33,14 @@
             <Setter Property="Height" Value="30"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="FontSize" Value="16"/>
-            <Setter Property="Background" Value="{DynamicResource BgBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource FieldBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource TrackBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
         <!-- Pastille de valeur (100 %, 0.0s – 3.8s) -->
         <Style x:Key="ValueChip" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource BgBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource FieldBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource TrackBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CornerRadius" Value="8"/>
@@ -70,7 +70,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid VerticalAlignment="Center" Height="{TemplateBinding Height}">
-                            <Border Height="4" CornerRadius="2" Background="{DynamicResource TrackBrush}"/>
+                            <Border Height="{DynamicResource SliderTrackHeight}" CornerRadius="2" Background="{DynamicResource TrackBrush}"/>
                             <Border Width="2" Height="10" HorizontalAlignment="Center" Background="{DynamicResource TrackBrush}"/>
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton>
@@ -91,7 +91,7 @@
                                     <Thumb Width="18" Height="18">
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
-                                                <Ellipse Fill="{DynamicResource AccentGradientBrush}" Stroke="{DynamicResource PanelBrush}" StrokeThickness="3"/>
+                                                <Ellipse Fill="{DynamicResource SliderThumbFill}" Stroke="{DynamicResource SurfaceBrush}" StrokeThickness="3"/>
                                             </ControlTemplate>
                                         </Thumb.Template>
                                     </Thumb>
@@ -104,7 +104,7 @@
         </Style>
     </Window.Resources>
 
-    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource PanelBrush}"
+    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource SurfaceBrush}"
             BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1">
     <Grid>
         <Grid.RowDefinitions>
@@ -126,7 +126,7 @@
 
                 <Grid Grid.Column="0" Width="76" Height="76" VerticalAlignment="Top">
                     <Button x:Name="ThumbButton" Width="68" Height="68" HorizontalAlignment="Left" VerticalAlignment="Bottom"
-                            Background="{DynamicResource AccentGradientBrush}"
+                            Background="{DynamicResource PrimaryBrush}"
                             Click="ThumbButton_Click" Cursor="Hand" ToolTip="Choisir un emoji">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
@@ -146,15 +146,15 @@
                             Click="FavoriteButton_Click" Cursor="Hand" ToolTip="Favori" Visibility="Collapsed">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border CornerRadius="12" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1">
+                                <Border CornerRadius="12" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1">
                                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                             </ControlTemplate>
                         </Button.Template>
                         <TextBlock x:Name="FavoriteGlyph" Text="☆" FontSize="13" Foreground="{DynamicResource TextBrush}" Opacity="0.7"/>
                     </Button>
-                    <Border Width="22" Height="22" CornerRadius="11" HorizontalAlignment="Right" VerticalAlignment="Bottom" IsHitTestVisible="False"
-                            Background="{DynamicResource BgBrush}" BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1">
+                    <Border x:Name="EditBadge" Width="22" Height="22" CornerRadius="11" HorizontalAlignment="Right" VerticalAlignment="Bottom" IsHitTestVisible="False"
+                            Background="{DynamicResource FieldBrush}" BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1">
                         <TextBlock Text="✏" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
                     </Border>
                 </Grid>
@@ -175,7 +175,7 @@
                 <StackPanel Margin="0,0,0,18">
                     <TextBlock Text="CATÉGORIES" Style="{StaticResource FieldLabel}"/>
                     <Button x:Name="CategoryTrigger" Click="CategoryTrigger_Click" Height="38" Padding="12,0"
-                            HorizontalContentAlignment="Stretch" Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
+                            HorizontalContentAlignment="Stretch" Background="{DynamicResource FieldBrush}" Foreground="{DynamicResource TextBrush}"
                             BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1">
                         <Grid>
                             <TextBlock x:Name="CategoryTriggerText" Text="Aucune" FontSize="14" VerticalAlignment="Center" HorizontalAlignment="Left"/>
@@ -184,7 +184,7 @@
                     </Button>
                     <Popup x:Name="CategoryPopup" PlacementTarget="{Binding ElementName=CategoryTrigger}" Placement="Bottom"
                            StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" Closed="CategoryPopup_Closed">
-                        <Border Margin="0,6,16,16" Width="376" Background="{DynamicResource BgBrush}"
+                        <Border Margin="0,6,16,16" Width="376" Background="{DynamicResource CardBrush}"
                                 BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1" CornerRadius="14" Padding="8">
                             <Border.Effect>
                                 <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.5"/>
@@ -206,9 +206,9 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBox x:Name="NewCategoryBox" Height="32" KeyDown="NewCategoryBox_KeyDown"/>
                                             <Button Grid.Column="1" Content="✓" Width="32" Height="32" Margin="6,0,0,0" Padding="0" Click="NewCategoryConfirm_Click"
-                                                    Background="{DynamicResource AccentGradientBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                                                    Style="{StaticResource PrimaryButtonStyle}"/>
                                             <Button Grid.Column="2" Content="✕" Width="32" Height="32" Margin="6,0,0,0" Padding="0" Click="NewCategoryCancel_Click"
-                                                    Background="{DynamicResource PanelBrush}" Foreground="{DynamicResource TextBrush}"/>
+                                                    Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}"/>
                                         </Grid>
                                     </StackPanel>
                                 </Border>
@@ -243,6 +243,7 @@
                 </StackPanel>
             </StackPanel>
 
+            <StackPanel x:Name="TrimPanel">
             <!-- Découpe -->
             <Grid Margin="0,0,0,7">
                 <TextBlock Text="DÉCOUPE" Style="{StaticResource FieldLabel}" Margin="0" VerticalAlignment="Center"/>
@@ -258,7 +259,7 @@
             <TextBlock x:Name="LoadingText" Text="Analyse du fichier audio..."
                        Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
 
-            <Border Background="{DynamicResource BgBrush}" BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1"
+            <Border Background="{DynamicResource FieldBrush}" BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1"
                     CornerRadius="12" Height="60" Margin="0,0,0,10" ClipToBounds="True">
                 <Canvas x:Name="WaveformCanvas" Width="374" Height="58" ClipToBounds="True">
                     <!-- Zone gardée : teinte d'accent + liseré à chaque bord -->
@@ -294,7 +295,7 @@
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
                 <Button x:Name="PreviewButton" Content="▶  Écouter l'extrait" Padding="14,8" Margin="0,0,8,0"
-                        Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
+                        Background="{DynamicResource FieldBrush}" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
                         BorderBrush="{DynamicResource TrackBrush}" Click="PreviewButton_Click"/>
                 <Button x:Name="ResetButton" Content="Tout garder" Padding="14,8"
                         Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1"
@@ -303,11 +304,12 @@
 
             <TextBlock x:Name="HintText" Foreground="{DynamicResource TextBrush}" Opacity="0.55" FontSize="11" Margin="0,-8,0,16" TextWrapping="Wrap"
                        Text="Faites glisser les poignées pour ne garder qu'une partie. Le son complet est conservé : vous pourrez le modifier plus tard (clic droit › Éditer)."/>
+            </StackPanel>
 
             <!-- Fichier du son (mode édition) -->
             <StackPanel x:Name="FilePanel" Visibility="Collapsed" Margin="0,0,0,4">
                 <TextBlock Text="SON" Style="{StaticResource FieldLabel}"/>
-                <Border Background="{DynamicResource BgBrush}" BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1" CornerRadius="12" Padding="10">
+                <Border Background="{DynamicResource FieldBrush}" BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1" CornerRadius="12" Padding="10">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -316,7 +318,7 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <Border Width="34" Height="34" CornerRadius="9" Background="{DynamicResource PanelBrush}">
+                        <Border Width="34" Height="34" CornerRadius="9" Background="{DynamicResource SurfaceBrush}">
                             <TextBlock Text="🎵" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Foreground="{DynamicResource AccentBrush}"/>
                         </Border>
@@ -325,7 +327,7 @@
                             <TextBlock x:Name="FileInfoText" FontSize="11.5" Opacity="0.5" Foreground="{DynamicResource TextBrush}"/>
                         </StackPanel>
                         <Button x:Name="ReplaceFileButton" Grid.Column="2" Content="Remplacer…" Padding="12,6" FontSize="12" Margin="0,0,4,0"
-                                VerticalAlignment="Center" Background="{DynamicResource PanelBrush}" Foreground="{DynamicResource TextBrush}"
+                                VerticalAlignment="Center" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource TextBrush}"
                                 BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1" Click="ReplaceFileButton_Click"
                                 ToolTip="Remplacer le fichier audio par un autre : le son garde son nom, son emoji, ses catégories et ses réglages"/>
                         <Button x:Name="RevertFileButton" Grid.Column="3" Content="↩" Width="30" Height="30" Padding="0" Margin="0,0,2,0" Visibility="Collapsed"
@@ -340,10 +342,10 @@
             <Grid Margin="0,18,0,0">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="Annuler" Padding="20,10" Margin="0,0,10,0" Click="Cancel_Click"
-                            Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
+                            Background="{DynamicResource FieldBrush}" Foreground="{DynamicResource TextBrush}"
                             BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1" FontWeight="SemiBold"/>
                     <Button x:Name="ConfirmButton" Content="Ajouter le son" Padding="22,10" Click="Confirm_Click" FontWeight="Bold"
-                            Background="{DynamicResource AccentGradientBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                            Style="{StaticResource PrimaryButtonStyle}"/>
                 </StackPanel>
             </Grid>
         </StackPanel>
@@ -351,7 +353,7 @@
         <!-- Sélecteur d'emoji : s'ouvre sous la vignette (le champ texte reste là pour coller un emoji) -->
         <Popup x:Name="EmojiPopup" PlacementTarget="{Binding ElementName=ThumbButton}" Placement="Bottom"
                StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" Closed="EmojiPopup_Closed">
-            <Border Margin="0,6,16,16" Width="340" Background="{DynamicResource BgBrush}"
+            <Border Margin="0,6,16,16" Width="340" Background="{DynamicResource CardBrush}"
                     BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1" CornerRadius="14" Padding="10">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="24" ShadowDepth="4" Opacity="0.5"/>

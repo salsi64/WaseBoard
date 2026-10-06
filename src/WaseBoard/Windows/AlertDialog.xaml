@@ -5,10 +5,10 @@
         Title="WaseBoard"
         FontFamily="Segoe UI Emoji, Segoe UI" Height="170" Width="380"
         WindowStartupLocation="CenterOwner"
-        Background="{DynamicResource BgBrush}"
+        Background="{DynamicResource SurfaceBrush}"
         chrome:WindowChromeBehavior.Enable="True"
         ResizeMode="NoResize">
-    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource BgBrush}">
+    <Border x:Name="RootChromeBorder" CornerRadius="8" Background="{DynamicResource SurfaceBrush}">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="36"/>
@@ -23,7 +23,7 @@
                 </StackPanel>
                 <Button Content="OK" Padding="20,6" HorizontalAlignment="Right" Click="Ok_Click"
                         IsDefault="True" IsCancel="True"
-                        Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource OnAccentBrush}" BorderThickness="0"/>
+                        Style="{StaticResource PrimaryButtonStyle}"/>
             </StackPanel>
         </Grid>
     </Border>

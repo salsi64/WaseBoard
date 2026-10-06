@@ -1,4 +1,5 @@
 ﻿<Application x:Class="WaseBoard.App"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:WaseBoard"
@@ -27,6 +28,24 @@
             <GradientStop Color="#38BDF8" Offset="0"/>
             <GradientStop Color="#38F8DB" Offset="1"/>
         </LinearGradientBrush>
+
+        <!-- ===== Jetons de style : ce qui distingue le thème « Flat » des autres ===== -->
+        <!-- Valeurs du style Classique/Moderne ; MainWindow.ApplyThemeTokens() les recalcule depuis la palette courante
+             (Flat : champs « en creux », fenêtres sur le panneau, boutons principaux en dégradé, bordures douces). -->
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#38BDF8"/>
+        <SolidColorBrush x:Key="FieldBrush" Color="#182236"/>
+        <SolidColorBrush x:Key="OutlineBrush" Color="#EAF0FA"/>
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#0F1624"/>
+        <SolidColorBrush x:Key="CardBrush" Color="#182236"/>
+        <SolidColorBrush x:Key="SecondaryBrush" Color="Transparent"/>
+        <SolidColorBrush x:Key="PillBorderBrush" Color="Transparent"/>
+        <SolidColorBrush x:Key="NavOutlineBrush" Color="#707070"/>
+        <SolidColorBrush x:Key="SliderThumbFill" Color="White"/>
+        <SolidColorBrush x:Key="SliderThumbStroke" Color="#38BDF8"/>
+        <CornerRadius x:Key="FieldRadius">8</CornerRadius>
+        <Thickness x:Key="SecondaryBorderThickness">0</Thickness>
+        <sys:Double x:Key="SliderTrackHeight">6</sys:Double>
+
         <SolidColorBrush x:Key="TextBrush" Color="#EAF0FA"/>
         <SolidColorBrush x:Key="TrackBrush" Color="#26324A"/>
 
@@ -64,6 +83,20 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Bouton principal / secondaire : suivent les jetons ci-dessus (dégradé et bordure douce en Flat). -->
+        <Style x:Key="PrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource PrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style x:Key="SecondaryButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{DynamicResource SecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource OutlineBrush}"/>
+            <Setter Property="BorderThickness" Value="{DynamicResource SecondaryBorderThickness}"/>
+        </Style>
+
 
         <!-- Barres de défilement : fines, arrondies, discrètes (teinte du texte à faible opacité) au lieu du
              gris système clair, très voyant sur une palette sombre. -->
@@ -142,13 +175,13 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid VerticalAlignment="Center" Height="{TemplateBinding Height}">
-                            <Border Height="6" Background="{DynamicResource TrackBrush}" CornerRadius="3"/>
+                            <Border Height="{DynamicResource SliderTrackHeight}" Background="{DynamicResource TrackBrush}" CornerRadius="3"/>
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="Slider.DecreaseLarge">
                                         <RepeatButton.Template>
                                             <ControlTemplate>
-                                                <Border Height="6" CornerRadius="3" Background="{DynamicResource AccentBrush}"/>
+                                                <Border Height="{DynamicResource SliderTrackHeight}" CornerRadius="3" Background="{DynamicResource AccentBrush}"/>
                                             </ControlTemplate>
                                         </RepeatButton.Template>
                                     </RepeatButton>
@@ -166,7 +199,7 @@
                                     <Thumb Width="18" Height="18">
                                         <Thumb.Template>
                                             <ControlTemplate TargetType="Thumb">
-                                                <Ellipse Fill="White" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2"/>
+                                                <Ellipse Fill="{DynamicResource SliderThumbFill}" Stroke="{DynamicResource SliderThumbStroke}" StrokeThickness="2"/>
                                             </ControlTemplate>
                                         </Thumb.Template>
                                     </Thumb>
@@ -187,6 +220,7 @@
             <Setter Property="Padding" Value="12,0"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NavOutlineBrush}"/>
             <Setter Property="FontSize" Value="13"/>
         </Style>
 
@@ -203,7 +237,7 @@
              s'accentue au focus). S'applique à tous les TextBox de l'app (recherche, Paramètres,
              dialogues...), aucun n'était stylé jusqu'ici. -->
         <Style TargetType="TextBox">
-            <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource FieldBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
             <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}"/>
             <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}"/>
@@ -216,7 +250,7 @@
                     <ControlTemplate TargetType="TextBox">
                         <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8" SnapsToDevicePixels="True">
+                                CornerRadius="{DynamicResource FieldRadius}" SnapsToDevicePixels="True">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
                                           VerticalAlignment="Center"
                                           HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
@@ -332,8 +366,8 @@
                                           IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource TrackBrush}"
-                                                BorderThickness="1" CornerRadius="6"/>
+                                        <Border Background="{DynamicResource FieldBrush}" BorderBrush="{DynamicResource TrackBrush}"
+                                                BorderThickness="1" CornerRadius="{DynamicResource FieldRadius}"/>
                                     </ControlTemplate>
                                 </ToggleButton.Template>
                             </ToggleButton>
@@ -350,8 +384,8 @@
                             </Grid>
                             <Popup x:Name="Popup" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True"
                                    Placement="Bottom" PopupAnimation="Fade">
-                                <Border Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource TrackBrush}"
-                                        BorderThickness="1" CornerRadius="6" Padding="3"
+                                <Border Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource TrackBrush}"
+                                        BorderThickness="1" CornerRadius="{DynamicResource FieldRadius}" Padding="3"
                                         MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
                                     <Border.Effect>
                                         <DropShadowEffect Color="Black" BlurRadius="16" ShadowDepth="3" Opacity="0.4"/>
