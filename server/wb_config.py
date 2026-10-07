@@ -61,6 +61,7 @@ ENV_OVERRIDES: dict[str, tuple[str, Callable]] = {
     "max_concurrent_voice": ("WASEBOARD_MAX_CONCURRENT_VOICE", int),
     "max_ffmpeg_processes": ("WASEBOARD_MAX_FFMPEG_PROCESSES", int),
     "http_rate_limit_per_min": ("WASEBOARD_HTTP_RATE_LIMIT_PER_MIN", int),
+    "voice_idle_sleep_s": ("WASEBOARD_VOICE_IDLE_SLEEP_S", float),
     "default_guild_limits": ("WASEBOARD_DEFAULT_GUILD_LIMITS", _json_object),
     "guild_limit_ceilings": ("WASEBOARD_GUILD_LIMIT_CEILINGS", _json_object),
 }
@@ -75,6 +76,10 @@ def validate_limits(config: dict) -> None:
     for key in RESOURCE_CAP_KEYS:
         if key in config and not _is_count(config[key]):
             raise ConfigError(f"{key} doit être un entier positif ou nul (0 = désactivé), pas {config[key]!r}.")
+    if "voice_idle_sleep_s" in config:
+        value = config["voice_idle_sleep_s"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 3600:
+            raise ConfigError(f"voice_idle_sleep_s doit être un nombre de secondes entre 0 (jamais) et 3600, pas {value!r}.")
     for name in ("default_guild_limits", "guild_limit_ceilings"):
         value = config.get(name)
         if value is None:

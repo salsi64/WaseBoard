@@ -390,6 +390,12 @@ et sous forme de variable d'environnement (`WASEBOARD_` + le nom en majuscules, 
 | `max_ffmpeg_processes` | sons joués en même temps, tous serveurs confondus (un processus ffmpeg chacun). |
 | `http_rate_limit_per_min` | requêtes par minute et par adresse IP sur les seules routes publiques ou coûteuses : `/connect/…`, `/oauth/…` (compteur commun) et l'envoi de sons. Les routes utilisées en continu par l'appli (`/activity`, `/status`, `/play`…) ne sont **jamais** freinées. Derrière nginx/Caddy, l'adresse du client est lue dans `X-Forwarded-For` (dernière entrée, celle vue par votre proxy). |
 
+### Voyant « en train de parler » du bot
+
+| Réglage | Effet |
+|---|---|
+| `voice_idle_sleep_s` | secondes sans aucun son avant que le bot cesse d'émettre dans le vocal (son voyant vert s'éteint dans Discord). **0 par défaut : le bot émet en continu**, le voyant reste allumé mais le premier son part sans la moindre latence. À activer (ex. `20`) seulement si le voyant permanent vous gêne : à la reprise, le bot rattrape l'horloge RTP pour que le récepteur n'ajoute pas de retard, mais vérifiez qu'un clic après une pause reste instantané chez vous. |
+
 Un refus de lecture répond `429` avec un message lisible (« Trop de sons en même temps… ») et **ne compte pas** dans
 l'anti-spam du membre.
 

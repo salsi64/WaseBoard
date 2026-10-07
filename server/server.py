@@ -85,6 +85,9 @@ MAX_GUILDS: int = CONFIG.get("max_guilds", 0)                          # serveur
 MAX_CONCURRENT_VOICE: int = CONFIG.get("max_concurrent_voice", 0)      # connexions vocales simultanées
 MAX_FFMPEG_PROCESSES: int = CONFIG.get("max_ffmpeg_processes", 0)      # sons joués en même temps, toutes guildes (1 ffmpeg chacun)
 HTTP_RATE_LIMIT_PER_MIN: int = CONFIG.get("http_rate_limit_per_min", 0)  # requêtes/min/IP sur les routes publiques
+# Voyant « en train de parler » du bot : secondes sans aucun son avant que le bot cesse d'émettre (le voyant s'éteint).
+# 0 (défaut) = le bot émet en continu, voyant toujours allumé mais AUCUNE latence au premier son. Voir MixingAudioSource.
+VOICE_IDLE_SLEEP_S: float = CONFIG.get("voice_idle_sleep_s", 0)
 # Réglages imposés par l'hébergeur aux guildes : valeurs PAR DÉFAUT de celles qui n'ont encore rien enregistré
 # (leurs admins peuvent les modifier) et PLAFONDS (que leurs admins ne peuvent pas dépasser ; « illimité » n'est alors
 # plus permis pour ce réglage). Clés possibles : voir wb_config.GUILD_LIMIT_KEYS.
@@ -100,6 +103,7 @@ ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma"}
 # Format attendu par discord.py pour une frame audio : 20ms de PCM stéréo 16 bits @ 48kHz.
 FRAME_BYTES = 3840
 SILENCE = b"\x00" * FRAME_BYTES
+RTP_CLOCK_HZ = 48000  # horloge RTP de l'audio Discord (Opus 48 kHz) : l'horodatage d'un paquet avance de 960 par trame de 20 ms
 
 #: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
 #: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).
@@ -582,21 +586,28 @@ class MixingAudioSource(discord.AudioSource):
     Le callback "on_finish" optionnel se déclenche à la fin réelle du son (ou à son remplacement),
     utilisé pour effacer le highlight partagé au bon moment.
 
-    Voyant « en train de parler » : le lecteur ne s'arrête jamais (pas de latence au premier son), mais quand rien
-    ne joue depuis IDLE_FRAMES_BEFORE_SLEEP frames il est mis en PAUSE (le voyant s'éteint, plus aucun paquet audio
-    n'est envoyé) et il est relancé par add() dès qu'un son arrive — voir attach().
+    Voyant « en train de parler » (facultatif, voice_idle_sleep_s) : par défaut le lecteur ne s'arrête jamais — le
+    flux reste continu et le premier son part sans la moindre latence, mais le voyant du bot reste allumé. Si
+    voice_idle_sleep_s > 0, le lecteur est mis en PAUSE (le voyant s'éteint, plus aucun paquet audio n'est envoyé) après
+    ce délai sans son, et relancé par add() dès qu'un son arrive — voir attach().
+
+    Piège de la pause : discord.py n'avance pas l'horodatage RTP pendant qu'il se tait. Au réveil, le récepteur voit
+    donc des paquets « en retard » de toute la durée de la pause et les rejette/retarde (latence au premier son, c'est
+    ce qui rendait chaque clic lent). On avance l'horodatage de la durée écoulée au réveil, comme le fait tout émetteur
+    RTP après un silence (voir _sync_rtp_timestamp).
     """
 
-    #: Frames de 20 ms sans aucun son avant d'éteindre le voyant (10 = 200 ms ; discord.py envoie en plus 5 trames de
-    #: silence en entrant en pause, ce qui évite de couper net la fin d'un son).
-    IDLE_FRAMES_BEFORE_SLEEP = 10
-
-    def __init__(self) -> None:
+    def __init__(self, idle_sleep_frames: Optional[int] = None) -> None:
         self._entries: dict[str, tuple[discord.AudioSource, Optional[callable]]] = {}
         self._lock = threading.Lock()
         self._voice_client = None
+        # Trames de 20 ms sans aucun son avant la pause ; 0 = jamais de pause.
+        self._sleep_after = round(VOICE_IDLE_SLEEP_S * 50) if idle_sleep_frames is None else idle_sleep_frames
         self._idle_frames = 0
         self._asleep = False
+        self._slept_at = 0.0
+        self._slept_ts: Optional[int] = None
+        self._sync_pending = False
 
     def attach(self, voice_client) -> None:
         """Lie ce mixeur au client vocal qui le lit : permet de mettre le lecteur en pause quand rien ne joue."""
@@ -608,6 +619,7 @@ class MixingAudioSource(discord.AudioSource):
         self._idle_frames = 0
         if self._asleep:
             self._asleep = False
+            self._sync_pending = True  # horodatage RTP à rattraper juste avant le premier paquet (voir read())
             if self._voice_client is not None:
                 try:
                     self._voice_client.resume()
@@ -615,9 +627,13 @@ class MixingAudioSource(discord.AudioSource):
                     log.exception("Reprise du lecteur vocal impossible")
 
     def _maybe_sleep_locked(self) -> None:
-        if self._asleep or self._idle_frames < self.IDLE_FRAMES_BEFORE_SLEEP or self._voice_client is None:
+        if self._sleep_after <= 0 or self._asleep or self._idle_frames < self._sleep_after or self._voice_client is None:
             return
         self._asleep = True
+        # Repère de l'horloge au moment de la pause : appelé depuis read(), donc depuis le fil du lecteur, juste avant
+        # l'envoi de la trame que lit ce read() — vc.timestamp est exactement l'horodatage de ce paquet.
+        self._slept_at = time.monotonic()
+        self._slept_ts = getattr(self._voice_client, "timestamp", None)
         try:
             self._voice_client.pause()
         except Exception:
@@ -660,6 +676,32 @@ class MixingAudioSource(discord.AudioSource):
         self._finish_entries(entries.values())
 
     def read(self) -> bytes:
+        frame = self._read_frame()
+        with self._lock:
+            sync, self._sync_pending = self._sync_pending, False
+        if sync:
+            # Après la lecture (qui peut avoir bloqué le temps que ffmpeg sorte sa première trame) et juste avant l'envoi
+            # du paquet par le lecteur : l'horodatage doit refléter l'instant réel d'émission.
+            self._sync_rtp_timestamp()
+        return frame
+
+    def _sync_rtp_timestamp(self) -> None:
+        """Au réveil d'une pause : avance l'horodatage RTP du client vocal de la durée réellement écoulée (moins ce
+        que les paquets de la pause ont déjà fait avancer), pour que le flux reprenne à l'heure — voir la docstring.
+        Appelé depuis le fil du lecteur, entre deux paquets : rien d'autre n'écrit l'horodatage à cet instant."""
+        vc, start_ts = self._voice_client, self._slept_ts
+        if vc is None or start_ts is None:
+            return
+        try:
+            elapsed = int((time.monotonic() - self._slept_at) * RTP_CLOCK_HZ)
+            already = (vc.timestamp - start_ts) & 0xFFFFFFFF
+            gap = elapsed - already
+            if gap > 0:
+                vc.timestamp = (vc.timestamp + gap) & 0xFFFFFFFF
+        except Exception:
+            log.exception("Resynchronisation de l'horodatage RTP impossible")
+
+    def _read_frame(self) -> bytes:
         with self._lock:
             snapshot = list(self._entries.items())
             if snapshot:

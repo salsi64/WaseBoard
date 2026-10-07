@@ -14,6 +14,7 @@
   "max_sources_per_guild": 0,
   "max_ffmpeg_processes": 0,
   "http_rate_limit_per_min": 0,
+  "voice_idle_sleep_s": 0,
   "default_guild_limits": {},
   "guild_limit_ceilings": {}
 }

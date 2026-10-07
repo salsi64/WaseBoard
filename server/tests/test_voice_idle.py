@@ -1,12 +1,16 @@
 """Voyant « en train de parler » du bot : le lecteur vocal est mis en pause quand rien ne joue et relancé dès qu'un son
-arrive (MixingAudioSource.attach), sans jamais bloquer un son ; plus l'annonce des fonctionnalités par /status.
-Vrai code de server.py, faux client vocal : aucun jeton ni Discord réel. Dossier de données isolé (_env.py)."""
+arrive (MixingAudioSource.attach), sans jamais bloquer un son ; l'horodatage RTP rattrape le temps de la pause (sinon
+chaque clic après un silence arrive en retard côté Discord) ; désactivé par défaut ; plus l'annonce des fonctionnalités
+par /status. Vrai code de server.py et vrai AudioPlayer de discord.py, faux client vocal : aucun jeton ni Discord réel.
+Dossier de données isolé (_env.py)."""
 import asyncio
 import json
 import shutil
 import sys
 import threading
 import time
+import types
+from pathlib import Path
 
 import _env  # noqa: E402  (doit s'exécuter AVANT import server : fixe WASEBOARD_DATA_DIR)
 import server as S  # noqa: E402
@@ -71,15 +75,15 @@ def idle(mixer, n):
 
 
 async def main():
-    N = S.MixingAudioSource.IDLE_FRAMES_BEFORE_SLEEP
+    N = 10  # trames de 20 ms sans son avant la pause, pour ces tests (le réglage réel est voice_idle_sleep_s)
 
     print("\n--- Sans client vocal lié ---")
-    m = S.MixingAudioSource()
+    m = S.MixingAudioSource(idle_sleep_frames=N)
     idle(m, N * 3)
     check("aucun client lié : lecture du silence sans erreur", m.read() == S.SILENCE)
 
     print("\n--- Mise en pause quand rien ne joue ---")
-    vc = FakeVC(); m = S.MixingAudioSource(); m.attach(vc)
+    vc = FakeVC(); m = S.MixingAudioSource(idle_sleep_frames=N); m.attach(vc)
     idle(m, N - 1)
     check(f"{N - 1} trames de silence : pas encore en pause", vc.calls == [], vc.calls)
     m.read()
@@ -112,7 +116,7 @@ async def main():
     check("après clear() (Stop tout) : pause", vc.paused, vc.calls)
 
     print("\n--- Course add()/read() : un son n'est jamais bloqué par une pause ---")
-    vc = FakeVC(); m = S.MixingAudioSource(); m.attach(vc)
+    vc = FakeVC(); m = S.MixingAudioSource(idle_sleep_frames=N); m.attach(vc)
     violations, stop = [], threading.Event()
 
     def reader():
@@ -136,8 +140,144 @@ async def main():
     stop.set(); t.join()
     check("300 ajouts à des instants variés : aucun son bloqué, aucun audio lu en pause", stuck == 0 and not violations, (stuck, violations[:2]))
 
+    print("\n--- Désactivé par défaut : flux continu, jamais de pause ---")
+    check("réglage par défaut : voice_idle_sleep_s = 0", S.VOICE_IDLE_SLEEP_S == 0, S.VOICE_IDLE_SLEEP_S)
+    vc = FakeVC(); m = S.MixingAudioSource(); m.attach(vc)
+    idle(m, 5000)
+    m.add("a", Tone(2))
+    check("100 s de silence puis un son : aucune pause ni reprise (le premier son part sans latence)", vc.calls == [], vc.calls)
+    check("sans réglage : jamais de pause (0 trame)", S.MixingAudioSource()._sleep_after == 0)
+
+    print("\n--- Réveil : l'horodatage RTP rattrape le temps écoulé ---")
+    clock = [1000.0]
+    real_monotonic = S.time.monotonic
+    S.time.monotonic = lambda: clock[0]
+    try:
+        def paused_mixer(start_ts):
+            v = FakeVC(); v.timestamp = start_ts
+            mx = S.MixingAudioSource(idle_sleep_frames=N); mx.attach(v)
+            idle(mx, N)  # la N-ième trame déclenche la pause ; repère : start_ts à t = 1000 s
+            v.timestamp += 960 * 6  # le lecteur envoie la trame de silence puis les 5 trames de fin de flux
+            return v, mx
+
+        vc, m = paused_mixer(1000)
+        clock[0] += 10.0
+        m.add("a", Tone(3))
+        check("à la reprise, avant la 1re trame : horodatage inchangé", vc.timestamp == 1000 + 5760, vc.timestamp)
+        frame = m.read()
+        check("la 1re trame est intacte", frame[:2] == b"\x01\x00" and len(frame) == FRAME)
+        check("l'horodatage a avancé des 10 s de pause : 1000 + 10 x 48000", vc.timestamp == 1000 + 480000, vc.timestamp)
+        m.read()
+        check("trames suivantes : une seule resynchronisation", vc.timestamp == 1000 + 480000, vc.timestamp)
+
+        vc, m = paused_mixer(1000)
+        clock[0] += 0.05  # 50 ms : moins que les trames déjà envoyées à la pause (120 ms) -> rien à rattraper
+        m.add("a", Tone(2)); m.read()
+        check("pause très courte : horodatage inchangé (jamais de retour en arrière)", vc.timestamp == 1000 + 5760, vc.timestamp)
+
+        start = 0xFFFFFFFF - 1000
+        vc, m = paused_mixer(start)
+        vc.timestamp &= 0xFFFFFFFF
+        clock[0] += 5.0
+        m.add("a", Tone(2)); m.read()
+        check("débordement 32 bits : l'horodatage reboucle comme un compteur RTP", vc.timestamp == (start + 240000) & 0xFFFFFFFF, vc.timestamp)
+
+        vc = FakeVC(); m = S.MixingAudioSource(idle_sleep_frames=N); m.attach(vc)  # faux client SANS horodatage
+        idle(m, N); clock[0] += 3.0
+        m.add("a", Tone(1))
+        check("client sans horodatage lisible : aucune erreur, le son joue", m.read()[:2] == b"\x01\x00" and vc.calls == ["pause", "resume"], vc.calls)
+
+        vc, m = paused_mixer(500)
+        m.add("a", Tone(1)); m.read()  # reprise immédiate : 0 s
+        idle(m, N + 1)  # le son est fini : nouvelle pause, nouveau repère
+        vc.timestamp += 960 * 6
+        t_before = vc.timestamp
+        clock[0] += 2.0
+        m.add("b", Tone(1)); m.read()
+        check("deuxième pause : repère renouvelé (2 s rattrapées, pas davantage)", vc.timestamp == t_before + 96000 - 5760, (vc.timestamp, t_before))
+    finally:
+        S.time.monotonic = real_monotonic
+
+    print("\n--- Vrai AudioPlayer de discord.py : la chronologie RTP reste à l'heure après une pause ---")
+    def player_timeline(sync):
+        loop = asyncio.new_event_loop()
+        threading.Thread(target=loop.run_forever, daemon=True).start()
+        speaking = []
+
+        class Client:
+            timeout = 5
+            def __init__(self):
+                self.timestamp = 0
+                self.packets = []  # (instant, horodatage, charge utile)
+                self.client = types.SimpleNamespace(loop=loop)
+                self.ws = types.SimpleNamespace(speak=self._speak)
+            async def _speak(self, state):
+                speaking.append(state)
+            def is_connected(self):
+                return True
+            def send_audio_packet(self, data, *, encode=True):
+                self.packets.append((time.perf_counter(), self.timestamp, data))
+                self.timestamp = (self.timestamp + 960) & 0xFFFFFFFF
+            def pause(self):
+                player.pause()
+            def resume(self):
+                player.resume()
+
+        client = Client()
+        mixer = S.MixingAudioSource(idle_sleep_frames=N)
+        if not sync:
+            mixer._sync_rtp_timestamp = lambda: None  # témoin : le comportement d'origine, sans rattrapage
+        mixer.attach(client)
+        player = S.discord.player.AudioPlayer(mixer, client)
+        player.start()
+        time.sleep(0.6)                       # silence : pause au bout de 200 ms
+        time.sleep(1.5)                       # 1,5 s en pause
+        mixer.add("a", Tone(5))
+        time.sleep(0.5)
+        player.stop()
+        player.join(2)
+        loop.call_soon_threadsafe(loop.stop)
+        tone = [p for p in client.packets if p[2][:2] == b"\x01\x00"]
+        return client, tone, speaking
+
+    for sync, label in ((True, "avec rattrapage"), (False, "témoin sans rattrapage")):
+        client, tone, speaking = player_timeline(sync)
+        if not tone:
+            check(f"{label} : le son a bien été émis", False, len(client.packets))
+            continue
+        first_tone = tone[0]
+        # repère de la chronologie : la dernière trame PCM envoyée avant la salve de silence Opus que discord.py émet en pause
+        first_opus_silence = next(i for i, p in enumerate(client.packets) if len(p[2]) < 100)
+        marker = client.packets[first_opus_silence - 1]
+        wall = first_tone[0] - marker[0]                            # secondes réelles écoulées entre cette trame et le son
+        rtp = ((first_tone[1] - marker[1]) & 0xFFFFFFFF) / 48000.0  # secondes que le récepteur déduit de l'horodatage
+        drift = wall - rtp
+        if sync:
+            check(f"{label} : horodatage RTP et horloge réelle concordent à 50 ms près (écart {drift * 1000:.0f} ms)", abs(drift) < 0.05, (wall, rtp))
+            check(f"{label} : le voyant s'est éteint puis rallumé ({len(speaking)} changements d'état)", len(speaking) >= 3, speaking)
+        else:
+            check(f"{label} : le flux accuse bien ~1,5 s de retard (écart {drift * 1000:.0f} ms) : le test voit le défaut", drift > 1.0, (wall, rtp))
+
+    print("\n--- Réglage voice_idle_sleep_s validé au démarrage ---")
+    import wb_config
+    bad_ok = True
+    for bad in (-1, "abc", True, 7200, None):
+        try:
+            wb_config.validate_limits({"voice_idle_sleep_s": bad}); bad_ok = False
+        except wb_config.ConfigError:
+            pass
+    check("valeurs invalides refusées (négatif, texte, booléen, > 3600 s, null)", bad_ok)
+    try:
+        wb_config.validate_limits({"voice_idle_sleep_s": 0}); wb_config.validate_limits({"voice_idle_sleep_s": 20.5})
+        accepted = True
+    except wb_config.ConfigError:
+        accepted = False
+    check("0 et 20,5 s acceptés", accepted)
+    cfg = wb_config.load_config(environ={"WASEBOARD_VOICE_IDLE_SLEEP_S": "20"}, config_path=Path("inexistant-pour-le-test.json"))
+    check("variable d'environnement WASEBOARD_VOICE_IDLE_SLEEP_S prise en compte", cfg.get("voice_idle_sleep_s") == 20.0, cfg)
+
     print("\n--- Échec de la pause ---")
-    vc = FakeVC(fail_pause=True); m = S.MixingAudioSource(); m.attach(vc)
+    vc = FakeVC(fail_pause=True); m = S.MixingAudioSource(idle_sleep_frames=N); m.attach(vc)
     idle(m, N * 2 + 1)
     m.add("x", Tone(1))
     check("pause impossible : ne casse rien, le son joue quand même", m.read()[:2] == b"\x01\x00")
