@@ -390,6 +390,12 @@ et sous forme de variable d'environnement (`WASEBOARD_` + le nom en majuscules, 
 | `max_ffmpeg_processes` | sons joués en même temps, tous serveurs confondus (un processus ffmpeg chacun). |
 | `http_rate_limit_per_min` | requêtes par minute et par adresse IP sur les seules routes publiques ou coûteuses : `/connect/…`, `/oauth/…` (compteur commun) et l'envoi de sons. Les routes utilisées en continu par l'appli (`/activity`, `/status`, `/play`…) ne sont **jamais** freinées. Derrière nginx/Caddy, l'adresse du client est lue dans `X-Forwarded-For` (dernière entrée, celle vue par votre proxy). |
 
+### Démarrage instantané des sons
+
+| Réglage | Effet |
+|---|---|
+| `pcm_cache_mb` | mémoire (en Mo) réservée aux sons déjà décodés. **0 par défaut** : chaque clic lance ffmpeg, ce qui ajoute ~50 ms avant le premier échantillon (et gèle ~50 ms les autres sons en cours). Avec par exemple `256`, le serveur décode les sons au démarrage puis à la première lecture, et un clic démarre sans attente. Compter ~11 Mo par minute de son ; au-delà du plafond, les sons les moins récemment joués sont oubliés (et simplement relus en flux), un son qui dépasse le quart du cache n'est jamais gardé. Remplacer le fichier d'un son invalide automatiquement sa copie en mémoire. |
+
 ### Voyant « en train de parler » du bot
 
 | Réglage | Effet |

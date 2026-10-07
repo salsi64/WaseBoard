@@ -16,11 +16,13 @@ import os
 import secrets
 import shutil
 import signal
+import subprocess
 import sys
 import threading
 import time
 import uuid
-from collections import Counter, deque
+from collections import Counter, OrderedDict, deque
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -88,6 +90,9 @@ HTTP_RATE_LIMIT_PER_MIN: int = CONFIG.get("http_rate_limit_per_min", 0)  # requ�
 # Voyant « en train de parler » du bot : secondes sans aucun son avant que le bot cesse d'émettre (le voyant s'éteint).
 # 0 (défaut) = le bot émet en continu, voyant toujours allumé mais AUCUNE latence au premier son. Voir MixingAudioSource.
 VOICE_IDLE_SLEEP_S: float = CONFIG.get("voice_idle_sleep_s", 0)
+# Mémoire (Mo) réservée aux sons déjà décodés : un clic démarre alors instantanément au lieu d'attendre ~50 ms le
+# démarrage de ffmpeg. 0 (défaut) = désactivé (chaque lecture lance ffmpeg). Voir PCMCache.
+PCM_CACHE_MB: float = CONFIG.get("pcm_cache_mb", 0)
 # Réglages imposés par l'hébergeur aux guildes : valeurs PAR DÉFAUT de celles qui n'ont encore rien enregistré
 # (leurs admins peuvent les modifier) et PLAFONDS (que leurs admins ne peuvent pas dépasser ; « illimité » n'est alors
 # plus permis pour ce réglage). Clés possibles : voir wb_config.GUILD_LIMIT_KEYS.
@@ -574,6 +579,119 @@ def purge_expired_trash(now: Optional[float] = None) -> list[dict]:
     expired_ids = {t["id"] for t in expired}
     save_trash([t for t in trash if t["id"] not in expired_ids])
     return expired
+
+
+PCM_BYTES_PER_MS = RTP_CLOCK_HZ * 2 * 2 // 1000  # s16le, 48 kHz, stéréo : 192 octets par milliseconde
+
+
+def decode_to_pcm(path: str, limit_bytes: int) -> Optional[bytes]:
+    """Décode tout un fichier audio en PCM s16le 48 kHz stéréo (exactement ce que produit FFmpegPCMAudio), avec la
+    priorité la plus basse. None si le son dépasse `limit_bytes` une fois décodé ou si ffmpeg échoue : l'appelant le
+    lira alors en flux, comme avant. Bloquant : à appeler depuis un fil, jamais depuis la boucle d'évènements."""
+    cmd = ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", path, "-f", "s16le", "-ar", "48000", "-ac", "2", "pipe:1"]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                            preexec_fn=(lambda: os.nice(10)) if hasattr(os, "nice") else None)
+    try:
+        data = proc.stdout.read(limit_bytes + 1)
+        if len(data) > limit_bytes or not data:
+            return None
+        return data if proc.wait(timeout=30) == 0 else None
+    except Exception:
+        return None
+    finally:
+        proc.kill()
+        proc.wait()
+        proc.stdout.close()
+
+
+class PCMCache:
+    """Sons décodés gardés en mémoire (au plus `max_bytes`, les moins récemment joués étant évincés en premier).
+    Clé = (id du son, date de modification, taille) : remplacer le fichier d'un son change la clé, l'ancienne version
+    n'est donc jamais rejouée. Un son trop long pour tenir (plus du quart du cache) n'est pas gardé et reste lu en
+    flux. Sûr à utiliser depuis plusieurs fils."""
+
+    def __init__(self, max_bytes: int) -> None:
+        self.max_bytes = max(0, int(max_bytes))
+        self._items: "OrderedDict[tuple, bytes]" = OrderedDict()
+        self._size = 0
+        self._loading: set = set()
+        self._uncacheable: set = set()
+        self._lock = threading.Lock()
+
+    @property
+    def enabled(self) -> bool:
+        return self.max_bytes > 0
+
+    @property
+    def max_item_bytes(self) -> int:
+        return self.max_bytes // 4
+
+    @property
+    def used_bytes(self) -> int:
+        return self._size
+
+    def get(self, key: tuple) -> Optional[bytes]:
+        with self._lock:
+            data = self._items.get(key)
+            if data is not None:
+                self._items.move_to_end(key)
+            return data
+
+    def put(self, key: tuple, data: bytes) -> bool:
+        with self._lock:
+            if len(data) > self.max_item_bytes:
+                self._uncacheable.add(key)
+                return False
+            previous = self._items.pop(key, None)
+            if previous is not None:
+                self._size -= len(previous)
+            self._items[key] = data
+            self._size += len(data)
+            while self._size > self.max_bytes and len(self._items) > 1:
+                _, evicted = self._items.popitem(last=False)
+                self._size -= len(evicted)
+            return True
+
+    def begin_load(self, key: tuple) -> bool:
+        """True si ce son doit être décodé maintenant (ni en mémoire, ni déjà en cours, ni connu comme trop gros)."""
+        with self._lock:
+            if not self.enabled or key in self._items or key in self._loading or key in self._uncacheable:
+                return False
+            self._loading.add(key)
+            return True
+
+    def end_load(self, key: tuple, data: Optional[bytes]) -> None:
+        if data is None:
+            with self._lock:
+                self._uncacheable.add(key)
+        else:
+            self.put(key, data)
+        with self._lock:
+            self._loading.discard(key)
+            if len(self._uncacheable) > 2000:  # garde-fou : l'ensemble ne doit pas grossir sans fin
+                self._uncacheable.clear()
+
+
+class PCMBufferSource(discord.AudioSource):
+    """Lit un son déjà décodé (voir PCMCache) par trames de 20 ms, sans aucun processus ni attente : le premier échantillon
+    part immédiatement. `start_ms`/`end_ms` = la portion gardée d'un son découpé (le tampon contient le fichier entier)."""
+
+    def __init__(self, buffer: bytes, start_ms: Optional[int] = None, end_ms: Optional[int] = None) -> None:
+        begin = 0 if start_ms is None else min(len(buffer), start_ms * PCM_BYTES_PER_MS // 4 * 4)
+        end = len(buffer) if end_ms is None else min(len(buffer), end_ms * PCM_BYTES_PER_MS // 4 * 4)
+        self._view = memoryview(buffer)[begin:max(begin, end)]
+        self._pos = 0
+
+    def read(self) -> bytes:
+        chunk = self._view[self._pos:self._pos + FRAME_BYTES]
+        self._pos += FRAME_BYTES
+        return bytes(chunk)
+
+    def is_opus(self) -> bool:
+        return False
+
+    def cleanup(self) -> None:
+        self._view = memoryview(b"")
 
 
 class MixingAudioSource(discord.AudioSource):
@@ -1149,6 +1267,9 @@ class WaseBoardServer(commands.Bot):
         self._membership_cache: dict[int, tuple[float, list]] = {}
         self._activity_lock = threading.Lock()
         self._web_runner: Optional[web.AppRunner] = None
+        # Sons décodés en mémoire (voir PCMCache) ; un seul fil pour les décoder en arrière-plan.
+        self.pcm_cache = PCMCache(int(PCM_CACHE_MB * 1024 * 1024))
+        self._pcm_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pcm-decode")
 
         # Sessions OAuth2 Discord : session_token (émis par WaseBoard) -> identité vérifiée +
         # jetons Discord. Chargées depuis disque pour survivre à un redémarrage.
@@ -1702,6 +1823,74 @@ class WaseBoardServer(commands.Bot):
         site = web.TCPSite(self._web_runner, HTTP_HOST, HTTP_PORT)
         await site.start()
         log.info("Serveur HTTP prêt sur %s:%s (catalogue + ordres de lecture WaseBoard).", HTTP_HOST, HTTP_PORT)
+        if self.pcm_cache.enabled:
+            asyncio.create_task(self._prewarm_pcm_cache())
+
+    @staticmethod
+    def _pcm_key(sound_id: str, file_path: Path) -> Optional[tuple]:
+        try:
+            st = file_path.stat()
+        except OSError:
+            return None
+        return (sound_id, st.st_mtime_ns, st.st_size)
+
+    def _schedule_pcm_load(self, key: tuple, file_path: Path) -> None:
+        """Décode ce son en arrière-plan pour que les prochaines lectures démarrent instantanément."""
+        if not self.pcm_cache.begin_load(key):
+            return
+
+        async def load() -> None:
+            data = None
+            try:
+                data = await asyncio.get_running_loop().run_in_executor(
+                    self._pcm_executor, decode_to_pcm, str(file_path), self.pcm_cache.max_item_bytes)
+            except Exception:
+                log.exception("Décodage en mémoire impossible : %s", file_path.name)
+            finally:
+                self.pcm_cache.end_load(key, data)
+
+        asyncio.create_task(load())
+
+    async def _prewarm_pcm_cache(self) -> None:
+        """Au démarrage : décode les sons du catalogue (les plus récents d'abord) tant que le cache n'est pas plein."""
+        try:
+            for entry in reversed(load_catalog()):
+                if self.pcm_cache.used_bytes > self.pcm_cache.max_bytes * 0.9:
+                    break
+                path = SOUNDS_DIR / f"{entry['id']}{entry['extension']}"
+                key = self._pcm_key(entry["id"], path)
+                if key is None or not self.pcm_cache.begin_load(key):
+                    continue
+                data = None
+                try:
+                    data = await asyncio.get_running_loop().run_in_executor(
+                        self._pcm_executor, decode_to_pcm, str(path), self.pcm_cache.max_item_bytes)
+                except Exception:
+                    log.exception("Préchauffage : décodage impossible (%s)", path.name)
+                finally:
+                    self.pcm_cache.end_load(key, data)
+            log.info("Sons préchargés en mémoire : %.0f Mo sur %.0f Mo.",
+                     self.pcm_cache.used_bytes / 1048576, self.pcm_cache.max_bytes / 1048576)
+        except Exception:
+            log.exception("Préchauffage du cache audio interrompu")
+
+    def _make_play_source(self, sound_id: str, entry: dict, file_path: Path, volume: float):
+        """La source audio d'un clic : le son déjà décodé en mémoire s'il y est (démarrage instantané), sinon ffmpeg en
+        flux comme avant — et on le décode en arrière-plan pour la fois suivante. Renvoie (source, "mémoire"|"ffmpeg")."""
+        key = self._pcm_key(sound_id, file_path) if self.pcm_cache.enabled else None
+        buffer = self.pcm_cache.get(key) if key is not None else None
+        if buffer is not None:
+            start, end = entry.get("trim_start_ms"), entry.get("trim_end_ms")
+            trimmed = isinstance(start, int) and isinstance(end, int) and end > start
+            source = PCMBufferSource(buffer, start if trimmed else None, end if trimmed else None)
+            kind = "mémoire"
+        else:
+            before_options, options = trim_ffmpeg_options(entry)
+            source = discord.FFmpegPCMAudio(str(file_path), before_options=before_options, options=options)
+            kind = "ffmpeg"
+            if key is not None:
+                self._schedule_pcm_load(key, file_path)
+        return discord.PCMVolumeTransformer(source, volume=min(max(volume, 0.0), 2.0)), kind
 
     async def _handle_health(self, request: web.Request) -> web.Response:
         """GET /health : 200 quand le bot est connecté à Discord, 503 tant qu'il démarre (ou s'il est déconnecté).
@@ -2542,6 +2731,7 @@ class WaseBoardServer(commands.Bot):
     # ---------- Lecture / arrêt ----------
 
     async def _handle_play(self, request: web.Request) -> web.Response:
+        started = time.perf_counter()
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
         session, err = await self._require_session(request)
@@ -2613,9 +2803,7 @@ class WaseBoardServer(commands.Bot):
         # On AJOUTE au mixeur plutôt que de remplacer la lecture en cours : plusieurs sons
         # (déclenchés par le même utilisateur ou des utilisateurs différents) se superposent
         # au lieu de s'annuler mutuellement.
-        before_options, options = trim_ffmpeg_options(entry)
-        source = discord.FFmpegPCMAudio(str(file_path), before_options=before_options, options=options)
-        source = discord.PCMVolumeTransformer(source, volume=min(max(volume, 0.0), 2.0))
+        source, kind = self._make_play_source(sound_id, entry, file_path, volume)
 
         # Le son part D'ABORD ; la résolution du membre Discord (highlight/avatar) — un appel
         # réseau si non déjà en cache — se fait ENSUITE en tâche de fond, pour ne jamais
@@ -2624,6 +2812,8 @@ class WaseBoardServer(commands.Bot):
         on_finish = (lambda: self.clear_activity(sound_id, str_user_id)) if str_user_id else None
 
         mixer.add(sound_id, source, on_finish=on_finish)
+        log.info("Lecture « %s » (%s) : %.0f ms de traitement.", entry.get("name", sound_id), kind,
+                 (time.perf_counter() - started) * 1000)
 
         if str_user_id:
             asyncio.create_task(self._record_play_activity(sound_id, str_user_id, guild_id))

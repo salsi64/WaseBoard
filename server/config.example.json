@@ -15,6 +15,7 @@
   "max_ffmpeg_processes": 0,
   "http_rate_limit_per_min": 0,
   "voice_idle_sleep_s": 0,
+  "pcm_cache_mb": 0,
   "default_guild_limits": {},
   "guild_limit_ceilings": {}
 }
