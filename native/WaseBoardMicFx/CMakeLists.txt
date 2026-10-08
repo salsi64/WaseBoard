@@ -34,3 +34,22 @@ target_compile_options(WaseBoardMicFx PRIVATE /W4 /permissive- /guard:cf /EHsc /
 target_link_options(WaseBoardMicFx PRIVATE /MANIFEST:NO /GUARD:CF /DYNAMICBASE /NXCOMPAT)
 
 target_link_libraries(WaseBoardMicFx PRIVATE ole32 advapi32 audiomediatypecrt)
+
+# Test d'intégration : charge la DLL et joue à la fois le moteur audio et WaseBoard (voir
+# tests/ApoTest.cpp). Doit être lancé élevé (objet Global\), comme sur GitHub Actions.
+option(WBMF_BUILD_TESTS "Compiler le test d'intégration tests/ApoTest.cpp" ON)
+if(WBMF_BUILD_TESTS)
+    add_executable(ApoTest tests/ApoTest.cpp)
+    target_compile_definitions(ApoTest PRIVATE
+        UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX
+        _WIN32_WINNT=0x0A00 WINVER=0x0A00 NTDDI_VERSION=0x0A000005)
+    target_compile_options(ApoTest PRIVATE /W4 /permissive- /EHsc /utf-8)
+    target_link_libraries(ApoTest PRIVATE ole32 audiomediatypecrt)
+    add_dependencies(ApoTest WaseBoardMicFx)
+endif()
+
+# Dépôt dans dist/, d'où le client C# l'embarque (src/WaseBoard/WaseBoard.csproj).
+add_custom_command(TARGET WaseBoardMicFx POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/dist"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:WaseBoardMicFx>" "${CMAKE_CURRENT_SOURCE_DIR}/dist/"
+)

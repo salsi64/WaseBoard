@@ -44,6 +44,10 @@ jobs:
           }
           if ($deps -match '(?i)vcruntime|msvcp|ucrtbased') { throw "Dépendance au runtime Visual C++ détectée" }
 
+      # Le runner tourne en administrateur : l'APO peut y créer sa mémoire Global\ comme dans audiodg.
+      - name: Test d'intégration (APO + mémoire partagée)
+        run: native/WaseBoardMicFx/build/Release/ApoTest.exe native/WaseBoardMicFx/build/Release/WaseBoardMicFx.dll
+
       - uses: actions/upload-artifact@v4
         with:
           name: WaseBoardMicFx-x64
