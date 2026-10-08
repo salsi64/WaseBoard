@@ -126,6 +126,45 @@ int wmain(int argc, wchar_t** argv)
     CHECK(SUCCEEDED(getClassObject(kClsid, __uuidof(IClassFactory), reinterpret_cast<void**>(&factory))), "fabrique introuvable");
     IAudioProcessingObject* apo = nullptr;
     CHECK(SUCCEEDED(factory->CreateInstance(nullptr, __uuidof(IAudioProcessingObject), reinterpret_cast<void**>(&apo))), "CreateInstance");
+
+    // --- Agrégation COM (le moteur audio peut agréger les APO) ---
+    {
+        struct Outer : IUnknown
+        {
+            LONG refs = 1;
+            IUnknown* inner = nullptr;
+            STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override
+            {
+                if (riid == __uuidof(IUnknown)) { *ppv = static_cast<IUnknown*>(this); AddRef(); return S_OK; }
+                return inner->QueryInterface(riid, ppv);
+            }
+            STDMETHODIMP_(ULONG) AddRef() override { return static_cast<ULONG>(++refs); }
+            STDMETHODIMP_(ULONG) Release() override { return static_cast<ULONG>(--refs); }
+        } outer;
+
+        void* refused = nullptr;
+        CHECK(factory->CreateInstance(&outer, __uuidof(IAudioProcessingObject), &refused) == CLASS_E_NOAGGREGATION && refused == nullptr,
+            "agrégation : seul IUnknown peut être demandé");
+        CHECK(SUCCEEDED(factory->CreateInstance(&outer, __uuidof(IUnknown), reinterpret_cast<void**>(&outer.inner))) && outer.inner != nullptr,
+            "agrégation : CreateInstance(IUnknown)");
+        if (outer.inner != nullptr)
+        {
+            IAudioProcessingObjectRT* aggregatedRt = nullptr;
+            CHECK(SUCCEEDED(outer.QueryInterface(__uuidof(IAudioProcessingObjectRT), reinterpret_cast<void**>(&aggregatedRt))), "agrégation : QI via l'agrégateur");
+            CHECK(outer.refs == 2, "agrégation : AddRef délégué à l'agrégateur (refs=%ld)", outer.refs);
+            IUnknown* identity = nullptr;
+            if (aggregatedRt != nullptr)
+            {
+                aggregatedRt->QueryInterface(__uuidof(IUnknown), reinterpret_cast<void**>(&identity));
+                CHECK(identity == static_cast<IUnknown*>(&outer), "agrégation : identité COM = agrégateur");
+                if (identity != nullptr) identity->Release();
+                aggregatedRt->Release();
+            }
+            CHECK(outer.refs == 1, "agrégation : Release délégué (refs=%ld)", outer.refs);
+            CHECK(outer.inner->Release() == 0, "agrégation : libération de l'objet interne");
+        }
+    }
+
     factory->Release();
     if (apo == nullptr) return 1;
 

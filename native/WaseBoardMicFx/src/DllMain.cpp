@@ -25,6 +25,8 @@ namespace
                 return S_OK;
             }
             *ppv = nullptr;
+            wchar_t iid[40];
+            DiagLog::Write(L"Fabrique : interface non prise en charge %s", DiagLog::GuidToString(riid, iid, 40));
             return E_NOINTERFACE;
         }
 
@@ -36,15 +38,24 @@ namespace
         {
             if (ppv == nullptr) return E_POINTER;
             *ppv = nullptr;
-            if (pUnkOuter != nullptr) return CLASS_E_NOAGGREGATION;
-
-            auto* apo = new (std::nothrow) CWaseBoardMicFx();
-            if (apo == nullptr) return E_OUTOFMEMORY;
-            const HRESULT hr = apo->QueryInterface(riid, ppv);
-            apo->Release();
 
             wchar_t iid[40];
-            DiagLog::Write(L"CreateInstance(%s) -> 0x%08lX", DiagLog::GuidToString(riid, iid, 40), hr);
+            DiagLog::GuidToString(riid, iid, 40);
+
+            // Agrégation COM : l'agrégateur doit demander IUnknown (il reçoit l'IUnknown non délégant).
+            if (pUnkOuter != nullptr && riid != __uuidof(IUnknown))
+            {
+                DiagLog::Write(L"CreateInstance(%s, agrégé) -> CLASS_E_NOAGGREGATION", iid);
+                return CLASS_E_NOAGGREGATION;
+            }
+
+            auto* apo = new (std::nothrow) CWaseBoardMicFx(pUnkOuter);
+            if (apo == nullptr) return E_OUTOFMEMORY;
+            IUnknown* inner = apo->NonDelegatingUnknown();
+            const HRESULT hr = inner->QueryInterface(riid, ppv);
+            inner->Release(); // référence initiale de la construction
+
+            DiagLog::Write(L"CreateInstance(%s, %s) -> 0x%08lX", iid, pUnkOuter != nullptr ? L"agrégé" : L"non agrégé", hr);
             return hr;
         }
 
@@ -76,8 +87,14 @@ STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ LPVOID
     if (ppv == nullptr) return E_POINTER;
     *ppv = nullptr;
     DiagLog::WriteProcessInfoOnce(g_dllModule);
-    if (rclsid != CLSID_WaseBoardMicFx) return CLASS_E_CLASSNOTAVAILABLE;
-    return g_classFactory.QueryInterface(riid, ppv);
+    const HRESULT hr = rclsid != CLSID_WaseBoardMicFx
+        ? CLASS_E_CLASSNOTAVAILABLE
+        : g_classFactory.QueryInterface(riid, ppv);
+
+    wchar_t clsid[40], iid[40];
+    DiagLog::Write(L"DllGetClassObject(%s, %s) -> 0x%08lX",
+        DiagLog::GuidToString(rclsid, clsid, 40), DiagLog::GuidToString(riid, iid, 40), hr);
+    return hr;
 }
 
 __control_entrypoint(DllExport)

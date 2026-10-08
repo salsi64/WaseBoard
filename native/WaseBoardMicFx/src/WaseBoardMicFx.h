@@ -30,12 +30,19 @@ class CWaseBoardMicFx final :
     public IAudioSystemEffects2
 {
 public:
-    CWaseBoardMicFx();
+    // outer : IUnknown de contrôle quand le moteur audio agrège l'effet (comme le permettent les
+    // APO d'exemple de Microsoft, bâtis sur ATL), nullptr sinon.
+    explicit CWaseBoardMicFx(IUnknown* outer);
 
-    // IUnknown
-    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override;
-    STDMETHODIMP_(ULONG) AddRef() override;
-    STDMETHODIMP_(ULONG) Release() override;
+    // IUnknown « délégant » de toutes les interfaces de l'effet : renvoie vers l'objet de contrôle
+    // (l'agrégateur, ou notre IUnknown non délégant hors agrégation) — règle COM de l'agrégation.
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override { return m_controlling->QueryInterface(riid, ppv); }
+    STDMETHODIMP_(ULONG) AddRef() override { return m_controlling->AddRef(); }
+    STDMETHODIMP_(ULONG) Release() override { return m_controlling->Release(); }
+
+    // IUnknown non délégant : celui que reçoit l'agrégateur (ou le client direct), seul maître de
+    // la durée de vie de l'objet.
+    IUnknown* NonDelegatingUnknown() { return &m_inner; }
 
     // IAudioProcessingObject
     STDMETHODIMP Reset() override;
@@ -65,6 +72,19 @@ public:
 private:
     ~CWaseBoardMicFx();
 
+    class Inner final : public IUnknown
+    {
+    public:
+        explicit Inner(CWaseBoardMicFx* owner) : m_owner(owner) {}
+        STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override;
+        STDMETHODIMP_(ULONG) AddRef() override;
+        STDMETHODIMP_(ULONG) Release() override;
+    private:
+        CWaseBoardMicFx* m_owner;
+    };
+
+    HRESULT InternalQueryInterface(REFIID riid, void** ppv);
+
     HRESULT CheckFormat(IAudioMediaType* pOppositeFormat, IAudioMediaType* pRequestedFormat,
         IAudioMediaType** ppSupportedFormat);
     HRESULT LockForProcessCore(UINT32 u32NumInputConnections, APO_CONNECTION_DESCRIPTOR** ppInputConnections,
@@ -79,6 +99,8 @@ private:
     void MixFeed(float* frames, UINT32 frameCount);
 
     volatile LONG m_refCount = 1;
+    Inner m_inner{ this };
+    IUnknown* m_controlling; // déclaré après m_inner : peut pointer dessus dès la construction
     bool m_initialized = false;
     bool m_locked = false;
 

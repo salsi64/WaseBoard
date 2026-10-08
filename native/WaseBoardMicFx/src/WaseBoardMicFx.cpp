@@ -79,7 +79,8 @@ namespace
     }
 }
 
-CWaseBoardMicFx::CWaseBoardMicFx()
+CWaseBoardMicFx::CWaseBoardMicFx(IUnknown* outer)
+    : m_controlling(outer != nullptr ? outer : static_cast<IUnknown*>(&m_inner))
 {
     InterlockedIncrement(&g_dllObjectCount);
 }
@@ -93,12 +94,14 @@ CWaseBoardMicFx::~CWaseBoardMicFx()
 
 // ---------- IUnknown ----------
 
-STDMETHODIMP CWaseBoardMicFx::QueryInterface(REFIID riid, void** ppv)
+// Interfaces de l'effet (hors IUnknown, propre à l'IUnknown non délégant). Le AddRef passe par
+// l'IUnknown délégant : en agrégation, c'est l'agrégateur qui compte les références.
+HRESULT CWaseBoardMicFx::InternalQueryInterface(REFIID riid, void** ppv)
 {
     if (ppv == nullptr) return E_POINTER;
     *ppv = nullptr;
 
-    if (riid == __uuidof(IUnknown) || riid == __uuidof(IAudioProcessingObject))
+    if (riid == __uuidof(IAudioProcessingObject))
         *ppv = static_cast<IAudioProcessingObject*>(this);
     else if (riid == __uuidof(IAudioProcessingObjectRT))
         *ppv = static_cast<IAudioProcessingObjectRT*>(this);
@@ -109,21 +112,37 @@ STDMETHODIMP CWaseBoardMicFx::QueryInterface(REFIID riid, void** ppv)
     else if (riid == __uuidof(IAudioSystemEffects2))
         *ppv = static_cast<IAudioSystemEffects2*>(this);
     else
+    {
+        wchar_t iid[40];
+        DiagLog::Write(L"QueryInterface : interface non prise en charge %s", DiagLog::GuidToString(riid, iid, 40));
         return E_NOINTERFACE;
+    }
 
     AddRef();
     return S_OK;
 }
 
-STDMETHODIMP_(ULONG) CWaseBoardMicFx::AddRef()
+STDMETHODIMP CWaseBoardMicFx::Inner::QueryInterface(REFIID riid, void** ppv)
 {
-    return static_cast<ULONG>(InterlockedIncrement(&m_refCount));
+    if (ppv == nullptr) return E_POINTER;
+    if (riid == __uuidof(IUnknown))
+    {
+        *ppv = static_cast<IUnknown*>(this);
+        AddRef();
+        return S_OK;
+    }
+    return m_owner->InternalQueryInterface(riid, ppv);
 }
 
-STDMETHODIMP_(ULONG) CWaseBoardMicFx::Release()
+STDMETHODIMP_(ULONG) CWaseBoardMicFx::Inner::AddRef()
 {
-    const LONG count = InterlockedDecrement(&m_refCount);
-    if (count == 0) delete this;
+    return static_cast<ULONG>(InterlockedIncrement(&m_owner->m_refCount));
+}
+
+STDMETHODIMP_(ULONG) CWaseBoardMicFx::Inner::Release()
+{
+    const LONG count = InterlockedDecrement(&m_owner->m_refCount);
+    if (count == 0) delete m_owner;
     return static_cast<ULONG>(count);
 }
 
