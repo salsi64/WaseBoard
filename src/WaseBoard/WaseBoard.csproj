@@ -36,6 +36,16 @@
     <EmbeddedResource Include="Assets\fluent-emoji-index.txt" LogicalName="fluent-emoji-index.txt" />
   </ItemGroup>
 
+  <!-- Effet « micro en jeu » (DLL C++ de native/WaseBoardMicFx) : livrée à côté de WaseBoard.exe,
+       hors du fichier unique. Ce n'est qu'une charge utile, copiée dans Program Files quand
+       l'utilisateur installe l'effet (MicFxSetup), jamais chargée par WaseBoard lui-même. Absente
+       (dist/ vide, voir native/WaseBoardMicFx/README.md) : la build reste valide, la page
+       Paramètres > Micro en jeu signale simplement que le module manque. -->
+  <ItemGroup Condition="Exists('..\..\native\WaseBoardMicFx\dist\WaseBoardMicFx.dll')">
+    <None Include="..\..\native\WaseBoardMicFx\dist\WaseBoardMicFx.dll" Link="WaseBoardMicFx.dll"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />

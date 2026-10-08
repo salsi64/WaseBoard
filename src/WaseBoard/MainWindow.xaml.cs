@@ -20,6 +20,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using WaseBoard.Models;
 using WaseBoard.Services;
+using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
 
 namespace WaseBoard
@@ -34,6 +35,13 @@ namespace WaseBoard
         /// (ex: Slider Value="1.0") ne sauvegarde des réglages par défaut avant leur chargement.</summary>
         private bool _settingsReady;
         private readonly AudioPlaybackService _audio = new();
+
+        /// <summary>Lecture « dans le micro » (Paramètres > Micro en jeu) : ne tourne que pendant qu'un son y joue.</summary>
+        private readonly MicFeedService _micFeed = new();
+
+        /// <summary>Sons en cours dans le micro : le serveur n'en sait rien, le sondage d'activité ne
+        /// doit donc pas éteindre leur bouton (voir PollActivityAsync).</summary>
+        private readonly HashSet<string> _micPlayingIds = new();
         private GlobalHotkeyManager? _hotkeys;
         private DispatcherTimer? _activityTimer;
         private DispatcherTimer? _voiceStatusTimer;
@@ -102,6 +110,12 @@ namespace WaseBoard
             // qui reflète l'activité PARTAGÉE (sondée depuis le serveur, voir PollActivityAsync).
             _audio.SoundStarted += id => Dispatcher.BeginInvoke(() => SetPreviewingState(id, true));
             _audio.SoundStopped += id => Dispatcher.BeginInvoke(() => SetPreviewingState(id, false));
+            _micFeed.SoundEnded += id => Dispatcher.BeginInvoke(() =>
+            {
+                _micPlayingIds.Remove(id);
+                var item = Sounds.FirstOrDefault(s => s.Id == id);
+                if (item is not null && item.ActiveUsers.Count == 0) item.IsPlaying = false;
+            });
 
             ToastService.Requested += OnToastRequested;
         }
@@ -233,6 +247,19 @@ namespace WaseBoard
             _themeTimer.Start();
 
             _ = CheckForUpdateOnStartupAsync();
+            WarnIfMicEffectNeedsRepair();
+        }
+
+        /// <summary>Une mise à jour du pilote du micro efface souvent sa liste d'effets (le nôtre avec) :
+        /// on le signale au démarrage plutôt que de laisser les sons disparaître du micro sans explication.</summary>
+        private void WarnIfMicEffectNeedsRepair()
+        {
+            if (!_library.Settings.MicFeedEnabled) return;
+            var state = MicFxSetup.ReadState();
+            if (state.AnyNeedsRepair)
+                ToastService.Show("🎮 L'effet « Micro en jeu » a été retiré d'un micro (mise à jour du pilote ?) — Paramètres › Micro en jeu › Réparer.", ToastKind.Warning);
+            else if (!state.AnyEquipped)
+                ToastService.Show("🎮 « Micro en jeu » est activé mais l'effet n'est installé sur aucun micro — Paramètres › Micro en jeu.", ToastKind.Warning);
         }
 
         /// <summary>Vérification passive, non bloquante : affiche un toast si une nouvelle version
@@ -787,7 +814,7 @@ namespace WaseBoard
                 }
                 else
                 {
-                    item.IsPlaying = false;
+                    item.IsPlaying = _micPlayingIds.Contains(item.Id);
                     if (item.ActiveUsers.Count > 0) item.ActiveUsers.Clear();
                 }
             }
@@ -1009,6 +1036,7 @@ namespace WaseBoard
             _themeTimer?.Stop();
             _hotkeys?.Dispose();
             _audio.Dispose();
+            _micFeed.Dispose();
             ToastService.Requested -= OnToastRequested;
         }
 
@@ -1953,8 +1981,51 @@ namespace WaseBoard
         /// Joue un son dans le vocal Discord. Le highlight s'allume localement dès le clic (sans
         /// attendre la moindre réponse réseau) ; le sondage régulier (PollActivityAsync) prend
         /// ensuite le relais pour refléter la réalité partagée (autres utilisateurs, extinction).
+        /// Avec « Micro en jeu » activé, le son part dans le micro, et dans Discord seulement si
+        /// demandé (sinon un Discord branché sur ce même micro l'entendrait deux fois).
         /// </summary>
-        private void Play(SoundItem item) => _ = PlayAndPollAsync(item);
+        private void Play(SoundItem item)
+        {
+            if (!_library.Settings.MicFeedEnabled)
+            {
+                _ = PlayAndPollAsync(item);
+                return;
+            }
+
+            _ = PlayInMicAsync(item);
+            if (_library.Settings.MicFeedAlsoDiscord) _ = PlayAndPollAsync(item);
+        }
+
+        /// <summary>Micro en jeu : le son est ajouté au vrai micro par l'effet WaseBoardMicFx (toutes
+        /// les applications qui l'écoutent l'entendent), plus le retour local si demandé. Le bouton
+        /// reste allumé jusqu'à la fin réelle du son dans le micro (MicFeedService.SoundEnded).</summary>
+        private async Task PlayInMicAsync(SoundItem item)
+        {
+            var localPath = await _library.GetOrDownloadCachedFileAsync(item);
+            if (localPath is null)
+            {
+                ToastService.Show($"Impossible de jouer « {item.Name} » dans le micro : fichier indisponible.", ToastKind.Error);
+                return;
+            }
+
+            TimeSpan? trimStart = item.TrimStartMs is { } startMs ? TimeSpan.FromMilliseconds(startMs) : null;
+            TimeSpan? trimEnd = item.TrimEndMs is { } endMs ? TimeSpan.FromMilliseconds(endMs) : null;
+            try
+            {
+                _micFeed.Volume = _library.Settings.MicFeedVolume;
+                _micFeed.Play(item.Id, localPath, item.Volume, trimStart, trimEnd);
+            }
+            catch (Exception ex)
+            {
+                ToastService.Show($"Impossible de jouer « {item.Name} » dans le micro : {ex.Message}", ToastKind.Error);
+                return;
+            }
+
+            _micPlayingIds.Add(item.Id);
+            item.IsPlaying = true;
+
+            if (_library.Settings.MicFeedMonitor) await PlayLocalAsync(item);
+        }
 
         private async Task PlayAndPollAsync(SoundItem item)
         {
@@ -2022,6 +2093,7 @@ namespace WaseBoard
         private async void StopAllButton_Click(object sender, RoutedEventArgs e)
         {
             _audio.StopAll();
+            _micFeed.StopAll();
             var ok = await _library.StopAllOnServerAsync();
             if (!ok)
             {
@@ -2039,7 +2111,7 @@ namespace WaseBoard
             // Le panel d'administration s'ouvre depuis les Paramètres, et n'y apparaît que si l'on
             // administre au moins un serveur (le serveur re-vérifie de toute façon chaque requête).
             var adminGuilds = _sharedCategories.Where(s => s.IsAdmin).ToList();
-            var window = new SettingsWindow(_library.Settings, _library, adminGuilds: adminGuilds, knownSounds: Sounds) { Owner = this };
+            var window = new SettingsWindow(_library.Settings, _library, adminGuilds: adminGuilds, knownSounds: Sounds, micFeed: _micFeed) { Owner = this };
             if (window.ShowDialog() == true)
             {
                 _library.SaveSettings();

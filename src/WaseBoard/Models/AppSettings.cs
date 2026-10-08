@@ -42,6 +42,21 @@ namespace WaseBoard.Models
         /// <summary>Volume de la lecture locale (aperçu uniquement).</summary>
         public float LocalPlaybackVolume { get; set; } = 1.0f;
 
+        /// <summary>Micro en jeu : les sons joués passent aussi dans le vrai micro (effet audio
+        /// WaseBoardMicFx, voir Services/MicFx), pour les chats vocaux des jeux. Désactivé par défaut :
+        /// l'effet doit d'abord être installé (Paramètres > Micro en jeu).</summary>
+        public bool MicFeedEnabled { get; set; }
+
+        /// <summary>Volume des sons dans le micro (0.0-1.5), indépendant du volume propre à chaque son.</summary>
+        public float MicFeedVolume { get; set; } = 0.8f;
+
+        /// <summary>En mode micro, s'entendre aussi (lecture locale sur la sortie par défaut).</summary>
+        public bool MicFeedMonitor { get; set; } = true;
+
+        /// <summary>En mode micro, jouer aussi via le bot Discord. Désactivé par défaut : si Discord
+        /// utilise ce même micro, les autres entendraient le son deux fois.</summary>
+        public bool MicFeedAlsoDiscord { get; set; }
+
         /// <summary>IDs des sons marqués en favoris (préférence locale, propre à cet utilisateur).</summary>
         public List<string> FavoriteSoundIds { get; set; } = new();
 

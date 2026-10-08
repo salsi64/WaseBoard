@@ -7,8 +7,10 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using WaseBoard.Models;
 using WaseBoard.Services;
+using WaseBoard.Services.MicFx;
 
 namespace WaseBoard.Windows
 {
@@ -33,19 +35,32 @@ namespace WaseBoard.Windows
         private readonly List<SoundLibraryService.SharedCategoryInfo> _adminGuilds;
         private readonly List<SoundItem> _knownSounds;
 
+        // Micro en jeu : service de lecture dans le micro (pour le bouton « Tester ») et cases à
+        // cocher des micros, par GUID d'endpoint.
+        private readonly MicFeedService? _micFeed;
+        private readonly Dictionary<string, CheckBox> _micCheckBoxes = new();
+        private readonly DispatcherTimer _micLiveTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+
         /// <summary>Vrai si le panel d'administration a modifié le catalogue (renommage, suppression,
         /// restauration) : l'appelant doit alors recharger les sons, même si les Paramètres n'ont pas été enregistrés.</summary>
         public bool AdminCatalogChanged { get; private set; }
 
         public SettingsWindow(AppSettings settings, SoundLibraryService library, string initialPage = "Server",
-            IEnumerable<SoundLibraryService.SharedCategoryInfo>? adminGuilds = null, IEnumerable<SoundItem>? knownSounds = null)
+            IEnumerable<SoundLibraryService.SharedCategoryInfo>? adminGuilds = null, IEnumerable<SoundItem>? knownSounds = null,
+            MicFeedService? micFeed = null)
         {
             InitializeComponent();
             _settings = settings;
             _library = library;
             _adminGuilds = adminGuilds?.ToList() ?? new();
             _knownSounds = knownSounds?.ToList() ?? new();
-            Closed += (_, _) => _isClosed = true;
+            _micFeed = micFeed;
+            Closed += (_, _) =>
+            {
+                _isClosed = true;
+                _micLiveTimer.Stop();
+            };
+            _micLiveTimer.Tick += (_, _) => UpdateMicLiveText();
 
             if (_adminGuilds.Count > 0)
             {
@@ -66,6 +81,12 @@ namespace WaseBoard.Windows
 
             LocalVolumeSlider.Value = _settings.LocalPlaybackVolume;
             UpdateVolumeLabel(LocalVolumeLabel, _settings.LocalPlaybackVolume);
+
+            MicFeedEnabledCheckBox.IsChecked = _settings.MicFeedEnabled;
+            MicFeedVolumeSlider.Value = _settings.MicFeedVolume;
+            UpdateVolumeLabel(MicFeedVolumeLabel, _settings.MicFeedVolume);
+            MicFeedMonitorCheckBox.IsChecked = _settings.MicFeedMonitor;
+            MicFeedAlsoDiscordCheckBox.IsChecked = _settings.MicFeedAlsoDiscord;
 
             _selectedBgColorHex = _settings.BackgroundColorHex;
             CustomColorBox.Text = _selectedBgColorHex ?? "";
@@ -105,6 +126,7 @@ namespace WaseBoard.Windows
                 ("Discord", PageDiscord, NavDiscordButton),
                 ("Appearance", PageAppearance, NavAppearanceButton),
                 ("Volume", PageVolume, NavVolumeButton),
+                ("Mic", PageMic, NavMicButton),
                 ("Updates", PageUpdates, NavUpdatesButton),
                 ("Admin", PageAdmin, NavAdminButton),
             };
@@ -116,6 +138,18 @@ namespace WaseBoard.Windows
                 page.Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed;
                 nav.Background = isSelected ? accent : Brushes.Transparent;
                 nav.Foreground = (Brush)FindResource(isSelected ? "OnAccentBrush" : "TextBrush");
+            }
+
+            // La page « Micro en jeu » lit l'état du registre et de l'effet : seulement quand elle est affichée.
+            if (key == "Mic")
+            {
+                RefreshMicFxState();
+                UpdateMicLiveText();
+                _micLiveTimer.Start();
+            }
+            else
+            {
+                _micLiveTimer.Stop();
             }
         }
 
@@ -274,6 +308,139 @@ namespace WaseBoard.Windows
         private void LocalVolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (LocalVolumeLabel is not null) UpdateVolumeLabel(LocalVolumeLabel, e.NewValue);
+        }
+
+        // ---------- Micro en jeu ----------
+
+        private void MicFeedVolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (MicFeedVolumeLabel is not null) UpdateVolumeLabel(MicFeedVolumeLabel, e.NewValue);
+        }
+
+        /// <summary>Relit l'installation (registre) et reconstruit la liste des micros. Cochés par
+        /// défaut : les micros déjà équipés (ou à réparer), sinon le micro de communication par défaut.</summary>
+        private void RefreshMicFxState()
+        {
+            var state = MicFxSetup.ReadState();
+
+            MicFxMicList.Children.Clear();
+            _micCheckBoxes.Clear();
+            foreach (var mic in state.Microphones)
+            {
+                var label = mic.Name;
+                if (mic.IsDefaultCommunications) label += " (micro par défaut)";
+                if (!mic.Compatible) label += " — non compatible";
+                else if (mic.NeedsRepair) label += " — ⚠️ à réparer";
+                else if (mic.Equipped) label += " — ✅ équipé";
+
+                var checkBox = new CheckBox
+                {
+                    Content = label,
+                    IsEnabled = mic.Compatible,
+                    IsChecked = mic.Compatible && (mic.Equipped || mic.NeedsRepair
+                        || (!state.AnyEquipped && mic.IsDefaultCommunications)),
+                    Margin = new Thickness(0, 0, 0, 4),
+                };
+                checkBox.SetResourceReference(ForegroundProperty, "TextBrush");
+                MicFxMicList.Children.Add(checkBox);
+                _micCheckBoxes[mic.EndpointGuid] = checkBox;
+            }
+
+            if (!MicFxSetup.IsBundled)
+            {
+                MicFxStatusText.Text = "Cette version de WaseBoard ne contient pas le module micro (WaseBoardMicFx.dll).";
+                MicFxInstallButton.IsEnabled = false;
+            }
+            else if (state.Microphones.Count == 0)
+            {
+                MicFxStatusText.Text = "Aucun micro actif détecté.";
+                MicFxInstallButton.IsEnabled = false;
+            }
+            else if (state.AnyNeedsRepair)
+            {
+                MicFxStatusText.Text = "⚠️ L'effet a été retiré d'un micro, ou les améliorations audio y ont été désactivées (souvent après une mise à jour du pilote). Cliquez « Réparer ».";
+                MicFxInstallButton.Content = "Réparer";
+                MicFxInstallButton.IsEnabled = true;
+            }
+            else if (state.Registered && state.AnyEquipped)
+            {
+                MicFxStatusText.Text = "✅ Installé. Cochez d'autres micros puis « Appliquer » pour les équiper aussi.";
+                MicFxInstallButton.Content = "Appliquer";
+                MicFxInstallButton.IsEnabled = true;
+            }
+            else
+            {
+                MicFxStatusText.Text = "Pas encore installé. Cochez le micro que vous utilisez en jeu, puis « Installer ».";
+                MicFxInstallButton.Content = "Installer";
+                MicFxInstallButton.IsEnabled = true;
+            }
+
+            MicFxUninstallButton.IsEnabled = state.Registered || state.AnyEquipped;
+            MicFxTestButton.IsEnabled = _micFeed is not null && state.AnyEquipped;
+        }
+
+        private void UpdateMicLiveText()
+        {
+            var status = MicFeedService.ReadStatus();
+            MicFxLiveText.Text = status switch
+            {
+                { MicInUse: true } => $"🎙 Micro écouté en ce moment par une application : effet actif ({status.SampleRate} Hz, {status.Channels} canal(aux)).",
+                { EffectLoaded: true } => "Effet chargé. Aucune application n'écoute le micro en ce moment (ouvrez le vocal du jeu, ou l'Enregistreur vocal de Windows pour tester).",
+                _ => "Effet pas encore chargé : il s'active dès qu'une application écoute un micro équipé.",
+            };
+        }
+
+        private async void MicFxInstallButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = _micCheckBoxes.Where(kv => kv.Value.IsChecked == true).Select(kv => kv.Key).ToList();
+            if (selected.Count == 0)
+            {
+                AlertDialog.Show(this, "Cochez au moins un micro.", "Micro en jeu", AlertKind.Warning);
+                return;
+            }
+            if (!ConfirmDialog.Show(this,
+                    "Windows va demander les droits administrateur, puis le son de l'ordinateur sera coupé environ 2 secondes.\n\nContinuer ?",
+                    "Micro en jeu"))
+                return;
+
+            MicFxInstallButton.IsEnabled = false;
+            var result = await MicFxSetup.InstallAsync(selected);
+            if (_isClosed) return;
+
+            RefreshMicFxState();
+            if (result.Cancelled) return;
+            if (result.Ok) MicFeedEnabledCheckBox.IsChecked = true;
+            AlertDialog.Show(this, string.Join("\n", result.Messages), "Micro en jeu",
+                result.Ok ? AlertKind.Info : AlertKind.Warning);
+        }
+
+        private async void MicFxUninstallButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!ConfirmDialog.Show(this,
+                    "Retirer l'effet de tous les micros ? Windows va demander les droits administrateur, puis le son sera coupé environ 2 secondes.",
+                    "Micro en jeu"))
+                return;
+
+            MicFxUninstallButton.IsEnabled = false;
+            var result = await MicFxSetup.UninstallAsync();
+            if (_isClosed) return;
+
+            RefreshMicFxState();
+            if (result.Cancelled) return;
+            if (result.Ok) MicFeedEnabledCheckBox.IsChecked = false;
+            AlertDialog.Show(this, string.Join("\n", result.Messages), "Micro en jeu",
+                result.Ok ? AlertKind.Info : AlertKind.Warning);
+        }
+
+        private void MicFxTestButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_micFeed is null) return;
+            _micFeed.Volume = (float)MicFeedVolumeSlider.Value;
+            _micFeed.PlayTestTone();
+            if (!MicFeedService.ReadStatus().MicInUse)
+                AlertDialog.Show(this,
+                    "Bip envoyé, mais aucune application n'écoute le micro en ce moment. Ouvrez par exemple l'Enregistreur vocal de Windows (ou le vocal du jeu), puis recliquez « Tester ».",
+                    "Micro en jeu");
         }
 
         private async void TestConnectionButton_Click(object sender, RoutedEventArgs e)
@@ -438,6 +605,10 @@ namespace WaseBoard.Windows
                 ? _settings.ServerUrl : ServerUrlBox.Text.Trim();
             _settings.ServerToken = ServerTokenBox.Text;
             _settings.LocalPlaybackVolume = (float)LocalVolumeSlider.Value;
+            _settings.MicFeedEnabled = MicFeedEnabledCheckBox.IsChecked == true;
+            _settings.MicFeedVolume = (float)MicFeedVolumeSlider.Value;
+            _settings.MicFeedMonitor = MicFeedMonitorCheckBox.IsChecked == true;
+            _settings.MicFeedAlsoDiscord = MicFeedAlsoDiscordCheckBox.IsChecked == true;
             _settings.BackgroundColorHex = _selectedBgColorHex;
             _settings.PaletteId = _selectedPaletteId;
             _settings.UiTheme = _selectedTheme;
