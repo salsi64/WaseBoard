@@ -3,8 +3,11 @@
 // (MicFxSetup.cs), pas par DllRegisterServer : une seule source de vérité.
 
 #include "WaseBoardMicFx.h"
+#include "DiagLog.h"
 
 #include <new>
+
+HMODULE g_dllModule = nullptr;
 
 namespace
 {
@@ -39,6 +42,9 @@ namespace
             if (apo == nullptr) return E_OUTOFMEMORY;
             const HRESULT hr = apo->QueryInterface(riid, ppv);
             apo->Release();
+
+            wchar_t iid[40];
+            DiagLog::Write(L"CreateInstance(%s) -> 0x%08lX", DiagLog::GuidToString(riid, iid, 40), hr);
             return hr;
         }
 
@@ -56,7 +62,11 @@ namespace
 BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD reason, LPVOID reserved)
 {
     UNREFERENCED_PARAMETER(reserved);
-    if (reason == DLL_PROCESS_ATTACH) DisableThreadLibraryCalls(hInstance);
+    if (reason == DLL_PROCESS_ATTACH)
+    {
+        g_dllModule = hInstance;
+        DisableThreadLibraryCalls(hInstance);
+    }
     return TRUE;
 }
 
@@ -65,6 +75,7 @@ STDAPI DllGetClassObject(_In_ REFCLSID rclsid, _In_ REFIID riid, _Outptr_ LPVOID
 {
     if (ppv == nullptr) return E_POINTER;
     *ppv = nullptr;
+    DiagLog::WriteProcessInfoOnce(g_dllModule);
     if (rclsid != CLSID_WaseBoardMicFx) return CLASS_E_CLASSNOTAVAILABLE;
     return g_classFactory.QueryInterface(riid, ppv);
 }

@@ -67,6 +67,8 @@ private:
 
     HRESULT CheckFormat(IAudioMediaType* pOppositeFormat, IAudioMediaType* pRequestedFormat,
         IAudioMediaType** ppSupportedFormat);
+    HRESULT LockForProcessCore(UINT32 u32NumInputConnections, APO_CONNECTION_DESCRIPTOR** ppInputConnections,
+        UINT32 u32NumOutputConnections, APO_CONNECTION_DESCRIPTOR** ppOutputConnections);
 
     // Mémoire partagée (hors temps réel)
     void OpenFeed();
@@ -91,4 +93,8 @@ private:
     bool m_synced = false;
     double m_readPos = 0.0;
     int64_t m_writePosSnapshot = 0;
+
+    // Compteurs pour le journal (incrémentés en temps réel, écrits hors temps réel).
+    UINT64 m_processCalls = 0;
+    UINT64 m_mixedCalls = 0;
 };

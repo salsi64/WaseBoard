@@ -14,6 +14,8 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_library(WaseBoardMicFx SHARED
     src/DllMain.cpp
+    src/DiagLog.cpp
+    src/DiagLog.h
     src/WaseBoardMicFx.cpp
     src/WaseBoardMicFx.h
     src/MicFeedProtocol.h

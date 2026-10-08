@@ -1,4 +1,5 @@
 #include "WaseBoardMicFx.h"
+#include "DiagLog.h"
 
 #include <audiomediatype.h>
 #include <sddl.h>
@@ -42,6 +43,21 @@ namespace
         return x < 0.0f ? -y : y;
     }
 
+    // « float32 2 canaux 48000 Hz » (ou le sous-type brut si ce n'est pas du float), pour le journal.
+    void DescribeFormat(IAudioMediaType* type, wchar_t* buffer, size_t count)
+    {
+        UNCOMPRESSEDAUDIOFORMAT f = {};
+        if (type == nullptr || FAILED(type->GetUncompressedAudioFormat(&f)))
+        {
+            wcscpy_s(buffer, count, L"(aucun / illisible)");
+            return;
+        }
+        wchar_t subtype[40];
+        swprintf_s(buffer, count, L"%s %lu bits (conteneur %lu) %lu canaux %.0f Hz",
+            IsEqualGUID(f.guidFormatType, kSubtypeIeeeFloat) ? L"float" : DiagLog::GuidToString(f.guidFormatType, subtype, 40),
+            f.dwValidBitsPerSample, f.dwBytesPerSampleContainer * 8, f.dwSamplesPerFrame, f.fFramesPerSecond);
+    }
+
     APO_REG_PROPERTIES MakeRegProperties()
     {
         APO_REG_PROPERTIES p = {};
@@ -69,6 +85,7 @@ CWaseBoardMicFx::CWaseBoardMicFx()
 
 CWaseBoardMicFx::~CWaseBoardMicFx()
 {
+    DiagLog::Write(L"Instance détruite (%llu blocs traités, %llu avec des sons)", m_processCalls, m_mixedCalls);
     CloseFeed();
     InterlockedDecrement(&g_dllObjectCount);
 }
@@ -139,7 +156,30 @@ STDMETHODIMP CWaseBoardMicFx::Initialize(UINT32 cbDataSize, BYTE* pbyData)
     if (m_initialized) return APOERR_ALREADY_INITIALIZED;
 
     // Rien à lire dans la structure d'init (APOInitSystemEffects, 2 ou 3 selon Windows) :
-    // l'effet ne dépend ni du mode de traitement, ni du périphérique.
+    // l'effet ne dépend ni du mode de traitement, ni du périphérique. Seulement tracé.
+    if (cbDataSize == sizeof(APOInitSystemEffects2))
+    {
+        const auto* init = reinterpret_cast<const APOInitSystemEffects2*>(pbyData);
+        wchar_t mode[40];
+        LPWSTR deviceId = nullptr;
+        IMMDevice* device = nullptr;
+        if (init->pDeviceCollection != nullptr
+            && SUCCEEDED(init->pDeviceCollection->Item(init->nSoftwareIoDeviceInCollection, &device)))
+        {
+            device->GetId(&deviceId);
+            device->Release();
+        }
+        DiagLog::Write(L"Initialize (APOInitSystemEffects2) mode %s, découverte seule %d, périphérique %s",
+            DiagLog::GuidToString(init->AudioProcessingMode, mode, 40), init->InitializeForDiscoveryOnly,
+            deviceId != nullptr ? deviceId : L"?");
+        CoTaskMemFree(deviceId);
+    }
+    else
+    {
+        DiagLog::Write(L"Initialize (structure de %u octets ; APOInitSystemEffects = %u, 2 = %u)",
+            cbDataSize, static_cast<UINT32>(sizeof(APOInitSystemEffects)), static_cast<UINT32>(sizeof(APOInitSystemEffects2)));
+    }
+
     m_initialized = true;
     return S_OK;
 }
@@ -193,13 +233,21 @@ HRESULT CWaseBoardMicFx::CheckFormat(IAudioMediaType* pOppositeFormat, IAudioMed
 STDMETHODIMP CWaseBoardMicFx::IsInputFormatSupported(IAudioMediaType* pOppositeFormat,
     IAudioMediaType* pRequestedInputFormat, IAudioMediaType** ppSupportedInputFormat)
 {
-    return CheckFormat(pOppositeFormat, pRequestedInputFormat, ppSupportedInputFormat);
+    const HRESULT hr = CheckFormat(pOppositeFormat, pRequestedInputFormat, ppSupportedInputFormat);
+    wchar_t requested[160];
+    DescribeFormat(pRequestedInputFormat, requested, 160);
+    DiagLog::Write(L"IsInputFormatSupported(%s) -> 0x%08lX", requested, hr);
+    return hr;
 }
 
 STDMETHODIMP CWaseBoardMicFx::IsOutputFormatSupported(IAudioMediaType* pOppositeFormat,
     IAudioMediaType* pRequestedOutputFormat, IAudioMediaType** ppSupportedOutputFormat)
 {
-    return CheckFormat(pOppositeFormat, pRequestedOutputFormat, ppSupportedOutputFormat);
+    const HRESULT hr = CheckFormat(pOppositeFormat, pRequestedOutputFormat, ppSupportedOutputFormat);
+    wchar_t requested[160];
+    DescribeFormat(pRequestedOutputFormat, requested, 160);
+    DiagLog::Write(L"IsOutputFormatSupported(%s) -> 0x%08lX", requested, hr);
+    return hr;
 }
 
 STDMETHODIMP CWaseBoardMicFx::GetInputChannelCount(UINT32* pu32ChannelCount)
@@ -212,6 +260,23 @@ STDMETHODIMP CWaseBoardMicFx::GetInputChannelCount(UINT32* pu32ChannelCount)
 // ---------- IAudioProcessingObjectConfiguration ----------
 
 STDMETHODIMP CWaseBoardMicFx::LockForProcess(UINT32 u32NumInputConnections,
+    APO_CONNECTION_DESCRIPTOR** ppInputConnections, UINT32 u32NumOutputConnections,
+    APO_CONNECTION_DESCRIPTOR** ppOutputConnections)
+{
+    const HRESULT hr = LockForProcessCore(u32NumInputConnections, ppInputConnections,
+        u32NumOutputConnections, ppOutputConnections);
+
+    wchar_t format[160] = L"?";
+    if (u32NumInputConnections > 0 && ppInputConnections != nullptr && ppInputConnections[0] != nullptr)
+        DescribeFormat(ppInputConnections[0]->pFormat, format, 160);
+    DiagLog::Write(L"LockForProcess(%u entrée(s), %u sortie(s), %s, %u frames max) -> 0x%08lX ; mémoire partagée %s",
+        u32NumInputConnections, u32NumOutputConnections, format,
+        (u32NumInputConnections > 0 && ppInputConnections != nullptr && ppInputConnections[0] != nullptr) ? ppInputConnections[0]->u32MaxFrameCount : 0,
+        hr, m_header != nullptr ? L"ouverte" : L"ABSENTE");
+    return hr;
+}
+
+HRESULT CWaseBoardMicFx::LockForProcessCore(UINT32 u32NumInputConnections,
     APO_CONNECTION_DESCRIPTOR** ppInputConnections, UINT32 u32NumOutputConnections,
     APO_CONNECTION_DESCRIPTOR** ppOutputConnections)
 {
@@ -248,6 +313,7 @@ STDMETHODIMP CWaseBoardMicFx::UnlockForProcess()
 {
     if (!m_locked) return APOERR_ALREADY_UNLOCKED;
     m_locked = false;
+    DiagLog::Write(L"UnlockForProcess (%llu blocs traités, %llu avec des sons)", m_processCalls, m_mixedCalls);
     return S_OK;
 }
 
@@ -293,18 +359,27 @@ void CWaseBoardMicFx::OpenFeed()
             createdHere = (err != ERROR_ALREADY_EXISTS);
             break;
         }
+        DiagLog::Write(L"CreateFileMapping(%s, SDDL %s) a échoué : erreur %lu", WBMF_MAPPING_NAME, sddl, err);
     }
 
     if (mapping == nullptr)
+    {
         mapping = OpenFileMappingW(FILE_MAP_READ | FILE_MAP_WRITE, FALSE, WBMF_MAPPING_NAME);
-    if (mapping == nullptr) return;
+        if (mapping == nullptr)
+        {
+            DiagLog::Write(L"OpenFileMapping(%s) a échoué : erreur %lu", WBMF_MAPPING_NAME, GetLastError());
+            return;
+        }
+    }
 
     void* view = MapViewOfFile(mapping, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, WBMF_TOTAL_SIZE);
     if (view == nullptr)
     {
+        DiagLog::Write(L"MapViewOfFile a échoué : erreur %lu", GetLastError());
         CloseHandle(mapping);
         return;
     }
+    DiagLog::Write(L"Mémoire partagée %s (%s)", WBMF_MAPPING_NAME, createdHere ? L"créée" : L"existante, ouverte");
 
     auto* header = static_cast<WbmfHeader*>(view);
     if (createdHere)
@@ -418,6 +493,7 @@ STDMETHODIMP_(void) CWaseBoardMicFx::APOProcess(UINT32 u32NumInputConnections,
         return;
     }
 
+    m_processCalls++;
     const bool silent = (flags == BUFFER_SILENT);
     if (!silent && dst != src)
         CopyMemory(dst, src, bytes);
@@ -427,6 +503,7 @@ STDMETHODIMP_(void) CWaseBoardMicFx::APOProcess(UINT32 u32NumInputConnections,
         // Un tampon « silencieux » n'a pas de contenu garanti : on part de vrais zéros.
         if (silent) ZeroMemory(dst, bytes);
         MixFeed(dst, frameCount);
+        m_mixedCalls++;
         out->u32BufferFlags = BUFFER_VALID;
     }
     else
