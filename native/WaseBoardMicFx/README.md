@@ -99,6 +99,18 @@ Elle a été compilée avec le CRT statique, sans manifeste embarqué. Elle ne d
 
   La ligne d'état sous les boutons indique si une application écoute le micro et si l'effet est
   bien chargé.
+- **De bout en bout, sans manipulation** : `tools/MicFxCheck` écoute le micro quelques secondes
+  (ce qui fait charger l'effet), envoie le bip et le cherche dans le signal capté. Rien n'est
+  enregistré. Il faut d'abord la build Dev du client :
+
+  ```powershell
+  dotnet build src/WaseBoard -c Dev
+  dotnet run --project native/WaseBoardMicFx/tools/MicFxCheck -c Release -- "BlackShark"
+  ```
+
+- **Journal** : `C:\ProgramData\WaseBoard\MicFx\apo.log`, écrit par l'effet depuis audiodg et
+  lisible sans droits admin. On y voit qui charge l'effet, chaque demande de Windows (fabrique,
+  interfaces, formats, LockForProcess) et le sort de la mémoire partagée.
 
 ## Limites connues
 

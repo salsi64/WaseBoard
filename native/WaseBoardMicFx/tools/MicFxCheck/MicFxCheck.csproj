@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Outil de dev : vérifie de bout en bout que l'effet micro ajoute bien le bip de test au micro.
+       S'appuie sur la build Dev du client (dotnet build src/WaseBoard -c Dev), dont il réutilise
+       MicFeedService. Voir native/WaseBoardMicFx/README.md, « Tester ». -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Le client est autonome (runtime embarqué) : le poste de dev n'a pas forcément .NET 8. -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="..\..\..\..\src\WaseBoard\bin\Dev\net8.0-windows\win-x64\WaseBoard-Dev.dll" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
+    <PackageReference Include="Concentus" Version="2.2.2" />
+    <PackageReference Include="Concentus.OggFile" Version="1.0.6" />
+  </ItemGroup>
+
+</Project>
