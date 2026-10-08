@@ -4,6 +4,7 @@
 #include <audiomediatype.h>
 #include <sddl.h>
 #include <math.h>
+#include <stdio.h>
 #include <new>
 
 // {8C9DCFA9-29AB-4056-936F-6721FBD44AEC}
