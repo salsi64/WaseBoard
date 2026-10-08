@@ -3,6 +3,9 @@ bin/
 obj/
 installer/Output/
 
+# Build C++ de l'effet micro (native/WaseBoardMicFx, CMake)
+native/WaseBoardMicFx/build/
+
 # Python
 __pycache__/
 *.pyc

@@ -1,0 +1,51 @@
+name: Micro en jeu — compiler l'effet audio (APO)
+
+# Compile native/WaseBoardMicFx (DLL C++ chargée par le moteur audio de Windows) et la publie en
+# artefact. Pas besoin de Visual Studio sur le poste de dev : le client C# l'embarque si elle est
+# présente (voir src/WaseBoard/WaseBoard.csproj, « WaseBoardMicFx.dll »).
+on:
+  push:
+    paths:
+      - "native/WaseBoardMicFx/**"
+      - ".github/workflows/micfx-build.yml"
+  pull_request:
+    paths:
+      - "native/WaseBoardMicFx/**"
+      - ".github/workflows/micfx-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurer (CMake, Visual Studio x64)
+        run: cmake -S native/WaseBoardMicFx -B native/WaseBoardMicFx/build -A x64
+
+      - name: Compiler (Release)
+        run: cmake --build native/WaseBoardMicFx/build --config Release
+
+      # La DLL vit dans audiodg.exe : elle ne doit dépendre d'aucune DLL de runtime Visual C++
+      # (absente chez beaucoup de joueurs), et doit exporter les deux points d'entrée COM.
+      - name: Vérifier exports et dépendances
+        shell: pwsh
+        run: |
+          $dll = "native/WaseBoardMicFx/build/Release/WaseBoardMicFx.dll"
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe |
+            Where-Object FullName -match 'Hostx64\\x64' | Select-Object -First 1
+          $exports = & $dumpbin.FullName /nologo /exports $dll | Out-String
+          $deps = & $dumpbin.FullName /nologo /dependents $dll | Out-String
+          Write-Host $exports
+          Write-Host $deps
+          foreach ($name in 'DllGetClassObject', 'DllCanUnloadNow') {
+            if ($exports -notmatch $name) { throw "Export manquant : $name" }
+          }
+          if ($deps -match '(?i)vcruntime|msvcp|ucrtbased') { throw "Dépendance au runtime Visual C++ détectée" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WaseBoardMicFx-x64
+          path: native/WaseBoardMicFx/build/Release/WaseBoardMicFx.dll
+          if-no-files-found: error

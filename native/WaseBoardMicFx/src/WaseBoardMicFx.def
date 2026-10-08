@@ -1,0 +1,4 @@
+LIBRARY WaseBoardMicFx
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow   PRIVATE
