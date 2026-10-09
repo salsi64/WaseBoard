@@ -258,9 +258,9 @@ namespace WaseBoard
             if (!_library.Settings.MicFeatureEnabled) return;
             var state = MicFxSetup.ReadState();
             if (state.AnyNeedsRepair)
-                ToastService.Show("🎮 L'effet « Micro en jeu » a été retiré d'un micro (mise à jour du pilote ?) — Paramètres › Micro en jeu › Réparer.", ToastKind.Warning);
+                ToastService.Show("🎮 Micro en jeu : à réparer (Paramètres › Micro en jeu).", ToastKind.Warning);
             else if (!state.AnyEquipped)
-                ToastService.Show("🎮 « Micro en jeu » est activé mais l'effet n'est installé sur aucun micro — Paramètres › Micro en jeu.", ToastKind.Warning);
+                ToastService.Show("🎮 Micro en jeu : pas encore installé (Paramètres › Micro en jeu).", ToastKind.Warning);
         }
 
         /// <summary>Vérification passive, non bloquante : affiche un toast si une nouvelle version
