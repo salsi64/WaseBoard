@@ -19,4 +19,8 @@ namespace DiagLog
 
     // GUID au format registre, pour les traces (buffer d'au moins 39 caractères).
     const wchar_t* GuidToString(REFGUID guid, wchar_t* buffer, size_t count);
+
+    // Vrai la première fois qu'on voit ce GUID dans ce processus : le moteur audio redemande les
+    // mêmes interfaces optionnelles à chaque instance, une ligne par interface suffit.
+    bool FirstTimeSeen(REFGUID guid);
 }

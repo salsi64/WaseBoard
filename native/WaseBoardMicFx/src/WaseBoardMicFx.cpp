@@ -114,7 +114,8 @@ HRESULT CWaseBoardMicFx::InternalQueryInterface(REFIID riid, void** ppv)
     else
     {
         wchar_t iid[40];
-        DiagLog::Write(L"QueryInterface : interface non prise en charge %s", DiagLog::GuidToString(riid, iid, 40));
+        if (DiagLog::FirstTimeSeen(riid))
+            DiagLog::Write(L"QueryInterface : interface non prise en charge %s (non signalée ensuite)", DiagLog::GuidToString(riid, iid, 40));
         return E_NOINTERFACE;
     }
 

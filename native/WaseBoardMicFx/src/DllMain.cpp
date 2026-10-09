@@ -26,7 +26,8 @@ namespace
             }
             *ppv = nullptr;
             wchar_t iid[40];
-            DiagLog::Write(L"Fabrique : interface non prise en charge %s", DiagLog::GuidToString(riid, iid, 40));
+            if (DiagLog::FirstTimeSeen(riid))
+                DiagLog::Write(L"Fabrique : interface non prise en charge %s", DiagLog::GuidToString(riid, iid, 40));
             return E_NOINTERFACE;
         }
 

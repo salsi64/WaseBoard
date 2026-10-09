@@ -8,6 +8,10 @@ namespace
 {
     SRWLOCK g_lock = SRWLOCK_INIT;
     volatile LONG g_processInfoWritten = 0;
+
+    SRWLOCK g_seenLock = SRWLOCK_INIT;
+    GUID g_seen[64];
+    size_t g_seenCount = 0;
     constexpr LONGLONG kMaxLogBytes = 512 * 1024;
 
     // %ProgramData%\WaseBoard\MicFx, créé au besoin (LOCAL SERVICE fait partie des Utilisateurs,
@@ -44,6 +48,16 @@ namespace
         HANDLE file = CreateFileW(logPath, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (file == INVALID_HANDLE_VALUE) return;
+
+        // Fichier neuf : marque UTF-8 (BOM), sans quoi le Bloc-notes ou PowerShell 5 lisent les
+        // accents comme de l'ANSI.
+        LARGE_INTEGER size = {};
+        if (GetFileSizeEx(file, &size) && size.QuadPart == 0)
+        {
+            static const char bom[] = "\xEF\xBB\xBF";
+            DWORD written = 0;
+            WriteFile(file, bom, 3, &written, nullptr);
+        }
 
         char utf8[2048];
         const int bytes = WideCharToMultiByte(CP_UTF8, 0, line, -1, utf8, sizeof(utf8), nullptr, nullptr);
@@ -116,6 +130,17 @@ namespace DiagLog
 
         Write(L"=== Chargé par %s (session %lu, compte %s, intégrité 0x%lX, AppContainer %lu) — DLL %s",
             exe, session, account, integrity, isAppContainer, dll);
+    }
+
+    bool FirstTimeSeen(REFGUID guid)
+    {
+        AcquireSRWLockExclusive(&g_seenLock);
+        bool first = true;
+        for (size_t i = 0; i < g_seenCount && first; i++)
+            first = !IsEqualGUID(g_seen[i], guid);
+        if (first && g_seenCount < ARRAYSIZE(g_seen)) g_seen[g_seenCount++] = guid;
+        ReleaseSRWLockExclusive(&g_seenLock);
+        return first;
     }
 
     const wchar_t* GuidToString(REFGUID guid, wchar_t* buffer, size_t count)
