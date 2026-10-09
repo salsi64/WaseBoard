@@ -28,6 +28,66 @@
             </DoubleAnimation>
         </Storyboard>
 
+        <!-- Segment de l'interrupteur Micro en jeu (🎮 Jeu | 🎧 Discord). Segment actif (IsChecked) :
+             fond d'accent et halo flou d'accent autour (même technique que le halo de lecture des
+             sons), en fondu d'environ 0,25 s. Aucune animation au repos. -->
+        <Style x:Key="MicModeSegmentStyle" TargetType="ToggleButton">
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border x:Name="Halo" Margin="-5" CornerRadius="12" Opacity="0" IsHitTestVisible="False"
+                                    Background="{DynamicResource AccentBrush}">
+                                <Border.Effect><BlurEffect Radius="12"/></Border.Effect>
+                            </Border>
+                            <Border x:Name="Fill" CornerRadius="7" Opacity="0" Background="{DynamicResource AccentBrush}"/>
+                            <Border x:Name="Hover" CornerRadius="7" Opacity="0" Background="{DynamicResource TrackBrush}"/>
+                            <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" Opacity="0.65"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}"/>
+                                <Setter TargetName="Content" Property="Opacity" Value="1"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.2"/>
+                                            <DoubleAnimation Storyboard.TargetName="Halo" Storyboard.TargetProperty="Opacity" To="0.6" Duration="0:0:0.3">
+                                                <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15"/>
+                                            <DoubleAnimation Storyboard.TargetName="Halo" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsChecked" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Hover" Property="Opacity" Value="0.6"/>
+                                <Setter TargetName="Content" Property="Opacity" Value="0.9"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Gabarit classique (carte) : colonne d'aperçu à gauche ; nom (2 lignes max), puis UNE ligne
              « ★ raccourci avatars » (hauteur réservée, rien ne se superpose), puis la mini-waveform. -->
         <DataTemplate x:Key="SoundButtonTemplate">
@@ -810,16 +870,31 @@
                             Style="{StaticResource ToolbarButtonStyle}" Click="RefreshButton_Click">
                         <TextBlock Text="&#xE72C;" Style="{StaticResource ToolbarIcon}"/>
                     </Button>
-                    <!-- Micro en jeu : bascule mode jeu (manette, sons dans le micro) / mode Discord (casque,
-                         sons joués par le bot). Visible seulement si la fonction est activée dans
-                         Paramètres > Micro en jeu — voir ApplyMicModeButton(). -->
-                    <Button x:Name="MicModeButton" Click="MicModeButton_Click" Style="{StaticResource ToolbarButtonStyle}"
-                            Visibility="Collapsed">
+                    <!-- Micro en jeu : interrupteur à deux segments, mode jeu (manette, sons dans le micro) |
+                         mode Discord (casque, sons joués par le bot) ; le segment actif s'allume. Visible
+                         seulement si la fonction est activée dans Paramètres > Micro en jeu — voir
+                         ApplyMicModeButton(). -->
+                    <Border x:Name="MicModeSwitch" Visibility="Collapsed" Height="34" Margin="0,0,6,0" Padding="3"
+                            CornerRadius="10" Background="{DynamicResource FieldBrush}"
+                            BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock x:Name="MicModeIcon" Text="&#xE7F6;" Style="{StaticResource ToolbarIcon}" Foreground="{DynamicResource AccentBrush}"/>
-                            <TextBlock x:Name="MicModeLabel" Text="Discord" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            <ToggleButton x:Name="MicModeGameButton" Click="MicModeSegment_Click" Style="{StaticResource MicModeSegmentStyle}"
+                                          ToolTip="Mode jeu : les sons passent dans votre micro (chat vocal du jeu)">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE7FC;" Style="{StaticResource ToolbarIcon}"/>
+                                    <TextBlock x:Name="MicModeGameLabel" Text="Jeu" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <ToggleButton x:Name="MicModeDiscordButton" Click="MicModeSegment_Click" Style="{StaticResource MicModeSegmentStyle}"
+                                          Margin="2,0,0,0"
+                                          ToolTip="Mode Discord : les sons sont joués par le bot dans votre salon vocal">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE7F6;" Style="{StaticResource ToolbarIcon}"/>
+                                    <TextBlock x:Name="MicModeDiscordLabel" Text="Discord" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ToggleButton>
                         </StackPanel>
-                    </Button>
+                    </Border>
                     <Button x:Name="JoinVoiceButton" Click="JoinVoiceButton_Click" Style="{StaticResource ToolbarButtonStyle}"
                             ToolTip="Rejoindre mon vocal : fait rejoindre le bot au salon vocal où vous êtes actuellement">
                         <StackPanel Orientation="Horizontal">

@@ -423,7 +423,8 @@ namespace WaseBoard
 
             var labels = compact ? Visibility.Collapsed : Visibility.Visible;
             JoinVoiceLabel.Visibility = labels;
-            MicModeLabel.Visibility = labels;
+            MicModeGameLabel.Visibility = labels;
+            MicModeDiscordLabel.Visibility = labels;
             StopAllLabel.Visibility = labels;
             AddCategoryLabel.Visibility = labels;
             AddSoundLabel.Text = compact ? "Son" : "Ajouter un son";
@@ -2000,29 +2001,29 @@ namespace WaseBoard
 
         private bool IsGameMode => _library.Settings.MicFeatureEnabled && _library.Settings.MicFeedEnabled;
 
-        /// <summary>Bascule mode jeu (🎮, sons dans le micro) / mode Discord (🎧, sons joués par le bot).</summary>
-        private void MicModeButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>Segment 🎮 Jeu ou 🎧 Discord de l'interrupteur : choisit ce mode (un clic sur le
+        /// segment déjà actif ne change rien).</summary>
+        private void MicModeSegment_Click(object sender, RoutedEventArgs e)
         {
-            _library.Settings.MicFeedEnabled = !_library.Settings.MicFeedEnabled;
-            _library.SaveSettings();
+            var game = ReferenceEquals(sender, MicModeGameButton);
+            if (_library.Settings.MicFeedEnabled != game)
+            {
+                _library.Settings.MicFeedEnabled = game;
+                _library.SaveSettings();
+            }
+            // Resynchronise les deux segments : un ToggleButton cliqué inverse seul son état, ce qui
+            // décocherait le segment actif.
             ApplyMicModeButton();
-            ToastService.Show(IsGameMode
-                    ? "🎮 Mode jeu : les sons passent dans votre micro."
-                    : "🎧 Mode Discord : les sons sont joués par le bot dans votre salon vocal.",
-                ToastKind.Info);
         }
 
-        /// <summary>Le bouton n'existe que si la fonction est activée (Paramètres > Micro en jeu) ;
-        /// icône et libellé indiquent le mode ACTUEL, l'infobulle ce que fait le clic.</summary>
+        /// <summary>L'interrupteur n'existe que si la fonction est activée (Paramètres > Micro en jeu) ;
+        /// le segment du mode actuel est coché, donc allumé.</summary>
         private void ApplyMicModeButton()
         {
-            MicModeButton.Visibility = _library.Settings.MicFeatureEnabled ? Visibility.Visible : Visibility.Collapsed;
+            MicModeSwitch.Visibility = _library.Settings.MicFeatureEnabled ? Visibility.Visible : Visibility.Collapsed;
             var game = IsGameMode;
-            MicModeIcon.Text = game ? "" : ""; // Segoe MDL2 : manette / casque
-            MicModeLabel.Text = game ? "Jeu" : "Discord";
-            MicModeButton.ToolTip = game
-                ? "Mode jeu : les sons passent dans votre micro (chat vocal du jeu). Cliquer pour revenir au mode Discord (sons joués par le bot)."
-                : "Mode Discord : les sons sont joués par le bot dans votre salon vocal. Cliquer pour passer en mode jeu (sons dans votre micro).";
+            MicModeGameButton.IsChecked = game;
+            MicModeDiscordButton.IsChecked = !game;
         }
 
         /// <summary>Micro en jeu : le son est ajouté au vrai micro par l'effet WaseBoardMicFx (toutes
