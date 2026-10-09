@@ -4,7 +4,7 @@
 ;   dotnet publish src/WaseBoard/WaseBoard.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 
 #define MyAppName "WaseBoard"
-#define MyAppVersion "3.2.0"
+#define MyAppVersion "3.3.0"
 ; ↑ Pensez à incrémenter ce numéro à chaque nouvelle version distribuée à vos utilisateurs
 ; (pas obligatoire pour que la mise à jour fonctionne — c'est l'AppId ci-dessous qui compte —
 ; mais ça permet de distinguer les versions dans le nom du fichier et dans Windows).
@@ -68,3 +68,18 @@ Root: HKCU; Subkey: "Software\Classes\waseboard\shell\open\command"; ValueType: 
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Lancer {#MyAppName}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// Micro en jeu : l'effet audio est greffé sur les micros dans HKLM (droits administrateur, voir
+// src/WaseBoard/Services/MicFx/MicFxSetup.cs). S'il est installé, on le retire avant de supprimer
+// WaseBoard (invite UAC), sinon il resterait sur les micros sans plus rien pour le désinstaller.
+// Un refus de l'invite n'empêche pas la désinstallation de WaseBoard.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  if (CurUninstallStep = usUninstall) and
+     RegKeyExists(HKLM, 'SOFTWARE\Classes\CLSID\{8C9DCFA9-29AB-4056-936F-6721FBD44AEC}') then
+    ShellExec('runas', ExpandConstant('{app}\{#MyAppExeName}'), '--micfx uninstall', '',
+      SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;

@@ -29,11 +29,14 @@ target_compile_definitions(WaseBoardMicFx PRIVATE
     _WIN32_WINNT=0x0A00 WINVER=0x0A00 NTDDI_VERSION=0x0A000005
 )
 
-target_compile_options(WaseBoardMicFx PRIVATE /W4 /permissive- /guard:cf /EHsc /utf-8)
+# /Brepro : compilation reproductible (pas d'horodatage dans le binaire). Le client compare
+# l'empreinte de la DLL installée à celle qu'il embarque pour proposer « Mettre à jour » : sans
+# ça, chaque recompilation du même code changerait l'empreinte et redemanderait une installation.
+target_compile_options(WaseBoardMicFx PRIVATE /W4 /permissive- /guard:cf /EHsc /utf-8 /Brepro)
 
 # Pas de manifeste embarqué : Microsoft le déconseille pour les APO (certaines API qu'il
 # déclenche sont interdites dans un graphe audio protégé).
-target_link_options(WaseBoardMicFx PRIVATE /MANIFEST:NO /GUARD:CF /DYNAMICBASE /NXCOMPAT)
+target_link_options(WaseBoardMicFx PRIVATE /MANIFEST:NO /GUARD:CF /DYNAMICBASE /NXCOMPAT /Brepro)
 
 target_link_libraries(WaseBoardMicFx PRIVATE ole32 advapi32 audiomediatypecrt)
 
