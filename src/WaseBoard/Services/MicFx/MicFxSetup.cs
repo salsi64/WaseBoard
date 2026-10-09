@@ -52,6 +52,11 @@ namespace WaseBoard.Services.MicFx
 
         public static bool IsBundled => File.Exists(BundledDllPath);
 
+        /// <summary>Nom d'installation de la DLL livrée (empreinte de son contenu), calculé une seule fois :
+        /// ReadState est appelé toutes les quelques secondes en mode jeu.</summary>
+        private static readonly Lazy<string?> BundledInstalledFileName =
+            new(() => IsBundled ? InstalledFileName(BundledDllPath) : null);
+
         // ---------- Lecture de l'état (sans droits admin) ----------
 
         public sealed record MicInfo(string EndpointGuid, string Name, bool IsDefaultCommunications,
@@ -74,8 +79,8 @@ namespace WaseBoard.Services.MicFx
                 if (inproc?.GetValue("") is string path && File.Exists(path))
                 {
                     registered = true;
-                    needsUpdate = IsBundled && !string.Equals(Path.GetFileName(path), InstalledFileName(BundledDllPath),
-                        StringComparison.OrdinalIgnoreCase);
+                    needsUpdate = BundledInstalledFileName.Value is { } bundled
+                        && !string.Equals(Path.GetFileName(path), bundled, StringComparison.OrdinalIgnoreCase);
                 }
             }
 
