@@ -413,6 +413,9 @@ namespace WaseBoard
         /// <summary>Quand la fenêtre est étroite, raccourcit les libellés de la barre d'outils (icônes seules) pour que
         /// la recherche garde au moins 150 px et que rien ne se chevauche. Seuils = largeur nécessaire avec libellés
         /// complets (le thème classique porte en plus le titre, le volume et Paramètres dans cette barre).</summary>
+        /// <summary>Barre d'outils en version étroite (libellés masqués) — voir ApplyToolbarDensity.</summary>
+        private bool _toolbarCompact;
+
         private void ApplyToolbarDensity()
         {
             if (JoinVoiceLabel is null) return; // encore en cours d'InitializeComponent
@@ -423,8 +426,8 @@ namespace WaseBoard
 
             var labels = compact ? Visibility.Collapsed : Visibility.Visible;
             JoinVoiceLabel.Visibility = labels;
-            MicModeGameLabel.Visibility = labels;
-            MicModeDiscordLabel.Visibility = labels;
+            _toolbarCompact = compact;
+            UpdateMicModeLabels();
             StopAllLabel.Visibility = labels;
             AddCategoryLabel.Visibility = labels;
             AddSoundLabel.Text = compact ? "Son" : "Ajouter un son";
@@ -2024,6 +2027,16 @@ namespace WaseBoard
             var game = IsGameMode;
             MicModeGameButton.IsChecked = game;
             MicModeDiscordButton.IsChecked = !game;
+            UpdateMicModeLabels();
+        }
+
+        /// <summary>Seul le segment actif affiche son nom (l'autre se réduit à son icône), et aucun
+        /// en barre étroite : l'interrupteur reste compact.</summary>
+        private void UpdateMicModeLabels()
+        {
+            var game = IsGameMode;
+            MicModeGameLabel.Visibility = game && !_toolbarCompact ? Visibility.Visible : Visibility.Collapsed;
+            MicModeDiscordLabel.Visibility = !game && !_toolbarCompact ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>Micro en jeu : le son est ajouté au vrai micro par l'effet WaseBoardMicFx (toutes
