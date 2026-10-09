@@ -50,6 +50,37 @@ namespace
         return type;
     }
 
+    // Propriétés d'endpoint minimales : seul PKEY_AudioEndpoint_GUID est lu par l'effet.
+    const PROPERTYKEY kEndpointGuidKey =
+        { { 0x1da5d803, 0xd492, 0x4edd, { 0x8c, 0x23, 0xe0, 0xc0, 0xff, 0xee, 0x7f, 0x0e } }, 4 };
+    const GUID kTestEndpoint = { 0x11111111, 0x2222, 0x3333, { 0x44, 0x44, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55 } };
+
+    struct FakeEndpointStore : IPropertyStore
+    {
+        STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override
+        {
+            if (riid == __uuidof(IUnknown) || riid == __uuidof(IPropertyStore)) { *ppv = this; return S_OK; }
+            *ppv = nullptr;
+            return E_NOINTERFACE;
+        }
+        STDMETHODIMP_(ULONG) AddRef() override { return 2; }
+        STDMETHODIMP_(ULONG) Release() override { return 1; }
+        STDMETHODIMP GetCount(DWORD* count) override { *count = 1; return S_OK; }
+        STDMETHODIMP GetAt(DWORD, PROPERTYKEY* key) override { *key = kEndpointGuidKey; return S_OK; }
+        STDMETHODIMP GetValue(REFPROPERTYKEY key, PROPVARIANT* value) override
+        {
+            PropVariantInit(value);
+            if (key.fmtid != kEndpointGuidKey.fmtid || key.pid != kEndpointGuidKey.pid) return S_OK;
+            static const wchar_t text[] = L"{11111111-2222-3333-4444-555555555555}";
+            value->pwszVal = static_cast<LPWSTR>(CoTaskMemAlloc(sizeof(text)));
+            memcpy(value->pwszVal, text, sizeof(text));
+            value->vt = VT_LPWSTR;
+            return S_OK;
+        }
+        STDMETHODIMP SetValue(REFPROPERTYKEY, REFPROPVARIANT) override { return E_NOTIMPL; }
+        STDMETHODIMP Commit() override { return E_NOTIMPL; }
+    };
+
     // Côté « WaseBoard » : écrit des frames 48 kHz à la suite de la ligne de temps.
     struct Writer
     {
@@ -189,9 +220,11 @@ int wmain(int argc, wchar_t** argv)
         CoTaskMemFree(reg);
     }
 
+    FakeEndpointStore endpointStore;
     APOInitSystemEffects2 init = {};
     init.APOInit.cbSize = sizeof(init);
     init.APOInit.clsid = kClsid;
+    init.pAPOEndpointProperties = &endpointStore;
     CHECK(apo->Initialize(sizeof(init), reinterpret_cast<BYTE*>(&init)) == S_OK, "Initialize");
     CHECK(apo->Initialize(sizeof(init), reinterpret_cast<BYTE*>(&init)) == APOERR_ALREADY_INITIALIZED, "double Initialize");
 
@@ -246,6 +279,10 @@ int wmain(int argc, wchar_t** argv)
     CHECK(writer.header->readTick != 0, "readTick mis à jour");
     CHECK(writer.header->readerRate == 48000 && writer.header->readerChannels == 2, "diagnostic lecteur : %u Hz, %u canaux",
         writer.header->readerRate, writer.header->readerChannels);
+    {
+        const WbmfReaderSlot& slot = writer.header->readers[kTestEndpoint.Data1 % WBMF_READER_SLOTS];
+        CHECK(IsEqualGUID(slot.endpoint, kTestEndpoint) && slot.tick != 0, "emplacement du micro horodaté (tick=%lld)", slot.tick);
+    }
 
     // 2. Un son (0,25 constant) : sortie = micro + son, sur chaque canal.
     writer.Write(std::vector<float>(4800, 0.25f));

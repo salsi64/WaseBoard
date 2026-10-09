@@ -59,6 +59,23 @@ namespace
             f.dwValidBitsPerSample, f.dwBytesPerSampleContainer * 8, f.dwSamplesPerFrame, f.fFramesPerSecond);
     }
 
+    // PKEY_AudioEndpoint_GUID (mmdeviceapi.h), recopié pour ne pas dépendre d'INITGUID.
+    const PROPERTYKEY kEndpointGuidKey =
+        { { 0x1da5d803, 0xd492, 0x4edd, { 0x8c, 0x23, 0xe0, 0xc0, 0xff, 0xee, 0x7f, 0x0e } }, 4 };
+
+    // GUID de l'endpoint du micro (« {xxxxxxxx-…} », la clé sous MMDevices\Audio\Capture).
+    bool ReadEndpointGuid(IPropertyStore* store, GUID* guid)
+    {
+        if (store == nullptr) return false;
+        PROPVARIANT value;
+        PropVariantInit(&value);
+        bool ok = SUCCEEDED(store->GetValue(kEndpointGuidKey, &value))
+            && value.vt == VT_LPWSTR && value.pwszVal != nullptr
+            && SUCCEEDED(CLSIDFromString(value.pwszVal, guid));
+        PropVariantClear(&value);
+        return ok;
+    }
+
     APO_REG_PROPERTIES MakeRegProperties()
     {
         APO_REG_PROPERTIES p = {};
@@ -176,8 +193,17 @@ STDMETHODIMP CWaseBoardMicFx::Initialize(UINT32 cbDataSize, BYTE* pbyData)
     if ((pbyData == nullptr) != (cbDataSize == 0)) return E_INVALIDARG;
     if (m_initialized) return APOERR_ALREADY_INITIALIZED;
 
-    // Rien à lire dans la structure d'init (APOInitSystemEffects, 2 ou 3 selon Windows) :
-    // l'effet ne dépend ni du mode de traitement, ni du périphérique. Seulement tracé.
+    // Le traitement ne dépend ni du mode ni du périphérique ; on note seulement QUEL micro on traite
+    // (diagnostic par micro, voir WbmfReaderSlot). pAPOEndpointProperties suit APOInit dans les
+    // trois versions de la structure (APOInitSystemEffects, 2 et 3).
+    if (cbDataSize >= sizeof(APOInitSystemEffects))
+    {
+        const auto* base = reinterpret_cast<const APOInitSystemEffects*>(pbyData);
+        m_hasEndpoint = ReadEndpointGuid(base->pAPOEndpointProperties, &m_endpoint);
+    }
+    wchar_t endpoint[40] = L"?";
+    if (m_hasEndpoint) DiagLog::GuidToString(m_endpoint, endpoint, 40);
+
     if (cbDataSize == sizeof(APOInitSystemEffects2))
     {
         const auto* init = reinterpret_cast<const APOInitSystemEffects2*>(pbyData);
@@ -190,15 +216,15 @@ STDMETHODIMP CWaseBoardMicFx::Initialize(UINT32 cbDataSize, BYTE* pbyData)
             device->GetId(&deviceId);
             device->Release();
         }
-        DiagLog::Write(L"Initialize (APOInitSystemEffects2) mode %s, découverte seule %d, périphérique %s",
-            DiagLog::GuidToString(init->AudioProcessingMode, mode, 40), init->InitializeForDiscoveryOnly,
+        DiagLog::Write(L"Initialize (APOInitSystemEffects2) micro %s, mode %s, découverte seule %d, périphérique %s",
+            endpoint, DiagLog::GuidToString(init->AudioProcessingMode, mode, 40), init->InitializeForDiscoveryOnly,
             deviceId != nullptr ? deviceId : L"?");
         CoTaskMemFree(deviceId);
     }
     else
     {
-        DiagLog::Write(L"Initialize (structure de %u octets ; APOInitSystemEffects = %u, 2 = %u)",
-            cbDataSize, static_cast<UINT32>(sizeof(APOInitSystemEffects)), static_cast<UINT32>(sizeof(APOInitSystemEffects2)));
+        DiagLog::Write(L"Initialize (structure de %u octets ; APOInitSystemEffects = %u, 2 = %u) micro %s",
+            cbDataSize, static_cast<UINT32>(sizeof(APOInitSystemEffects)), static_cast<UINT32>(sizeof(APOInitSystemEffects2)), endpoint);
     }
 
     m_initialized = true;
@@ -326,6 +352,13 @@ HRESULT CWaseBoardMicFx::LockForProcessCore(UINT32 u32NumInputConnections,
     // Un échec ici n'empêche pas le micro de fonctionner : l'effet reste transparent.
     OpenFeed();
 
+    // Emplacement de diagnostic de ce micro (écrit une fois ici, horodaté ensuite en temps réel).
+    if (m_header != nullptr && m_hasEndpoint)
+    {
+        m_slot = &m_header->readers[m_endpoint.Data1 % WBMF_READER_SLOTS];
+        m_slot->endpoint = m_endpoint;
+    }
+
     m_locked = true;
     return S_OK;
 }
@@ -423,6 +456,7 @@ void CWaseBoardMicFx::OpenFeed()
 
 void CWaseBoardMicFx::CloseFeed()
 {
+    m_slot = nullptr;
     if (m_header != nullptr)
     {
         UnmapViewOfFile(m_header);
@@ -446,7 +480,9 @@ bool CWaseBoardMicFx::FeedHasData()
         return false;
 
     // Diagnostic pour WaseBoard : « un programme écoute le micro et l'effet est bien chargé ».
-    h->readTick = static_cast<int64_t>(GetTickCount64());
+    const int64_t now = static_cast<int64_t>(GetTickCount64());
+    h->readTick = now;
+    if (m_slot != nullptr) m_slot->tick = now;
     h->readerRate = static_cast<uint32_t>(WBMF_SAMPLE_RATE / m_step + 0.5);
     h->readerChannels = m_channels;
 

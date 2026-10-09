@@ -14,21 +14,33 @@
 //   d'ouvrir un objet existant.
 // - L'écrivain garde ~WBMF_LEAD_FRAMES d'avance sur l'horloge murale ; un lecteur qui rejoint
 //   en cours de route démarre à writePos - WBMF_LEAD_FRAMES.
+// - Chaque lecteur signale dans readers[] le micro (endpoint) qu'il traite et son dernier passage :
+//   WaseBoard peut ainsi dire, micro par micro, si l'effet tourne vraiment (diagnostic « une
+//   application écoute ce micro mais l'effet ne s'active pas »).
+// - Le nom de l'objet suit la version : deux versions (de tailles différentes) ne se mélangent jamais.
 
 #pragma once
 
 #include <stdint.h>
+#include <guiddef.h>
 
-#define WBMF_MAPPING_NAME   L"Global\\WaseBoardMicFeed"
+#define WBMF_MAPPING_NAME   L"Global\\WaseBoardMicFeed.v2"
 #define WBMF_MAGIC          0x464D4257u   // "WBMF" en little-endian
-#define WBMF_VERSION        1u
+#define WBMF_VERSION        2u
 #define WBMF_SAMPLE_RATE    48000u
 #define WBMF_CAPACITY       65536u        // frames, puissance de 2 (~1,37 s à 48 kHz)
 #define WBMF_LEAD_FRAMES    2880u         // 60 ms : avance visée par l'écrivain
 #define WBMF_MAX_LAG_FRAMES 14400u        // 300 ms : au-delà, le lecteur se recale
-#define WBMF_HEADER_SIZE    64u
+#define WBMF_HEADER_SIZE    256u
+#define WBMF_READER_SLOTS   8u            // emplacement d'un micro = endpoint.Data1 % WBMF_READER_SLOTS
 
 #pragma pack(push, 8)
+typedef struct WbmfReaderSlot
+{
+    GUID endpoint;             //  0 : GUID de l'endpoint du micro (clé sous MMDevices\Audio\Capture)
+    volatile int64_t tick;     // 16 : GetTickCount64() du dernier APOProcess sur ce micro
+} WbmfReaderSlot;              // 24 octets
+
 typedef struct WbmfHeader
 {
     uint32_t magic;            //  0 : WBMF_MAGIC une fois l'en-tête initialisé (par l'APO créateur)
@@ -43,11 +55,13 @@ typedef struct WbmfHeader
     uint32_t reserved0;               // 44
     volatile int64_t writerTick;      // 48 : GetTickCount64() du dernier passage de l'écrivain
     uint32_t reserved1[2];            // 56
-} WbmfHeader;                         // 64 octets, suivis de float samples[WBMF_CAPACITY]
+    WbmfReaderSlot readers[WBMF_READER_SLOTS]; // 64 : un emplacement par micro équipé (diagnostic)
+} WbmfHeader;                         // 256 octets, suivis de float samples[WBMF_CAPACITY]
 #pragma pack(pop)
 
 #ifdef __cplusplus
-static_assert(sizeof(WbmfHeader) == WBMF_HEADER_SIZE, "en-tete WBMF : 64 octets attendus");
+static_assert(sizeof(WbmfReaderSlot) == 24, "emplacement lecteur WBMF : 24 octets attendus");
+static_assert(sizeof(WbmfHeader) == WBMF_HEADER_SIZE, "en-tete WBMF : 256 octets attendus");
 static_assert((WBMF_CAPACITY & (WBMF_CAPACITY - 1)) == 0, "WBMF_CAPACITY doit etre une puissance de 2");
 #endif
 

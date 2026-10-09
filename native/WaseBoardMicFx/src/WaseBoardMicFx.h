@@ -111,6 +111,12 @@ private:
     WbmfHeader* m_header = nullptr;
     const float* m_samples = nullptr;
 
+    // Micro traité (GUID d'endpoint, lu à l'Initialize) et son emplacement de diagnostic dans
+    // l'en-tête partagé (horodaté à chaque bloc).
+    GUID m_endpoint = {};
+    bool m_hasEndpoint = false;
+    WbmfReaderSlot* m_slot = nullptr;
+
     // Curseur de lecture propre à cette instance (position dans la ligne de temps de l'anneau).
     bool m_synced = false;
     double m_readPos = 0.0;
