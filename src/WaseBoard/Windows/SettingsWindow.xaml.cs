@@ -40,6 +40,8 @@ namespace WaseBoard.Windows
         private readonly MicFeedService? _micFeed;
         private readonly Dictionary<string, CheckBox> _micCheckBoxes = new();
         private readonly DispatcherTimer _micLiveTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+        private MicFxSetup.State? _micState;
+        private readonly Dictionary<string, int> _micMissingStreak = new();
 
         /// <summary>Vrai si le panel d'administration a modifié le catalogue (renommage, suppression,
         /// restauration) : l'appelant doit alors recharger les sons, même si les Paramètres n'ont pas été enregistrés.</summary>
@@ -322,6 +324,7 @@ namespace WaseBoard.Windows
         private void RefreshMicFxState()
         {
             var state = MicFxSetup.ReadState();
+            _micState = state;
 
             MicFxMicList.Children.Clear();
             _micCheckBoxes.Clear();
@@ -362,6 +365,12 @@ namespace WaseBoard.Windows
                 MicFxInstallButton.Content = "Réparer";
                 MicFxInstallButton.IsEnabled = true;
             }
+            else if (state.NeedsUpdate)
+            {
+                SetMicStatus(MicFxStatusText, "Mise à jour de l'effet disponible.", WarningBrush);
+                MicFxInstallButton.Content = "Mettre à jour";
+                MicFxInstallButton.IsEnabled = true;
+            }
             else if (state.Registered && state.AnyEquipped)
             {
                 SetMicStatus(MicFxStatusText, "Installé.", SuccessBrush);
@@ -379,10 +388,28 @@ namespace WaseBoard.Windows
             MicFxTestButton.IsEnabled = _micFeed is not null && state.AnyEquipped;
         }
 
+        /// <summary>État en direct, micro par micro (voir MicFxDiagnostics). « Écouté mais effet inactif »
+        /// n'est signalé qu'au 2e constat d'affilée : à l'ouverture d'un flux, l'effet met quelques
+        /// millisecondes à démarrer.</summary>
         private void UpdateMicLiveText()
         {
-            if (MicFeedService.ReadStatus().MicInUse)
-                SetMicStatus(MicFxLiveText, "Actif : une application écoute votre micro.", SuccessBrush);
+            var state = _micState;
+            if (state is null || !state.AnyEquipped || state.NeedsUpdate)
+            {
+                SetMicStatus(MicFxLiveText, "", null); // la ligne d'état au-dessus dit déjà quoi faire
+                return;
+            }
+
+            var activity = MicFxDiagnostics.Probe(state.Microphones);
+            foreach (var mic in activity)
+                _micMissingStreak[mic.EndpointGuid] = mic.EffectMissing ? _micMissingStreak.GetValueOrDefault(mic.EndpointGuid) + 1 : 0;
+
+            var missing = activity.FirstOrDefault(m => m.EffectMissing && _micMissingStreak[m.EndpointGuid] >= 2);
+            var active = activity.FirstOrDefault(m => m.EffectActive);
+            if (missing is not null)
+                SetMicStatus(MicFxLiveText, $"« {missing.Name} » : une application écoute ce micro mais l'effet ne s'active pas. Ce micro n'est peut-être pas compatible.", WarningBrush);
+            else if (active is not null)
+                SetMicStatus(MicFxLiveText, $"Actif sur « {active.Name} ».", SuccessBrush);
             else
                 SetMicStatus(MicFxLiveText, "Prêt : s'active dès qu'une application écoute votre micro.", null);
         }

@@ -249,6 +249,33 @@ namespace WaseBoard
 
             _ = CheckForUpdateOnStartupAsync();
             WarnIfMicEffectNeedsRepair();
+
+            // Micro en jeu : vérifie en mode jeu que l'effet tourne bien sur les micros qu'on écoute.
+            _micDiagTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            _micDiagTimer.Tick += (_, _) => CheckMicEffectActivity();
+            _micDiagTimer.Start();
+        }
+
+        private DispatcherTimer? _micDiagTimer;
+        private readonly Dictionary<string, int> _micMissingStreak = new();
+        private readonly HashSet<string> _micMissingWarned = new();
+
+        /// <summary>En mode jeu, prévient (une fois par micro et par session) si une application écoute un
+        /// micro équipé sans que l'effet s'y active : les sons n'y passent pas (micro incompatible, ou
+        /// application en mode exclusif). Au 2e constat d'affilée seulement, pour ignorer le démarrage d'un flux.</summary>
+        private void CheckMicEffectActivity()
+        {
+            if (!IsGameMode) return;
+            var state = MicFxSetup.ReadState();
+            if (!state.AnyEquipped || state.NeedsUpdate) return;
+
+            foreach (var mic in MicFxDiagnostics.Probe(state.Microphones))
+            {
+                var streak = mic.EffectMissing ? _micMissingStreak.GetValueOrDefault(mic.EndpointGuid) + 1 : 0;
+                _micMissingStreak[mic.EndpointGuid] = streak;
+                if (streak == 2 && _micMissingWarned.Add(mic.EndpointGuid))
+                    ToastService.Show($"🎮 Micro en jeu : l'effet ne s'active pas sur « {mic.Name} », vos sons n'y passent pas (micro peut-être incompatible).", ToastKind.Warning);
+            }
         }
 
         /// <summary>Une mise à jour du pilote du micro efface souvent sa liste d'effets (le nôtre avec) :
@@ -259,6 +286,8 @@ namespace WaseBoard
             var state = MicFxSetup.ReadState();
             if (state.AnyNeedsRepair)
                 ToastService.Show("🎮 Micro en jeu : à réparer (Paramètres › Micro en jeu).", ToastKind.Warning);
+            else if (state.NeedsUpdate)
+                ToastService.Show("🎮 Micro en jeu : mise à jour de l'effet disponible (Paramètres › Micro en jeu).", ToastKind.Warning);
             else if (!state.AnyEquipped)
                 ToastService.Show("🎮 Micro en jeu : pas encore installé (Paramètres › Micro en jeu).", ToastKind.Warning);
         }
@@ -1081,6 +1110,7 @@ namespace WaseBoard
             _activityTimer?.Stop();
             _voiceStatusTimer?.Stop();
             _themeTimer?.Stop();
+            _micDiagTimer?.Stop();
             _hotkeys?.Dispose();
             _audio.Dispose();
             _micFeed.Dispose();

@@ -57,7 +57,9 @@ namespace WaseBoard.Services.MicFx
         public sealed record MicInfo(string EndpointGuid, string Name, bool IsDefaultCommunications,
             bool Compatible, bool Equipped, bool NeedsRepair, bool EnhancementsDisabled);
 
-        public sealed record State(bool Registered, IReadOnlyList<MicInfo> Microphones)
+        /// <summary>NeedsUpdate : l'effet installé n'est pas celui livré avec cette version de WaseBoard
+        /// (les fichiers installés portent l'empreinte de leur contenu) — à réinstaller.</summary>
+        public sealed record State(bool Registered, bool NeedsUpdate, IReadOnlyList<MicInfo> Microphones)
         {
             public bool AnyEquipped => Microphones.Any(m => m.Equipped);
             public bool AnyNeedsRepair => Microphones.Any(m => m.NeedsRepair);
@@ -66,9 +68,15 @@ namespace WaseBoard.Services.MicFx
         public static State ReadState()
         {
             var registered = false;
+            var needsUpdate = false;
             using (var inproc = Registry.LocalMachine.OpenSubKey(ClsidKeyPath + @"\InprocServer32"))
             {
-                if (inproc?.GetValue("") is string path) registered = File.Exists(path);
+                if (inproc?.GetValue("") is string path && File.Exists(path))
+                {
+                    registered = true;
+                    needsUpdate = IsBundled && !string.Equals(Path.GetFileName(path), InstalledFileName(BundledDllPath),
+                        StringComparison.OrdinalIgnoreCase);
+                }
             }
 
             var mics = new List<MicInfo>();
@@ -91,7 +99,7 @@ namespace WaseBoard.Services.MicFx
                 // Énumération impossible (service audio arrêté) : liste vide, l'interface l'affiche.
             }
 
-            return new State(registered, mics);
+            return new State(registered, needsUpdate, mics);
         }
 
         private static MicInfo ReadMic(string guid, string name, bool isDefault)
@@ -285,13 +293,16 @@ namespace WaseBoard.Services.MicFx
         private static string CopyDll(string sourceDll)
         {
             Directory.CreateDirectory(InstallDir);
-            string hash;
-            using (var stream = File.OpenRead(sourceDll))
-                hash = Convert.ToHexString(SHA256.HashData(stream))[..12].ToLowerInvariant();
-
-            var target = Path.Combine(InstallDir, $"WaseBoardMicFx-{hash}.dll");
+            var target = Path.Combine(InstallDir, InstalledFileName(sourceDll));
             if (!File.Exists(target)) File.Copy(sourceDll, target);
             return target;
+        }
+
+        /// <summary>« WaseBoardMicFx-&lt;empreinte du contenu&gt;.dll » : nom sous lequel cette DLL est installée.</summary>
+        private static string InstalledFileName(string dllPath)
+        {
+            using var stream = File.OpenRead(dllPath);
+            return $"WaseBoardMicFx-{Convert.ToHexString(SHA256.HashData(stream))[..12].ToLowerInvariant()}.dll";
         }
 
         private static void DeleteOldDlls(string? keep)

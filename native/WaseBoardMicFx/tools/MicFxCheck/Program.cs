@@ -9,7 +9,7 @@ using WaseBoard.Services.MicFx;
 //
 // --echo : mesure en plus l'effet de l'annulation d'écho de Windows (voir EchoCheck.cs).
 
-const string MicFeedRingName = @"Global\WaseBoardMicFeed";
+const string MicFeedRingName = @"Global\WaseBoardMicFeed.v2";
 
 string Header()
 {

@@ -13,14 +13,15 @@ namespace WaseBoard.Services.MicFx
     /// Global\) : tant qu'aucune application n'écoute un micro équipé, TryOpen renvoie null.</summary>
     internal sealed class MicFeedRing : IDisposable
     {
-        public const string MappingName = @"Global\WaseBoardMicFeed";
+        // Le nom suit la version du protocole (comme côté APO) : jamais de mélange de tailles.
+        public const string MappingName = @"Global\WaseBoardMicFeed.v2";
         public const uint Magic = 0x464D4257; // "WBMF"
-        public const uint Version = 1;
+        public const uint Version = 2;
         public const int SampleRate = 48000;
         public const int Capacity = 65536;     // frames, puissance de 2
         public const int LeadFrames = 2880;    // 60 ms d'avance visée sur l'horloge murale
 
-        private const int HeaderSize = 64;
+        private const int HeaderSize = 256;
         private const long TotalSize = HeaderSize + Capacity * sizeof(float);
 
         private const int OffMagic = 0;
@@ -33,6 +34,9 @@ namespace WaseBoard.Services.MicFx
         private const int OffReaderChannels = 36;
         private const int OffWriterPid = 40;
         private const int OffWriterTick = 48;
+        private const int OffReaders = 64;       // WbmfReaderSlot[8] : { GUID endpoint ; int64 tick }
+        private const int ReaderSlotSize = 24;
+        private const int ReaderSlots = 8;
 
         private readonly MemoryMappedFile _file;
         private readonly MemoryMappedViewAccessor _view;
@@ -77,6 +81,17 @@ namespace WaseBoard.Services.MicFx
         public long ReadTick => _view.ReadInt64(OffReadTick);
         public uint ReaderRate => _view.ReadUInt32(OffReaderRate);
         public uint ReaderChannels => _view.ReadUInt32(OffReaderChannels);
+
+        /// <summary>Instant (Environment.TickCount64) du dernier passage de l'effet sur CE micro (GUID
+        /// d'endpoint), ou 0 si l'effet ne l'a jamais signalé — voir WbmfReaderSlot côté APO.</summary>
+        public long ReadEndpointTick(Guid endpoint)
+        {
+            var key = endpoint.ToByteArray(); // même disposition mémoire qu'un GUID natif
+            var offset = OffReaders + (int)(BitConverter.ToUInt32(key, 0) % ReaderSlots) * ReaderSlotSize;
+            var stored = new byte[16];
+            _view.ReadArray(offset, stored, 0, stored.Length);
+            return stored.AsSpan().SequenceEqual(key) ? _view.ReadInt64(offset + 16) : 0;
+        }
 
         public uint WriterPid => _view.ReadUInt32(OffWriterPid);
         public long WriterTick => _view.ReadInt64(OffWriterTick);
