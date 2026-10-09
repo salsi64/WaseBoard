@@ -82,7 +82,7 @@ namespace WaseBoard.Windows
             LocalVolumeSlider.Value = _settings.LocalPlaybackVolume;
             UpdateVolumeLabel(LocalVolumeLabel, _settings.LocalPlaybackVolume);
 
-            MicFeedEnabledCheckBox.IsChecked = _settings.MicFeedEnabled;
+            MicFeatureEnabledCheckBox.IsChecked = _settings.MicFeatureEnabled;
             MicFeedVolumeSlider.Value = _settings.MicFeedVolume;
             UpdateVolumeLabel(MicFeedVolumeLabel, _settings.MicFeedVolume);
             MicFeedMonitorCheckBox.IsChecked = _settings.MicFeedMonitor;
@@ -409,7 +409,7 @@ namespace WaseBoard.Windows
 
             RefreshMicFxState();
             if (result.Cancelled) return;
-            if (result.Ok) MicFeedEnabledCheckBox.IsChecked = true;
+            if (result.Ok) MicFeatureEnabledCheckBox.IsChecked = true;
             AlertDialog.Show(this, string.Join("\n", result.Messages), "Micro en jeu",
                 result.Ok ? AlertKind.Info : AlertKind.Warning);
         }
@@ -427,7 +427,7 @@ namespace WaseBoard.Windows
 
             RefreshMicFxState();
             if (result.Cancelled) return;
-            if (result.Ok) MicFeedEnabledCheckBox.IsChecked = false;
+            if (result.Ok) MicFeatureEnabledCheckBox.IsChecked = false;
             AlertDialog.Show(this, string.Join("\n", result.Messages), "Micro en jeu",
                 result.Ok ? AlertKind.Info : AlertKind.Warning);
         }
@@ -605,7 +605,11 @@ namespace WaseBoard.Windows
                 ? _settings.ServerUrl : ServerUrlBox.Text.Trim();
             _settings.ServerToken = ServerTokenBox.Text;
             _settings.LocalPlaybackVolume = (float)LocalVolumeSlider.Value;
-            _settings.MicFeedEnabled = MicFeedEnabledCheckBox.IsChecked == true;
+            // Fonction tout juste activée : on démarre en mode jeu (c'est ce qu'on vient chercher) ;
+            // ensuite, le bouton 🎮/🎧 de la page principale bascule librement.
+            var micFeatureEnabled = MicFeatureEnabledCheckBox.IsChecked == true;
+            if (micFeatureEnabled && !_settings.MicFeatureEnabled) _settings.MicFeedEnabled = true;
+            _settings.MicFeatureEnabled = micFeatureEnabled;
             _settings.MicFeedVolume = (float)MicFeedVolumeSlider.Value;
             _settings.MicFeedMonitor = MicFeedMonitorCheckBox.IsChecked == true;
             _settings.MicFeedAlsoDiscord = MicFeedAlsoDiscordCheckBox.IsChecked == true;

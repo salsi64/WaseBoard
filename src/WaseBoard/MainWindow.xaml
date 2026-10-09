@@ -810,6 +810,16 @@
                             Style="{StaticResource ToolbarButtonStyle}" Click="RefreshButton_Click">
                         <TextBlock Text="&#xE72C;" Style="{StaticResource ToolbarIcon}"/>
                     </Button>
+                    <!-- Micro en jeu : bascule mode jeu (manette, sons dans le micro) / mode Discord (casque,
+                         sons joués par le bot). Visible seulement si la fonction est activée dans
+                         Paramètres > Micro en jeu — voir ApplyMicModeButton(). -->
+                    <Button x:Name="MicModeButton" Click="MicModeButton_Click" Style="{StaticResource ToolbarButtonStyle}"
+                            Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="MicModeIcon" Text="&#xE7F6;" Style="{StaticResource ToolbarIcon}" Foreground="{DynamicResource AccentBrush}"/>
+                            <TextBlock x:Name="MicModeLabel" Text="Discord" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                     <Button x:Name="JoinVoiceButton" Click="JoinVoiceButton_Click" Style="{StaticResource ToolbarButtonStyle}"
                             ToolTip="Rejoindre mon vocal : fait rejoindre le bot au salon vocal où vous êtes actuellement">
                         <StackPanel Orientation="Horizontal">

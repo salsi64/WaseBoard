@@ -163,6 +163,7 @@ namespace WaseBoard
             _library.Load();
             _settingsReady = true;
             ApplyColorScheme();
+            ApplyMicModeButton();
 
             // Lien waseboard:// reçu en argument de lancement (voir App.OnStartup) — appliqué
             // AVANT le bloc d'onboarding juste en dessous, qui s'ouvrira normalement si c'est un
@@ -254,7 +255,7 @@ namespace WaseBoard
         /// on le signale au démarrage plutôt que de laisser les sons disparaître du micro sans explication.</summary>
         private void WarnIfMicEffectNeedsRepair()
         {
-            if (!_library.Settings.MicFeedEnabled) return;
+            if (!_library.Settings.MicFeatureEnabled) return;
             var state = MicFxSetup.ReadState();
             if (state.AnyNeedsRepair)
                 ToastService.Show("🎮 L'effet « Micro en jeu » a été retiré d'un micro (mise à jour du pilote ?) — Paramètres › Micro en jeu › Réparer.", ToastKind.Warning);
@@ -422,6 +423,7 @@ namespace WaseBoard
 
             var labels = compact ? Visibility.Collapsed : Visibility.Visible;
             JoinVoiceLabel.Visibility = labels;
+            MicModeLabel.Visibility = labels;
             StopAllLabel.Visibility = labels;
             AddCategoryLabel.Visibility = labels;
             AddSoundLabel.Text = compact ? "Son" : "Ajouter un son";
@@ -1981,12 +1983,12 @@ namespace WaseBoard
         /// Joue un son dans le vocal Discord. Le highlight s'allume localement dès le clic (sans
         /// attendre la moindre réponse réseau) ; le sondage régulier (PollActivityAsync) prend
         /// ensuite le relais pour refléter la réalité partagée (autres utilisateurs, extinction).
-        /// Avec « Micro en jeu » activé, le son part dans le micro, et dans Discord seulement si
-        /// demandé (sinon un Discord branché sur ce même micro l'entendrait deux fois).
+        /// En mode jeu (bouton 🎮 de la barre d'outils), le son part dans le micro, et dans Discord
+        /// seulement si demandé (sinon un Discord branché sur ce même micro l'entendrait deux fois).
         /// </summary>
         private void Play(SoundItem item)
         {
-            if (!_library.Settings.MicFeedEnabled)
+            if (!IsGameMode)
             {
                 _ = PlayAndPollAsync(item);
                 return;
@@ -1994,6 +1996,33 @@ namespace WaseBoard
 
             _ = PlayInMicAsync(item);
             if (_library.Settings.MicFeedAlsoDiscord) _ = PlayAndPollAsync(item);
+        }
+
+        private bool IsGameMode => _library.Settings.MicFeatureEnabled && _library.Settings.MicFeedEnabled;
+
+        /// <summary>Bascule mode jeu (🎮, sons dans le micro) / mode Discord (🎧, sons joués par le bot).</summary>
+        private void MicModeButton_Click(object sender, RoutedEventArgs e)
+        {
+            _library.Settings.MicFeedEnabled = !_library.Settings.MicFeedEnabled;
+            _library.SaveSettings();
+            ApplyMicModeButton();
+            ToastService.Show(IsGameMode
+                    ? "🎮 Mode jeu : les sons passent dans votre micro."
+                    : "🎧 Mode Discord : les sons sont joués par le bot dans votre salon vocal.",
+                ToastKind.Info);
+        }
+
+        /// <summary>Le bouton n'existe que si la fonction est activée (Paramètres > Micro en jeu) ;
+        /// icône et libellé indiquent le mode ACTUEL, l'infobulle ce que fait le clic.</summary>
+        private void ApplyMicModeButton()
+        {
+            MicModeButton.Visibility = _library.Settings.MicFeatureEnabled ? Visibility.Visible : Visibility.Collapsed;
+            var game = IsGameMode;
+            MicModeIcon.Text = game ? "" : ""; // Segoe MDL2 : manette / casque
+            MicModeLabel.Text = game ? "Jeu" : "Discord";
+            MicModeButton.ToolTip = game
+                ? "Mode jeu : les sons passent dans votre micro (chat vocal du jeu). Cliquer pour revenir au mode Discord (sons joués par le bot)."
+                : "Mode Discord : les sons sont joués par le bot dans votre salon vocal. Cliquer pour passer en mode jeu (sons dans votre micro).";
         }
 
         /// <summary>Micro en jeu : le son est ajouté au vrai micro par l'effet WaseBoardMicFx (toutes
@@ -2117,6 +2146,7 @@ namespace WaseBoard
                 _library.SaveSettings();
                 ApplyColorScheme();
                 ApplyTheme();
+                ApplyMicModeButton();
                 await RefreshCatalogAsync();
                 await RefreshSharedCategoriesAsync();
                 await RefreshVoiceStatusAsync();

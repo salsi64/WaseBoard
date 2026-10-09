@@ -42,9 +42,15 @@ namespace WaseBoard.Models
         /// <summary>Volume de la lecture locale (aperçu uniquement).</summary>
         public float LocalPlaybackVolume { get; set; } = 1.0f;
 
-        /// <summary>Micro en jeu : les sons joués passent aussi dans le vrai micro (effet audio
-        /// WaseBoardMicFx, voir Services/MicFx), pour les chats vocaux des jeux. Désactivé par défaut :
-        /// l'effet doit d'abord être installé (Paramètres > Micro en jeu).</summary>
+        /// <summary>Fonction « micro en jeu » activée (Paramètres > Micro en jeu) : affiche sur la page
+        /// principale le bouton qui bascule entre mode jeu (🎮, sons dans le micro) et mode Discord (🎧,
+        /// sons joués par le bot). Désactivée par défaut : l'effet audio WaseBoardMicFx (voir
+        /// Services/MicFx) doit d'abord être installé.</summary>
+        public bool MicFeatureEnabled { get; set; }
+
+        /// <summary>Mode jeu actif (bouton 🎮/🎧 de la page principale) : les sons passent dans le vrai
+        /// micro, pour les chats vocaux des jeux, au lieu d'être joués par le bot Discord. Sans effet
+        /// tant que MicFeatureEnabled est faux.</summary>
         public bool MicFeedEnabled { get; set; }
 
         /// <summary>Volume des sons dans le micro (0.0-1.5), indépendant du volume propre à chaque son.</summary>
