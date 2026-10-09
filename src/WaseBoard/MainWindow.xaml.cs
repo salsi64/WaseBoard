@@ -20,6 +20,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using WaseBoard.Models;
 using WaseBoard.Services;
+using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
 
 namespace WaseBoard
@@ -34,6 +35,13 @@ namespace WaseBoard
         /// (ex: Slider Value="1.0") ne sauvegarde des réglages par défaut avant leur chargement.</summary>
         private bool _settingsReady;
         private readonly AudioPlaybackService _audio = new();
+
+        /// <summary>Lecture « dans le micro » (Paramètres > Micro en jeu) : ne tourne que pendant qu'un son y joue.</summary>
+        private readonly MicFeedService _micFeed = new();
+
+        /// <summary>Sons en cours dans le micro : le serveur n'en sait rien, le sondage d'activité ne
+        /// doit donc pas éteindre leur bouton (voir PollActivityAsync).</summary>
+        private readonly HashSet<string> _micPlayingIds = new();
         private GlobalHotkeyManager? _hotkeys;
         private DispatcherTimer? _activityTimer;
         private DispatcherTimer? _voiceStatusTimer;
@@ -102,6 +110,12 @@ namespace WaseBoard
             // qui reflète l'activité PARTAGÉE (sondée depuis le serveur, voir PollActivityAsync).
             _audio.SoundStarted += id => Dispatcher.BeginInvoke(() => SetPreviewingState(id, true));
             _audio.SoundStopped += id => Dispatcher.BeginInvoke(() => SetPreviewingState(id, false));
+            _micFeed.SoundEnded += id => Dispatcher.BeginInvoke(() =>
+            {
+                _micPlayingIds.Remove(id);
+                var item = Sounds.FirstOrDefault(s => s.Id == id);
+                if (item is not null && item.ActiveUsers.Count == 0) item.IsPlaying = false;
+            });
 
             ToastService.Requested += OnToastRequested;
         }
@@ -149,6 +163,7 @@ namespace WaseBoard
             _library.Load();
             _settingsReady = true;
             ApplyColorScheme();
+            ApplyMicModeButton();
 
             // Lien waseboard:// reçu en argument de lancement (voir App.OnStartup) — appliqué
             // AVANT le bloc d'onboarding juste en dessous, qui s'ouvrira normalement si c'est un
@@ -233,6 +248,48 @@ namespace WaseBoard
             _themeTimer.Start();
 
             _ = CheckForUpdateOnStartupAsync();
+            WarnIfMicEffectNeedsRepair();
+
+            // Micro en jeu : vérifie en mode jeu que l'effet tourne bien sur les micros qu'on écoute.
+            _micDiagTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            _micDiagTimer.Tick += (_, _) => CheckMicEffectActivity();
+            _micDiagTimer.Start();
+        }
+
+        private DispatcherTimer? _micDiagTimer;
+        private readonly Dictionary<string, int> _micMissingStreak = new();
+        private readonly HashSet<string> _micMissingWarned = new();
+
+        /// <summary>En mode jeu, prévient (une fois par micro et par session) si une application écoute un
+        /// micro équipé sans que l'effet s'y active : les sons n'y passent pas (micro incompatible, ou
+        /// application en mode exclusif). Au 2e constat d'affilée seulement, pour ignorer le démarrage d'un flux.</summary>
+        private void CheckMicEffectActivity()
+        {
+            if (!IsGameMode) return;
+            var state = MicFxSetup.ReadState();
+            if (!state.AnyEquipped || state.NeedsUpdate) return;
+
+            foreach (var mic in MicFxDiagnostics.Probe(state.Microphones))
+            {
+                var streak = mic.EffectMissing ? _micMissingStreak.GetValueOrDefault(mic.EndpointGuid) + 1 : 0;
+                _micMissingStreak[mic.EndpointGuid] = streak;
+                if (streak == 2 && _micMissingWarned.Add(mic.EndpointGuid))
+                    ToastService.Show($"🎮 Micro en jeu : l'effet ne s'active pas sur « {mic.Name} », vos sons n'y passent pas (micro peut-être incompatible).", ToastKind.Warning);
+            }
+        }
+
+        /// <summary>Une mise à jour du pilote du micro efface souvent sa liste d'effets (le nôtre avec) :
+        /// on le signale au démarrage plutôt que de laisser les sons disparaître du micro sans explication.</summary>
+        private void WarnIfMicEffectNeedsRepair()
+        {
+            if (!_library.Settings.MicFeatureEnabled) return;
+            var state = MicFxSetup.ReadState();
+            if (state.AnyNeedsRepair)
+                ToastService.Show("🎮 Micro en jeu : à réparer (Paramètres › Micro en jeu).", ToastKind.Warning);
+            else if (state.NeedsUpdate)
+                ToastService.Show("🎮 Micro en jeu : mise à jour de l'effet disponible (Paramètres › Micro en jeu).", ToastKind.Warning);
+            else if (!state.AnyEquipped)
+                ToastService.Show("🎮 Micro en jeu : pas encore installé (Paramètres › Micro en jeu).", ToastKind.Warning);
         }
 
         /// <summary>Vérification passive, non bloquante : affiche un toast si une nouvelle version
@@ -382,24 +439,70 @@ namespace WaseBoard
 
         private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => ApplyToolbarDensity();
 
-        /// <summary>Quand la fenêtre est étroite, raccourcit les libellés de la barre d'outils (icônes seules) pour que
-        /// la recherche garde au moins 150 px et que rien ne se chevauche. Seuils = largeur nécessaire avec libellés
-        /// complets (le thème classique porte en plus le titre, le volume et Paramètres dans cette barre).</summary>
+        /// <summary>Barre d'outils en version étroite (libellés masqués) — voir ApplyToolbarDensity.</summary>
+        private bool _toolbarCompact;
+
+        /// <summary>Largeur que la recherche garde tant que la barre peut encore être raccourcie : quand la
+        /// fenêtre rétrécit, la recherche rétrécit d'abord jusque-là, puis les libellés se raccourcissent.</summary>
+        private const double SearchComfortWidth = 150;
+
+        /// <summary>Paliers de la barre d'outils, du plus complet au plus compact (voir SetToolbarDensity).</summary>
+        private const int ToolbarDensityLevels = 4;
+
+        /// <summary>Choisit le palier le plus complet de la barre d'outils qui laisse encore à la recherche
+        /// sa largeur de confort, pour que les boutons ne sortent jamais de la fenêtre. Les largeurs sont
+        /// MESURÉES (et non devinées par des seuils fixes) : elles dépendent du thème (titre, Paramètres), des
+        /// boutons présents (interrupteur Micro en jeu) et du mode affiché.</summary>
         private void ApplyToolbarDensity()
         {
             if (JoinVoiceLabel is null) return; // encore en cours d'InitializeComponent
 
             var sidebarWidth = ThemeState.IsModern ? SidebarColumn.Width.Value : 0;
             var available = ActualWidth - sidebarWidth - 24;
-            var compact = available < (ThemeState.IsModern ? 700 : 1020);
+            var unbounded = new Size(double.PositiveInfinity, double.PositiveInfinity);
 
-            var labels = compact ? Visibility.Collapsed : Visibility.Visible;
+            for (var level = 0; level < ToolbarDensityLevels; level++)
+            {
+                SetToolbarDensity(level);
+                if (level == ToolbarDensityLevels - 1) break; // le plus compact, faute de mieux
+
+                // Un libellé masqué ou raccourci n'invalide la taille de son bouton qu'à la prochaine passe
+                // de mise en page : sans ça, la mesure renverrait la largeur du palier PRÉCÉDENT. On
+                // invalide donc juste la chaîne libellé → barre (pas toute la fenêtre, coûteux en
+                // redimensionnement avec un gros catalogue).
+                foreach (var label in new FrameworkElement[] { JoinVoiceLabel, StopAllLabel, AddCategoryLabel, AddSoundLabel, MicModeGameLabel, MicModeDiscordLabel })
+                    InvalidateMeasureUpTo(label, ToolbarActions);
+
+                ToolbarActions.Measure(unbounded);
+                TitleText.Measure(unbounded);
+                var titleWidth = TitleText.Visibility == Visibility.Visible ? TitleText.DesiredSize.Width : 0;
+                var needed = titleWidth + ToolbarActions.DesiredSize.Width + 12; // + marge à droite de la recherche
+                if (available - needed >= SearchComfortWidth) break;
+            }
+        }
+
+        private static void InvalidateMeasureUpTo(DependencyObject element, UIElement root)
+        {
+            for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+            {
+                (current as UIElement)?.InvalidateMeasure();
+                if (ReferenceEquals(current, root)) break;
+            }
+        }
+
+        /// <summary>0 : tout ; 1 : sans le titre (thème classique — déjà dans la barre de titre de la
+        /// fenêtre) ; 2 : « Catégorie » en icône seule et « Son » au lieu d'« Ajouter un son » ;
+        /// 3 : icônes seules.</summary>
+        private void SetToolbarDensity(int level)
+        {
+            TitleText.Visibility = !ThemeState.IsModern && level == 0 ? Visibility.Visible : Visibility.Collapsed;
+            AddCategoryLabel.Visibility = level < 2 ? Visibility.Visible : Visibility.Collapsed;
+            AddSoundLabel.Text = level < 2 ? "Ajouter un son" : "Son";
+            var labels = level < 3 ? Visibility.Visible : Visibility.Collapsed;
             JoinVoiceLabel.Visibility = labels;
             StopAllLabel.Visibility = labels;
-            AddCategoryLabel.Visibility = labels;
-            AddSoundLabel.Text = compact ? "Son" : "Ajouter un son";
-            // Le titre de l'application est déjà dans la barre de titre de la fenêtre : on le retire en premier.
-            TitleText.Visibility = !ThemeState.IsModern && !compact ? Visibility.Visible : Visibility.Collapsed;
+            _toolbarCompact = level >= 3;
+            UpdateMicModeLabels();
         }
 
         private bool _reloginPromptShowing;
@@ -787,7 +890,7 @@ namespace WaseBoard
                 }
                 else
                 {
-                    item.IsPlaying = false;
+                    item.IsPlaying = _micPlayingIds.Contains(item.Id);
                     if (item.ActiveUsers.Count > 0) item.ActiveUsers.Clear();
                 }
             }
@@ -1007,8 +1110,10 @@ namespace WaseBoard
             _activityTimer?.Stop();
             _voiceStatusTimer?.Stop();
             _themeTimer?.Stop();
+            _micDiagTimer?.Stop();
             _hotkeys?.Dispose();
             _audio.Dispose();
+            _micFeed.Dispose();
             ToastService.Requested -= OnToastRequested;
         }
 
@@ -1953,8 +2058,85 @@ namespace WaseBoard
         /// Joue un son dans le vocal Discord. Le highlight s'allume localement dès le clic (sans
         /// attendre la moindre réponse réseau) ; le sondage régulier (PollActivityAsync) prend
         /// ensuite le relais pour refléter la réalité partagée (autres utilisateurs, extinction).
+        /// En mode jeu (bouton 🎮 de la barre d'outils), le son part dans le micro, et dans Discord
+        /// seulement si demandé (sinon un Discord branché sur ce même micro l'entendrait deux fois).
         /// </summary>
-        private void Play(SoundItem item) => _ = PlayAndPollAsync(item);
+        private void Play(SoundItem item)
+        {
+            if (!IsGameMode)
+            {
+                _ = PlayAndPollAsync(item);
+                return;
+            }
+
+            _ = PlayInMicAsync(item);
+            if (_library.Settings.MicFeedAlsoDiscord) _ = PlayAndPollAsync(item);
+        }
+
+        private bool IsGameMode => _library.Settings.MicFeatureEnabled && _library.Settings.MicFeedEnabled;
+
+        /// <summary>Interrupteur 🎮 Jeu | 🎧 Discord : un clic n'importe où bascule le mode.</summary>
+        private void MicModeSwitch_Click(object sender, RoutedEventArgs e)
+        {
+            _library.Settings.MicFeedEnabled = !_library.Settings.MicFeedEnabled;
+            _library.SaveSettings();
+            ApplyMicModeButton();
+        }
+
+        /// <summary>L'interrupteur n'existe que si la fonction est activée (Paramètres > Micro en jeu) ;
+        /// le segment du mode actuel est coché, donc allumé, et seul lui porte son nom.</summary>
+        private void ApplyMicModeButton()
+        {
+            MicModeSwitch.Visibility = _library.Settings.MicFeatureEnabled ? Visibility.Visible : Visibility.Collapsed;
+            var game = IsGameMode;
+            MicModeGameButton.IsChecked = game;
+            MicModeDiscordButton.IsChecked = !game;
+            MicModeSwitch.ToolTip = game
+                ? "Mode jeu : les sons passent dans votre micro (chat vocal du jeu). Cliquer pour passer en mode Discord."
+                : "Mode Discord : les sons sont joués par le bot dans votre salon vocal. Cliquer pour passer en mode jeu.";
+            // La largeur de l'interrupteur change avec le mode (« Jeu » / « Discord ») : la barre se réajuste.
+            ApplyToolbarDensity();
+        }
+
+        /// <summary>Seul le segment actif affiche son nom (l'autre se réduit à son icône), et aucun
+        /// en barre étroite : l'interrupteur reste compact.</summary>
+        private void UpdateMicModeLabels()
+        {
+            var game = IsGameMode;
+            MicModeGameLabel.Visibility = game && !_toolbarCompact ? Visibility.Visible : Visibility.Collapsed;
+            MicModeDiscordLabel.Visibility = !game && !_toolbarCompact ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>Micro en jeu : le son est ajouté au vrai micro par l'effet WaseBoardMicFx (toutes
+        /// les applications qui l'écoutent l'entendent), plus le retour local si demandé. Le bouton
+        /// reste allumé jusqu'à la fin réelle du son dans le micro (MicFeedService.SoundEnded).</summary>
+        private async Task PlayInMicAsync(SoundItem item)
+        {
+            var localPath = await _library.GetOrDownloadCachedFileAsync(item);
+            if (localPath is null)
+            {
+                ToastService.Show($"Impossible de jouer « {item.Name} » dans le micro : fichier indisponible.", ToastKind.Error);
+                return;
+            }
+
+            TimeSpan? trimStart = item.TrimStartMs is { } startMs ? TimeSpan.FromMilliseconds(startMs) : null;
+            TimeSpan? trimEnd = item.TrimEndMs is { } endMs ? TimeSpan.FromMilliseconds(endMs) : null;
+            try
+            {
+                _micFeed.Volume = _library.Settings.MicFeedVolume;
+                _micFeed.Play(item.Id, localPath, item.Volume, trimStart, trimEnd);
+            }
+            catch (Exception ex)
+            {
+                ToastService.Show($"Impossible de jouer « {item.Name} » dans le micro : {ex.Message}", ToastKind.Error);
+                return;
+            }
+
+            _micPlayingIds.Add(item.Id);
+            item.IsPlaying = true;
+
+            if (_library.Settings.MicFeedMonitor) await PlayLocalAsync(item);
+        }
 
         private async Task PlayAndPollAsync(SoundItem item)
         {
@@ -2022,6 +2204,7 @@ namespace WaseBoard
         private async void StopAllButton_Click(object sender, RoutedEventArgs e)
         {
             _audio.StopAll();
+            _micFeed.StopAll();
             var ok = await _library.StopAllOnServerAsync();
             if (!ok)
             {
@@ -2039,12 +2222,13 @@ namespace WaseBoard
             // Le panel d'administration s'ouvre depuis les Paramètres, et n'y apparaît que si l'on
             // administre au moins un serveur (le serveur re-vérifie de toute façon chaque requête).
             var adminGuilds = _sharedCategories.Where(s => s.IsAdmin).ToList();
-            var window = new SettingsWindow(_library.Settings, _library, adminGuilds: adminGuilds, knownSounds: Sounds) { Owner = this };
+            var window = new SettingsWindow(_library.Settings, _library, adminGuilds: adminGuilds, knownSounds: Sounds, micFeed: _micFeed) { Owner = this };
             if (window.ShowDialog() == true)
             {
                 _library.SaveSettings();
                 ApplyColorScheme();
                 ApplyTheme();
+                ApplyMicModeButton();
                 await RefreshCatalogAsync();
                 await RefreshSharedCategoriesAsync();
                 await RefreshVoiceStatusAsync();

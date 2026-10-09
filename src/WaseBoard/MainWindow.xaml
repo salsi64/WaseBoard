@@ -28,6 +28,95 @@
             </DoubleAnimation>
         </Storyboard>
 
+        <!-- Segment de l'interrupteur Micro en jeu (🎮 Jeu | 🎧 Discord), même typographie que les
+             boutons de la barre (icône d'accent, texte clair semi-gras). Segment actif (IsChecked) :
+             icône d'accent, fond légèrement teinté, liseré et halo flou d'accent (même technique que le
+             halo de lecture des sons), en fondu d'environ 0,25 s ; inactif : icône claire atténuée.
+             Aucune animation au repos. -->
+        <Style x:Key="MicModeSegmentStyle" TargetType="ToggleButton">
+            <Setter Property="IsHitTestVisible" Value="False"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border x:Name="Halo" Margin="-4" CornerRadius="11" Opacity="0" IsHitTestVisible="False"
+                                    Background="{DynamicResource AccentBrush}">
+                                <Border.Effect><BlurEffect Radius="10"/></Border.Effect>
+                            </Border>
+                            <!-- Fond opaque : le halo ne déborde qu'AUTOUR du segment, sans délaver la teinte. -->
+                            <Border CornerRadius="7" Background="{DynamicResource FieldBrush}"/>
+                            <Border x:Name="Fill" CornerRadius="7" Opacity="0" Background="{DynamicResource AccentBrush}"/>
+                            <Border x:Name="Ring" CornerRadius="7" Opacity="0" BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}"/>
+                            <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" Opacity="0.55"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Content" Property="Opacity" Value="1"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Ring" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.2"/>
+                                            <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity" To="0.16" Duration="0:0:0.2"/>
+                                            <DoubleAnimation Storyboard.TargetName="Halo" Storyboard.TargetProperty="Opacity" To="0.35" Duration="0:0:0.3">
+                                                <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Ring" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15"/>
+                                            <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15"/>
+                                            <DoubleAnimation Storyboard.TargetName="Halo" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Interrupteur Micro en jeu : conteneur cliquable des deux segments, mêmes bordure, coins et
+             survol (bordure d'accent) que les boutons de la barre d'outils. -->
+        <Style x:Key="MicModeSwitchStyle" TargetType="Button">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Padding" Value="3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="{DynamicResource FieldBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TrackBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Gabarit classique (carte) : colonne d'aperçu à gauche ; nom (2 lignes max), puis UNE ligne
              « ★ raccourci avatars » (hauteur réservée, rien ne se superpose), puis la mini-waveform. -->
         <DataTemplate x:Key="SoundButtonTemplate">
@@ -779,14 +868,14 @@
             </Grid.RowDefinitions>
 
             <!-- Barre unique : titre (classique), recherche, volume (classique), actions. Quatre colonnes
-                 (la recherche prend le reste, jamais moins de 150 px) : les éléments ne peuvent plus se
-                 chevaucher ni écraser la recherche. Les libellés des boutons se raccourcissent quand la
-                 fenêtre est étroite (ApplyToolbarDensity). Paramètres et volume ne restent visibles ICI
+                 (la recherche prend le reste, jamais moins de 100 px) : les éléments ne peuvent plus se
+                 chevaucher ni écraser la recherche. Quand la fenêtre rétrécit, la recherche rétrécit
+                 d'abord, puis les libellés des boutons se raccourcissent (ApplyToolbarDensity). Paramètres et volume ne restent visibles ICI
                  qu'en thème classique (la barre latérale les porte en moderne) — voir ApplyTheme(). -->
             <Grid Grid.Row="0" Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*" MinWidth="150"/>
+                    <ColumnDefinition Width="*" MinWidth="100"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -805,10 +894,31 @@
                              ToolTip="Rechercher un son par son nom"/>
                 </Grid>
 
-                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                <StackPanel x:Name="ToolbarActions" Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="RefreshButton" ToolTip="Actualiser le catalogue" Width="34" Padding="0"
                             Style="{StaticResource ToolbarButtonStyle}" Click="RefreshButton_Click">
                         <TextBlock Text="&#xE72C;" Style="{StaticResource ToolbarIcon}"/>
+                    </Button>
+                    <!-- Micro en jeu : interrupteur à deux segments, mode jeu (manette, sons dans le micro) |
+                         mode Discord (casque, sons joués par le bot). Un clic n'importe où bascule le mode ;
+                         les segments ne sont que l'affichage (le segment actif s'allume). Visible seulement
+                         si la fonction est activée dans Paramètres > Micro en jeu — voir ApplyMicModeButton(). -->
+                    <Button x:Name="MicModeSwitch" Visibility="Collapsed" Click="MicModeSwitch_Click"
+                            Style="{StaticResource MicModeSwitchStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleButton x:Name="MicModeGameButton" Style="{StaticResource MicModeSegmentStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE7FC;" Style="{StaticResource ToolbarIcon}"/>
+                                    <TextBlock x:Name="MicModeGameLabel" Text="Jeu" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                </StackPanel>
+                            </ToggleButton>
+                            <ToggleButton x:Name="MicModeDiscordButton" Style="{StaticResource MicModeSegmentStyle}" Margin="2,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE7F6;" Style="{StaticResource ToolbarIcon}"/>
+                                    <TextBlock x:Name="MicModeDiscordLabel" Text="Discord" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                                </StackPanel>
+                            </ToggleButton>
+                        </StackPanel>
                     </Button>
                     <Button x:Name="JoinVoiceButton" Click="JoinVoiceButton_Click" Style="{StaticResource ToolbarButtonStyle}"
                             ToolTip="Rejoindre mon vocal : fait rejoindre le bot au salon vocal où vous êtes actuellement">

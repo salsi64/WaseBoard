@@ -1,0 +1,33 @@
+#include <winver.h>
+
+#define WBMF_FILEVERSION     1,0,0,0
+#define WBMF_FILEVERSION_STR "1.0.0.0"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION WBMF_FILEVERSION
+ PRODUCTVERSION WBMF_FILEVERSION
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_DLL
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040c04b0"
+        BEGIN
+            VALUE "CompanyName", "WaseBoard"
+            VALUE "FileDescription", "WaseBoard Mic Effect (APO) - sons du soundboard dans le micro"
+            VALUE "FileVersion", WBMF_FILEVERSION_STR
+            VALUE "InternalName", "WaseBoardMicFx"
+            VALUE "LegalCopyright", "Licence MIT"
+            VALUE "OriginalFilename", "WaseBoardMicFx.dll"
+            VALUE "ProductName", "WaseBoard"
+            VALUE "ProductVersion", WBMF_FILEVERSION_STR
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x040c, 1200
+    END
+END

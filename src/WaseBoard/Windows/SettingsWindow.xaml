@@ -29,6 +29,7 @@
                 <Button x:Name="NavDiscordButton" Content="Discord" Tag="Discord" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
                 <Button x:Name="NavAppearanceButton" Content="Apparence" Tag="Appearance" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
                 <Button x:Name="NavVolumeButton" Content="Volume" Tag="Volume" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavMicButton" Content="🎮 Micro en jeu" Tag="Mic" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
                 <Button x:Name="NavUpdatesButton" Content="Mises à jour" Tag="Updates" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
                 <!-- Visible seulement si l'on administre au moins un serveur Discord -->
                 <Button x:Name="NavAdminButton" Content="🛡 Administration" Tag="Admin" Click="NavButton_Click" Visibility="Collapsed"
@@ -157,6 +158,64 @@
                             <TextBlock x:Name="LocalVolumeLabel" Grid.Column="1" Text="100%" Foreground="{DynamicResource TextBrush}"
                                        VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12" Opacity="0.8"/>
                         </Grid>
+                    </StackPanel>
+
+                    <!-- Page : Micro en jeu (fonction expérimentale) : 1. installer l'effet sur le micro,
+                         2. régler. Textes volontairement courts. -->
+                    <StackPanel x:Name="PageMic" Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Micro en jeu" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
+                            <Border Margin="10,0,0,0" Padding="7,1" CornerRadius="8" VerticalAlignment="Center"
+                                    Background="#26F5A623" BorderBrush="#F5A623" BorderThickness="1">
+                                <TextBlock Text="EXPÉRIMENTAL" FontSize="10" FontWeight="Bold" Foreground="#F5A623"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="Vos sons passent dans votre micro : vos coéquipiers les entendent dans le vocal du jeu." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2" TextWrapping="Wrap"/>
+                        <TextBlock Text="Fonction en test : elle peut ne pas marcher avec tous les micros." FontSize="11" Foreground="#F5A623" Margin="0,0,0,16" TextWrapping="Wrap"/>
+
+                        <!-- 1. Installation -->
+                        <TextBlock Text="1. Installer sur votre micro" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="MicFxStatusText" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+                        <StackPanel x:Name="MicFxMicList" Margin="0,0,0,8"/>
+                        <WrapPanel Margin="0,0,0,2">
+                            <Button x:Name="MicFxInstallButton" Content="Installer" Height="34" Padding="16,0" Margin="0,0,8,6"
+                                    Click="MicFxInstallButton_Click" Style="{StaticResource PrimaryButtonStyle}"/>
+                            <Button x:Name="MicFxTestButton" Content="Tester" Height="34" Padding="16,0" Margin="0,0,8,6"
+                                    Click="MicFxTestButton_Click" ToolTip="Envoie un bip dans votre micro"
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
+                            <Button x:Name="MicFxUninstallButton" Content="Désinstaller" Height="34" Padding="16,0" Margin="0,0,0,6"
+                                    Click="MicFxUninstallButton_Click"
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
+                        </WrapPanel>
+                        <TextBlock Text="Demande les droits administrateur. Le son se coupe 2 secondes." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="MicFxLiveText" FontSize="11" Opacity="0.8" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,18" TextWrapping="Wrap"/>
+
+                        <!-- 2. Réglages -->
+                        <TextBlock Text="2. Réglages" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                        <CheckBox x:Name="MicFeatureEnabledCheckBox" Content="Activer le micro en jeu"
+                                  Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                        <TextBlock Text="Affiche le bouton 🎮 Jeu / 🎧 Discord sur la page principale." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,10" TextWrapping="Wrap"/>
+
+                        <TextBlock Text="Volume des sons dans le micro" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="44"/>
+                            </Grid.ColumnDefinitions>
+                            <Slider x:Name="MicFeedVolumeSlider" Minimum="0" Maximum="1.5" Value="0.8"
+                                    ValueChanged="MicFeedVolumeSlider_ValueChanged"/>
+                            <TextBlock x:Name="MicFeedVolumeLabel" Grid.Column="1" Text="80%" Foreground="{DynamicResource TextBrush}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12" Opacity="0.8"/>
+                        </Grid>
+
+                        <CheckBox x:Name="MicFeedMonitorCheckBox" Content="M'entendre aussi"
+                                  Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
+                        <TextBlock Text="Décochez si vos coéquipiers n'entendent pas les sons." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,8" TextWrapping="Wrap"/>
+                        <CheckBox x:Name="MicFeedAlsoDiscordCheckBox" Content="Jouer aussi dans Discord (bot)"
+                                  Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
+                        <TextBlock Text="Laissez décoché si Discord utilise ce micro (sinon, son en double)." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
 
                     <!-- Page : Mises à jour -->

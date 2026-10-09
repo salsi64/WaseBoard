@@ -36,6 +36,23 @@
     <EmbeddedResource Include="Assets\fluent-emoji-index.txt" LogicalName="fluent-emoji-index.txt" />
   </ItemGroup>
 
+  <!-- Effet « micro en jeu » (DLL C++ de native/WaseBoardMicFx) : livrée à côté de WaseBoard.exe,
+       hors du fichier unique. Ce n'est qu'une charge utile, copiée dans Program Files quand
+       l'utilisateur installe l'effet (MicFxSetup), jamais chargée par WaseBoard lui-même. Absente
+       (dist/ vide, voir native/WaseBoardMicFx/README.md) : la build reste valide, la page
+       Paramètres > Micro en jeu signale simplement que le module manque. -->
+  <ItemGroup Condition="Exists('..\..\native\WaseBoardMicFx\dist\WaseBoardMicFx.dll')">
+    <None Include="..\..\native\WaseBoardMicFx\dist\WaseBoardMicFx.dll" Link="WaseBoardMicFx.dll"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
+  <!-- Une version publiée sans l'effet passerait inaperçue (la page dirait juste « module absent ») :
+       la publication Release échoue plutôt, avec la marche à suivre. -->
+  <Target Name="RequireMicFxForRelease" BeforeTargets="PrepareForPublish"
+          Condition="'$(Configuration)'=='Release' And !Exists('..\..\native\WaseBoardMicFx\dist\WaseBoardMicFx.dll')">
+    <Error Text="WaseBoardMicFx.dll absente de native\WaseBoardMicFx\dist : compilez-la (CMake, voir native/WaseBoardMicFx/README.md) ou récupérez celle de la CI avec native\WaseBoardMicFx\fetch-dll.ps1, puis relancez la publication." />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WaseBoard — Micro en jeu</title>
+<meta name="description" content="Micro en jeu (expérimental) : vos sons WaseBoard passent dans votre micro, pour le vocal de vos jeux, sans logiciel tiers.">
+<style>
+  :root {
+    --bg: #0F1624;
+    --panel: #182236;
+    --panel-hi: #1E2C45;
+    --accent: #38BDF8;
+    --accent-2: #F472B6;
+    --accent-3: #34D399;
+    --accent-4: #FBBF24;
+    --warn: #F5A623;
+    --on-accent: #0B1220;
+    --text: #EAF0FA;
+    --text-dim: #B8C4D9;
+    --track: #26324A;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(600px 300px at 50% -10%, #1C2B47 0%, transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", -apple-system, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; }
+  .back { font-size: 13px; }
+  a.link { color: var(--accent); }
+
+  header { text-align: center; margin: 18px 0 8px; }
+  header .emoji { font-size: 48px; }
+  h1 { font-size: 30px; margin: 6px 0 6px; }
+  .tag {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+    color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 2px 10px;
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+  }
+  .tagline { color: var(--text-dim); font-size: 15px; max-width: 520px; margin: 12px auto 0; }
+
+  .card { background: var(--panel); border-radius: 12px; padding: 24px 28px; margin-bottom: 20px; }
+  .card h2 { margin-top: 0; font-size: 18px; }
+  .card p, .card li { font-size: 14px; color: var(--text-dim); }
+  .card strong { color: var(--text); }
+  .warn-card { border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent); }
+  .warn-card p { margin: 0; }
+  .section-label {
+    text-align: center; font-size: 13px; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: .04em; margin: 36px 0 12px;
+  }
+
+  /* schéma : voix + sons -> micro -> coéquipiers */
+  .diagram { width: 100%; height: auto; margin: 4px 0 8px; }
+  .diagram .box { fill: var(--panel-hi); stroke: var(--track); }
+  .diagram .box.hi { stroke: var(--accent); }
+  .diagram text { fill: var(--text); font-family: inherit; font-size: 13px; }
+  .diagram .sub { fill: var(--text-dim); font-size: 11px; }
+  .diagram .flow { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 5; fill: none; animation: dash 1.2s linear infinite; }
+  .diagram .flow.pink { stroke: var(--accent-2); }
+  @keyframes dash { to { stroke-dashoffset: -20; } }
+  @media (prefers-reduced-motion: reduce) { .diagram .flow { animation: none; } }
+
+  /* étapes */
+  .steps { list-style: none; padding: 0; margin: 0; counter-reset: step; }
+  .steps li { position: relative; padding-left: 42px; margin-bottom: 14px; }
+  .steps li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: -1px; width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: var(--on-accent); font-weight: 700; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .shot {
+    display: block; max-width: 100%; height: auto; margin: 18px auto 4px;
+    border-radius: 12px; border: 1px solid var(--track); box-shadow: 0 18px 44px -18px #000C;
+  }
+  .caption { text-align: center; font-size: 12px; color: var(--text-dim); opacity: .8; }
+
+  .split { display: grid; grid-template-columns: 1fr 200px; gap: 24px; align-items: center; }
+  .split .shot { margin: 0 auto; }
+  @media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
+  .modes { list-style: none; padding: 0; margin: 0; }
+  .modes li { margin-bottom: 10px; }
+
+  /* dépannage : sections dépliables */
+  details { background: var(--panel); border: 1px solid var(--track); border-radius: 10px; margin-bottom: 10px; }
+  summary { cursor: pointer; padding: 14px 18px; font-weight: 600; font-size: 14px; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸"; display: inline-block; width: 18px; color: var(--accent); transition: transform .15s; }
+  details[open] summary::before { transform: rotate(90deg); }
+  details .answer { padding: 0 18px 14px 36px; font-size: 14px; color: var(--text-dim); }
+  details .answer p { margin: 0 0 8px; }
+  details .answer ul { margin: 0; padding-left: 18px; }
+
+  a.button {
+    display: inline-block; text-decoration: none; padding: 12px 22px; border-radius: 10px;
+    font-weight: 600; font-size: 14px;
+  }
+  a.button.primary { background: var(--accent); color: var(--on-accent); }
+  a.button.secondary { background: var(--panel-hi); color: var(--text); border: 1px solid var(--track); }
+  a.button:hover { opacity: 0.85; }
+  .actions { text-align: center; margin: 28px 0 0; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  code { background: var(--track); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  .note { font-size: 12px; color: var(--text-dim); opacity: .8; text-align: center; margin-top: 40px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="link back" href="/">← Retour à l'accueil</a>
+
+    <header>
+      <div class="emoji">🎮</div>
+      <h1>Micro en jeu</h1>
+      <span class="tag">EXPÉRIMENTAL</span>
+      <div class="tagline">Vos sons WaseBoard passent dans votre micro : vos coéquipiers les entendent dans le vocal du jeu, comme votre voix. Sans logiciel en plus, sans rien changer dans le jeu.</div>
+    </header>
+
+    <div class="card">
+      <svg class="diagram" viewBox="0 0 600 150" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schéma : votre voix et les sons WaseBoard se rejoignent dans votre micro, que le vocal du jeu envoie à vos coéquipiers">
+        <rect class="box" x="8" y="12" width="150" height="52" rx="12"/>
+        <text x="83" y="35" text-anchor="middle">🗣️ Votre voix</text>
+        <text class="sub" x="83" y="52" text-anchor="middle">comme d'habitude</text>
+
+        <rect class="box" x="8" y="86" width="150" height="52" rx="12"/>
+        <text x="83" y="109" text-anchor="middle">🎛️ WaseBoard</text>
+        <text class="sub" x="83" y="126" text-anchor="middle">vos sons</text>
+
+        <rect class="box hi" x="225" y="49" width="150" height="52" rx="12"/>
+        <text x="300" y="72" text-anchor="middle">🎙️ Votre micro</text>
+        <text class="sub" x="300" y="89" text-anchor="middle">voix + sons</text>
+
+        <rect class="box" x="442" y="49" width="150" height="52" rx="12"/>
+        <text x="517" y="72" text-anchor="middle">🎮 Vocal du jeu</text>
+        <text class="sub" x="517" y="89" text-anchor="middle">vos coéquipiers</text>
+
+        <path class="flow" d="M158 38 C 195 38, 195 66, 225 66"/>
+        <path class="flow pink" d="M158 112 C 195 112, 195 84, 225 84"/>
+        <path class="flow" d="M375 75 H442"/>
+      </svg>
+      <p style="margin-bottom:0;">Pour <strong>Discord</strong>, rien ne change : le bot WaseBoard joue toujours vos sons dans votre salon vocal. Le micro en jeu sert aux vocaux <strong>des jeux</strong> (Valorant, CS2, Fortnite…), où le bot ne peut pas aller.</p>
+    </div>
+
+    <div class="card warn-card">
+      <p><strong>Fonction en test.</strong> Elle marche sur les micros testés, mais peut ne pas marcher avec tous. Si votre micro n'est pas compatible, WaseBoard vous le dit.</p>
+    </div>
+
+    <div class="section-label">Installer (une seule fois)</div>
+    <div class="card">
+      <ol class="steps">
+        <li>Dans WaseBoard, ouvrez <strong>Paramètres › 🎮 Micro en jeu</strong>.</li>
+        <li>Cochez le micro que vous utilisez en jeu, puis cliquez <strong>Installer</strong>.</li>
+        <li>Acceptez la demande de Windows (droits administrateur). Le son se coupe environ 2 secondes, c'est normal.</li>
+      </ol>
+      <img class="shot" src="img/micro-en-jeu-parametres.png" width="620" height="530" loading="lazy" alt="Page Paramètres › Micro en jeu : badge expérimental, micro installé, boutons Appliquer, Tester et Désinstaller, puis les réglages">
+      <div class="caption">Cliquez « Tester » avec un vocal ouvert : un bip passe dans votre micro.</div>
+    </div>
+
+    <div class="section-label">Utiliser</div>
+    <div class="card split">
+      <div>
+        <h2>Un bouton, deux modes</h2>
+        <p>Un bouton apparaît dans la barre du haut de WaseBoard. Un clic bascule :</p>
+        <ul class="modes">
+          <li><strong>🎮 Jeu</strong> : vos sons passent dans votre micro.</li>
+          <li><strong>🎧 Discord</strong> : vos sons sont joués par le bot, comme avant.</li>
+        </ul>
+        <p style="margin-bottom:0;">Le mode actif est allumé. Vos raccourcis clavier suivent le mode choisi.</p>
+      </div>
+      <img class="shot" src="img/micro-en-jeu-interrupteur.png" width="185" height="174" loading="lazy" alt="L'interrupteur de WaseBoard : en haut le mode Jeu actif, en bas le mode Discord actif">
+    </div>
+
+    <div class="section-label">Ça ne marche pas ?</div>
+
+    <details>
+      <summary>Mes coéquipiers n'entendent pas les sons</summary>
+      <div class="answer">
+        <ul>
+          <li>Vérifiez que le bouton est sur <strong>🎮 Jeu</strong>, et que le jeu utilise bien le micro coché dans WaseBoard.</li>
+          <li>En <strong>push-to-talk</strong>, les sons ne passent que touche enfoncée, comme votre voix. L'activation vocale est plus pratique.</li>
+          <li>Avec des <strong>enceintes</strong> et un micro de PC portable, l'annulation d'écho du micro peut effacer les sons : décochez « M'entendre aussi ».</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>WaseBoard dit « l'effet ne s'active pas » sur mon micro</summary>
+      <div class="answer">
+        <p>Une application écoute ce micro, mais l'effet n'y tourne pas : soit ce micro n'est pas compatible, soit l'application le prend en <strong>mode exclusif</strong> (cela contourne tous les effets).</p>
+        <p>Essayez un autre micro, ou désactivez le mode exclusif : Panneau de configuration › Son › onglet <em>Enregistrement</em> › votre micro › <em>Propriétés</em> › <em>Avancé</em> › décochez « Autoriser les applications à prendre le contrôle exclusif de ce périphérique ».</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>WaseBoard dit « à réparer » ou « mettre à jour »</summary>
+      <div class="answer">
+        <p><strong>À réparer</strong> : une mise à jour du pilote de votre micro a retiré l'effet. <strong>Mettre à jour</strong> : votre WaseBoard apporte une version plus récente de l'effet. Dans les deux cas, un clic sur le bouton de la page Micro en jeu suffit.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Mon micro est marqué « non compatible »</summary>
+      <div class="answer">
+        <p>C'est le cas des micros virtuels (VB-Cable, Steam Streaming Microphone…) : ils n'acceptent pas d'effets.</p>
+      </div>
+    </details>
+
+    <div class="section-label">Questions fréquentes</div>
+
+    <details>
+      <summary>Est-ce que je risque un ban en jeu ?</summary>
+      <div class="answer">
+        <p>L'effet ne touche pas au jeu : il fonctionne dans Windows, sur le son du micro, comme les effets fournis avec beaucoup de casques. Rien n'est injecté dans le jeu. Aucun éditeur ne publie de liste officielle des logiciels autorisés.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Est-ce que ça ralentit mon PC ?</summary>
+      <div class="answer">
+        <p>Non. L'effet ajoute simplement les sons au micro, et ne fait rien quand aucun son ne joue.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>WaseBoard doit-il rester ouvert ?</summary>
+      <div class="answer">
+        <p>Oui, pour jouer des sons. WaseBoard fermé, votre micro marche normalement, sans les sons.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Qu'est-ce qui est modifié sur mon PC ? Comment tout enlever ?</summary>
+      <div class="answer">
+        <p>Un petit fichier est copié dans <code>C:\Program Files\WaseBoard\MicFx</code>, et l'effet est ajouté <strong>à la fin</strong> de la liste des effets de votre micro : ceux déjà présents (ceux de votre casque, par exemple) restent en place.</p>
+        <p>Paramètres › Micro en jeu › <strong>Désinstaller</strong> remet tout exactement comme avant.</p>
+      </div>
+    </details>
+
+    <div class="actions">
+      <a class="button primary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger WaseBoard</a>
+      <a class="button secondary" href="https://discord.gg/HAGTNGFyQd">💬 Un souci ? Le Discord WaseBoard</a>
+    </div>
+
+    <div class="note">
+      WaseBoard — projet open-source. Détails techniques sur
+      <a class="link" href="https://github.com/salsi64/WaseBoard/blob/master/native/WaseBoardMicFx/README.md">GitHub</a>.<br>
+      <a class="link" href="/">Accueil</a> ·
+      <a class="link" href="/privacy.html">Confidentialité</a> ·
+      <a class="link" href="/terms.html">Conditions d'utilisation</a>
+    </div>
+  </div>
+</body>
+</html>

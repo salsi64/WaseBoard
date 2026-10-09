@@ -3,6 +3,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
+using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
 
 namespace WaseBoard
@@ -19,6 +20,14 @@ namespace WaseBoard
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            // Instance relancée en administrateur pour installer/retirer l'effet micro en jeu (voir
+            // MicFxSetup) : aucune fenêtre ni mutex mono-instance, l'application normale attend sa fin.
+            if (e.Args.Length > 0 && e.Args[0] == MicFxSetup.CommandLineSwitch)
+            {
+                Shutdown(MicFxSetup.RunCommandLine(e.Args));
+                return;
+            }
+
             var deepLink = e.Args.FirstOrDefault(a => a.StartsWith("waseboard://", StringComparison.OrdinalIgnoreCase));
 
             // Une seule instance à la fois (deux processus écrasent silencieusement les réglages
