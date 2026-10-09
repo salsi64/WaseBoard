@@ -36,6 +36,14 @@ Vous pouvez aussi cliquer plusieurs sons d'affilée : ils se superposent, aucun 
 L'icône 📣 à gauche d'un bouton fait un **aperçu local** (chez vous seulement, sans déranger les autres)
 — pratique pour vérifier un son avant de l'envoyer en vocal.
 
+## Jouer des sons dans le vocal d'un jeu (expérimental)
+
+Avec **🎮 Micro en jeu**, vos sons passent dans votre micro : vos coéquipiers les entendent dans le
+vocal du jeu (Valorant, CS2…). Installation en un clic dans **Paramètres › 🎮 Micro en jeu**, puis un
+bouton **🎮 Jeu / 🎧 Discord** dans la barre du haut choisit où vont vos sons.
+
+Guide complet et dépannage : [`micro-en-jeu.md`](micro-en-jeu.md).
+
 ## Ajouter un son
 
 « + Ajouter un son » (ou glisser-déposer un fichier dans la fenêtre) : donnez-lui un nom, un emoji, et
@@ -76,6 +84,11 @@ gardez le droit de jouer et de gérer vos favoris/catégories dans tous les cas.
 **Puis-je jouer un son d'un autre serveur Discord que je fréquente ?**
 Oui, si WaseBoard y est aussi installé et que vous en êtes membre : ses sons apparaissent dans votre
 catalogue, jouables dans n'importe quel vocal où vous êtes.
+
+**Mes coéquipiers en jeu n'entendent pas mes sons.**
+Vérifiez que le bouton de la barre du haut est sur **🎮 Jeu** et que le jeu utilise le micro équipé
+dans Paramètres › Micro en jeu. En push-to-talk, les sons ne passent que touche enfoncée. Le reste du
+dépannage est dans le [guide Micro en jeu](micro-en-jeu.md#ça-ne-marche-pas-).
 
 **Est-ce que ça marche sur mobile / Mac / Linux ?**
 Le client est pour l'instant Windows uniquement. Le bot Discord, lui, joue dans le vocal quel que soit

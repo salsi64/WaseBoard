@@ -40,6 +40,9 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 - **Aperçu local** (émoticône sur la gauche des boutons) avant de jouer réellement dans le vocal ; le bouton s'illumine
   pour tout le monde pendant la lecture, avec l'avatar de qui joue.
 - **Plusieurs sons en même temps**, sans s'annuler entre utilisateurs.
+- **🎮 Micro en jeu** *(expérimental)* : vos sons passent aussi dans votre micro, pour le vocal des jeux
+  (Valorant, CS2…), sans logiciel tiers ni changement dans le jeu. Un bouton **🎮 Jeu / 🎧 Discord**
+  dans la barre choisit où vont les sons. Guide : [`docs/micro-en-jeu.md`](docs/micro-en-jeu.md).
 - **Favoris**, **catégories personnelles** et **catégorie automatique par serveur Discord**,
   glisser-déposer pour classer/réorganiser, recherche en temps réel.
 - **Emoji obligatoire par son**, en 3D brillante (Fluent Emoji), palette prédéfinie ou personnalisée.
