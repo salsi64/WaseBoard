@@ -86,7 +86,9 @@ de la liste des effets de votre micro. Les effets déjà présents (ceux du fabr
 exemple) restent en place.
 
 **Comment tout enlever ?**
-Paramètres › Micro en jeu › **Désinstaller** : tout revient exactement comme avant.
+Paramètres › Micro en jeu › **Désinstaller** : tout revient exactement comme avant. Si vous désinstallez
+WaseBoard sans l'avoir fait, la désinstallation retire aussi l'effet (Windows demande alors l'autorisation
+administrateur).
 
 ---
 

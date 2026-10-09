@@ -289,6 +289,8 @@ namespace WaseBoard.Services.MicFx
 
             RestartAudioService(messages);
             DeleteOldDlls(keep: null);
+            DeleteIfEmpty(InstallDir);
+            DeleteIfEmpty(Path.GetDirectoryName(InstallDir)!); // Program Files\WaseBoard, sauf si WaseBoard y est installé
             messages.Insert(0, "Effet micro retiré.");
             return true;
         }
@@ -319,6 +321,16 @@ namespace WaseBoard.Services.MicFx
                 try { File.Delete(file); }
                 catch { /* encore chargée par audiodg : sera retirée à la prochaine installation */ }
             }
+        }
+
+        private static void DeleteIfEmpty(string directory)
+        {
+            try
+            {
+                if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
+                    Directory.Delete(directory);
+            }
+            catch { /* dossier vide laissé en place, sans conséquence */ }
         }
 
         private static void RegisterCom(string dllPath)
