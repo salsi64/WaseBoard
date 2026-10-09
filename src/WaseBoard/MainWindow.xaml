@@ -28,9 +28,11 @@
             </DoubleAnimation>
         </Storyboard>
 
-        <!-- Segment de l'interrupteur Micro en jeu (🎮 Jeu | 🎧 Discord). Segment actif (IsChecked) :
-             fond d'accent et halo flou d'accent autour (même technique que le halo de lecture des
-             sons), en fondu d'environ 0,25 s. Aucune animation au repos. -->
+        <!-- Segment de l'interrupteur Micro en jeu (🎮 Jeu | 🎧 Discord), même typographie que les
+             boutons de la barre (icône d'accent, texte clair semi-gras). Segment actif (IsChecked) :
+             icône d'accent, fond légèrement teinté, liseré et halo flou d'accent (même technique que le
+             halo de lecture des sons), en fondu d'environ 0,25 s ; inactif : icône claire atténuée.
+             Aucune animation au repos. -->
         <Style x:Key="MicModeSegmentStyle" TargetType="ToggleButton">
             <Setter Property="IsHitTestVisible" Value="False"/>
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
@@ -42,23 +44,27 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
                         <Grid>
-                            <Border x:Name="Halo" Margin="-5" CornerRadius="12" Opacity="0" IsHitTestVisible="False"
+                            <Border x:Name="Halo" Margin="-4" CornerRadius="11" Opacity="0" IsHitTestVisible="False"
                                     Background="{DynamicResource AccentBrush}">
-                                <Border.Effect><BlurEffect Radius="12"/></Border.Effect>
+                                <Border.Effect><BlurEffect Radius="10"/></Border.Effect>
                             </Border>
+                            <!-- Fond opaque : le halo ne déborde qu'AUTOUR du segment, sans délaver la teinte. -->
+                            <Border CornerRadius="7" Background="{DynamicResource FieldBrush}"/>
                             <Border x:Name="Fill" CornerRadius="7" Opacity="0" Background="{DynamicResource AccentBrush}"/>
-                            <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" Opacity="0.65"
+                            <Border x:Name="Ring" CornerRadius="7" Opacity="0" BorderThickness="1" BorderBrush="{DynamicResource AccentBrush}"/>
+                            <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" Opacity="0.55"
                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
                                 <Setter TargetName="Content" Property="Opacity" Value="1"/>
                                 <Trigger.EnterActions>
                                     <BeginStoryboard>
                                         <Storyboard>
-                                            <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.2"/>
-                                            <DoubleAnimation Storyboard.TargetName="Halo" Storyboard.TargetProperty="Opacity" To="0.6" Duration="0:0:0.3">
+                                            <DoubleAnimation Storyboard.TargetName="Ring" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.2"/>
+                                            <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity" To="0.16" Duration="0:0:0.2"/>
+                                            <DoubleAnimation Storyboard.TargetName="Halo" Storyboard.TargetProperty="Opacity" To="0.35" Duration="0:0:0.3">
                                                 <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
                                             </DoubleAnimation>
                                         </Storyboard>
@@ -67,6 +73,7 @@
                                 <Trigger.ExitActions>
                                     <BeginStoryboard>
                                         <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Ring" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15"/>
                                             <DoubleAnimation Storyboard.TargetName="Fill" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15"/>
                                             <DoubleAnimation Storyboard.TargetName="Halo" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.15"/>
                                         </Storyboard>
@@ -902,13 +909,13 @@
                             <ToggleButton x:Name="MicModeGameButton" Style="{StaticResource MicModeSegmentStyle}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE7FC;" Style="{StaticResource ToolbarIcon}"/>
-                                    <TextBlock x:Name="MicModeGameLabel" Text="Jeu" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="MicModeGameLabel" Text="Jeu" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
                                 </StackPanel>
                             </ToggleButton>
                             <ToggleButton x:Name="MicModeDiscordButton" Style="{StaticResource MicModeSegmentStyle}" Margin="2,0,0,0">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE7F6;" Style="{StaticResource ToolbarIcon}"/>
-                                    <TextBlock x:Name="MicModeDiscordLabel" Text="Discord" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="MicModeDiscordLabel" Text="Discord" Margin="8,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
                                 </StackPanel>
                             </ToggleButton>
                         </StackPanel>
