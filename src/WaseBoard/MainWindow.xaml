@@ -32,11 +32,11 @@
              fond d'accent et halo flou d'accent autour (même technique que le halo de lecture des
              sons), en fondu d'environ 0,25 s. Aucune animation au repos. -->
         <Style x:Key="MicModeSegmentStyle" TargetType="ToggleButton">
+            <Setter Property="IsHitTestVisible" Value="False"/>
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
             <Setter Property="FontSize" Value="12.5"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Padding" Value="10,0"/>
-            <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -47,7 +47,6 @@
                                 <Border.Effect><BlurEffect Radius="12"/></Border.Effect>
                             </Border>
                             <Border x:Name="Fill" CornerRadius="7" Opacity="0" Background="{DynamicResource AccentBrush}"/>
-                            <Border x:Name="Hover" CornerRadius="7" Opacity="0" Background="{DynamicResource TrackBrush}"/>
                             <ContentPresenter x:Name="Content" Margin="{TemplateBinding Padding}" Opacity="0.65"
                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Grid>
@@ -74,14 +73,37 @@
                                     </BeginStoryboard>
                                 </Trigger.ExitActions>
                             </Trigger>
-                            <MultiTrigger>
-                                <MultiTrigger.Conditions>
-                                    <Condition Property="IsMouseOver" Value="True"/>
-                                    <Condition Property="IsChecked" Value="False"/>
-                                </MultiTrigger.Conditions>
-                                <Setter TargetName="Hover" Property="Opacity" Value="0.6"/>
-                                <Setter TargetName="Content" Property="Opacity" Value="0.9"/>
-                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Interrupteur Micro en jeu : conteneur cliquable des deux segments, mêmes bordure, coins et
+             survol (bordure d'accent) que les boutons de la barre d'outils. -->
+        <Style x:Key="MicModeSwitchStyle" TargetType="Button">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Padding" Value="3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="{DynamicResource FieldBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource TrackBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -839,14 +861,14 @@
             </Grid.RowDefinitions>
 
             <!-- Barre unique : titre (classique), recherche, volume (classique), actions. Quatre colonnes
-                 (la recherche prend le reste, jamais moins de 150 px) : les éléments ne peuvent plus se
-                 chevaucher ni écraser la recherche. Les libellés des boutons se raccourcissent quand la
-                 fenêtre est étroite (ApplyToolbarDensity). Paramètres et volume ne restent visibles ICI
+                 (la recherche prend le reste, jamais moins de 100 px) : les éléments ne peuvent plus se
+                 chevaucher ni écraser la recherche. Quand la fenêtre rétrécit, la recherche rétrécit
+                 d'abord, puis les libellés des boutons se raccourcissent (ApplyToolbarDensity). Paramètres et volume ne restent visibles ICI
                  qu'en thème classique (la barre latérale les porte en moderne) — voir ApplyTheme(). -->
             <Grid Grid.Row="0" Margin="0,0,0,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*" MinWidth="150"/>
+                    <ColumnDefinition Width="*" MinWidth="100"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -865,36 +887,32 @@
                              ToolTip="Rechercher un son par son nom"/>
                 </Grid>
 
-                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                <StackPanel x:Name="ToolbarActions" Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="RefreshButton" ToolTip="Actualiser le catalogue" Width="34" Padding="0"
                             Style="{StaticResource ToolbarButtonStyle}" Click="RefreshButton_Click">
                         <TextBlock Text="&#xE72C;" Style="{StaticResource ToolbarIcon}"/>
                     </Button>
                     <!-- Micro en jeu : interrupteur à deux segments, mode jeu (manette, sons dans le micro) |
-                         mode Discord (casque, sons joués par le bot) ; le segment actif s'allume. Visible
-                         seulement si la fonction est activée dans Paramètres > Micro en jeu — voir
-                         ApplyMicModeButton(). -->
-                    <Border x:Name="MicModeSwitch" Visibility="Collapsed" Height="34" Margin="0,0,6,0" Padding="3"
-                            CornerRadius="10" Background="{DynamicResource FieldBrush}"
-                            BorderBrush="{DynamicResource TrackBrush}" BorderThickness="1">
+                         mode Discord (casque, sons joués par le bot). Un clic n'importe où bascule le mode ;
+                         les segments ne sont que l'affichage (le segment actif s'allume). Visible seulement
+                         si la fonction est activée dans Paramètres > Micro en jeu — voir ApplyMicModeButton(). -->
+                    <Button x:Name="MicModeSwitch" Visibility="Collapsed" Click="MicModeSwitch_Click"
+                            Style="{StaticResource MicModeSwitchStyle}">
                         <StackPanel Orientation="Horizontal">
-                            <ToggleButton x:Name="MicModeGameButton" Click="MicModeSegment_Click" Style="{StaticResource MicModeSegmentStyle}"
-                                          ToolTip="Mode jeu : les sons passent dans votre micro (chat vocal du jeu)">
+                            <ToggleButton x:Name="MicModeGameButton" Style="{StaticResource MicModeSegmentStyle}">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE7FC;" Style="{StaticResource ToolbarIcon}"/>
                                     <TextBlock x:Name="MicModeGameLabel" Text="Jeu" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </ToggleButton>
-                            <ToggleButton x:Name="MicModeDiscordButton" Click="MicModeSegment_Click" Style="{StaticResource MicModeSegmentStyle}"
-                                          Margin="2,0,0,0"
-                                          ToolTip="Mode Discord : les sons sont joués par le bot dans votre salon vocal">
+                            <ToggleButton x:Name="MicModeDiscordButton" Style="{StaticResource MicModeSegmentStyle}" Margin="2,0,0,0">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="&#xE7F6;" Style="{StaticResource ToolbarIcon}"/>
                                     <TextBlock x:Name="MicModeDiscordLabel" Text="Discord" Margin="6,0,0,0" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </ToggleButton>
                         </StackPanel>
-                    </Border>
+                    </Button>
                     <Button x:Name="JoinVoiceButton" Click="JoinVoiceButton_Click" Style="{StaticResource ToolbarButtonStyle}"
                             ToolTip="Rejoindre mon vocal : fait rejoindre le bot au salon vocal où vous êtes actuellement">
                         <StackPanel Orientation="Horizontal">

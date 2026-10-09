@@ -410,29 +410,70 @@ namespace WaseBoard
 
         private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => ApplyToolbarDensity();
 
-        /// <summary>Quand la fenêtre est étroite, raccourcit les libellés de la barre d'outils (icônes seules) pour que
-        /// la recherche garde au moins 150 px et que rien ne se chevauche. Seuils = largeur nécessaire avec libellés
-        /// complets (le thème classique porte en plus le titre, le volume et Paramètres dans cette barre).</summary>
         /// <summary>Barre d'outils en version étroite (libellés masqués) — voir ApplyToolbarDensity.</summary>
         private bool _toolbarCompact;
 
+        /// <summary>Largeur que la recherche garde tant que la barre peut encore être raccourcie : quand la
+        /// fenêtre rétrécit, la recherche rétrécit d'abord jusque-là, puis les libellés se raccourcissent.</summary>
+        private const double SearchComfortWidth = 150;
+
+        /// <summary>Paliers de la barre d'outils, du plus complet au plus compact (voir SetToolbarDensity).</summary>
+        private const int ToolbarDensityLevels = 4;
+
+        /// <summary>Choisit le palier le plus complet de la barre d'outils qui laisse encore à la recherche
+        /// sa largeur de confort, pour que les boutons ne sortent jamais de la fenêtre. Les largeurs sont
+        /// MESURÉES (et non devinées par des seuils fixes) : elles dépendent du thème (titre, Paramètres), des
+        /// boutons présents (interrupteur Micro en jeu) et du mode affiché.</summary>
         private void ApplyToolbarDensity()
         {
             if (JoinVoiceLabel is null) return; // encore en cours d'InitializeComponent
 
             var sidebarWidth = ThemeState.IsModern ? SidebarColumn.Width.Value : 0;
             var available = ActualWidth - sidebarWidth - 24;
-            var compact = available < (ThemeState.IsModern ? 700 : 1020);
+            var unbounded = new Size(double.PositiveInfinity, double.PositiveInfinity);
 
-            var labels = compact ? Visibility.Collapsed : Visibility.Visible;
+            for (var level = 0; level < ToolbarDensityLevels; level++)
+            {
+                SetToolbarDensity(level);
+                if (level == ToolbarDensityLevels - 1) break; // le plus compact, faute de mieux
+
+                // Un libellé masqué ou raccourci n'invalide la taille de son bouton qu'à la prochaine passe
+                // de mise en page : sans ça, la mesure renverrait la largeur du palier PRÉCÉDENT. On
+                // invalide donc juste la chaîne libellé → barre (pas toute la fenêtre, coûteux en
+                // redimensionnement avec un gros catalogue).
+                foreach (var label in new FrameworkElement[] { JoinVoiceLabel, StopAllLabel, AddCategoryLabel, AddSoundLabel, MicModeGameLabel, MicModeDiscordLabel })
+                    InvalidateMeasureUpTo(label, ToolbarActions);
+
+                ToolbarActions.Measure(unbounded);
+                TitleText.Measure(unbounded);
+                var titleWidth = TitleText.Visibility == Visibility.Visible ? TitleText.DesiredSize.Width : 0;
+                var needed = titleWidth + ToolbarActions.DesiredSize.Width + 12; // + marge à droite de la recherche
+                if (available - needed >= SearchComfortWidth) break;
+            }
+        }
+
+        private static void InvalidateMeasureUpTo(DependencyObject element, UIElement root)
+        {
+            for (var current = element; current is not null; current = VisualTreeHelper.GetParent(current))
+            {
+                (current as UIElement)?.InvalidateMeasure();
+                if (ReferenceEquals(current, root)) break;
+            }
+        }
+
+        /// <summary>0 : tout ; 1 : sans le titre (thème classique — déjà dans la barre de titre de la
+        /// fenêtre) ; 2 : « Catégorie » en icône seule et « Son » au lieu d'« Ajouter un son » ;
+        /// 3 : icônes seules.</summary>
+        private void SetToolbarDensity(int level)
+        {
+            TitleText.Visibility = !ThemeState.IsModern && level == 0 ? Visibility.Visible : Visibility.Collapsed;
+            AddCategoryLabel.Visibility = level < 2 ? Visibility.Visible : Visibility.Collapsed;
+            AddSoundLabel.Text = level < 2 ? "Ajouter un son" : "Son";
+            var labels = level < 3 ? Visibility.Visible : Visibility.Collapsed;
             JoinVoiceLabel.Visibility = labels;
-            _toolbarCompact = compact;
-            UpdateMicModeLabels();
             StopAllLabel.Visibility = labels;
-            AddCategoryLabel.Visibility = labels;
-            AddSoundLabel.Text = compact ? "Son" : "Ajouter un son";
-            // Le titre de l'application est déjà dans la barre de titre de la fenêtre : on le retire en premier.
-            TitleText.Visibility = !ThemeState.IsModern && !compact ? Visibility.Visible : Visibility.Collapsed;
+            _toolbarCompact = level >= 3;
+            UpdateMicModeLabels();
         }
 
         private bool _reloginPromptShowing;
@@ -2004,30 +2045,27 @@ namespace WaseBoard
 
         private bool IsGameMode => _library.Settings.MicFeatureEnabled && _library.Settings.MicFeedEnabled;
 
-        /// <summary>Segment 🎮 Jeu ou 🎧 Discord de l'interrupteur : choisit ce mode (un clic sur le
-        /// segment déjà actif ne change rien).</summary>
-        private void MicModeSegment_Click(object sender, RoutedEventArgs e)
+        /// <summary>Interrupteur 🎮 Jeu | 🎧 Discord : un clic n'importe où bascule le mode.</summary>
+        private void MicModeSwitch_Click(object sender, RoutedEventArgs e)
         {
-            var game = ReferenceEquals(sender, MicModeGameButton);
-            if (_library.Settings.MicFeedEnabled != game)
-            {
-                _library.Settings.MicFeedEnabled = game;
-                _library.SaveSettings();
-            }
-            // Resynchronise les deux segments : un ToggleButton cliqué inverse seul son état, ce qui
-            // décocherait le segment actif.
+            _library.Settings.MicFeedEnabled = !_library.Settings.MicFeedEnabled;
+            _library.SaveSettings();
             ApplyMicModeButton();
         }
 
         /// <summary>L'interrupteur n'existe que si la fonction est activée (Paramètres > Micro en jeu) ;
-        /// le segment du mode actuel est coché, donc allumé.</summary>
+        /// le segment du mode actuel est coché, donc allumé, et seul lui porte son nom.</summary>
         private void ApplyMicModeButton()
         {
             MicModeSwitch.Visibility = _library.Settings.MicFeatureEnabled ? Visibility.Visible : Visibility.Collapsed;
             var game = IsGameMode;
             MicModeGameButton.IsChecked = game;
             MicModeDiscordButton.IsChecked = !game;
-            UpdateMicModeLabels();
+            MicModeSwitch.ToolTip = game
+                ? "Mode jeu : les sons passent dans votre micro (chat vocal du jeu). Cliquer pour passer en mode Discord."
+                : "Mode Discord : les sons sont joués par le bot dans votre salon vocal. Cliquer pour passer en mode jeu.";
+            // La largeur de l'interrupteur change avec le mode (« Jeu » / « Discord ») : la barre se réajuste.
+            ApplyToolbarDensity();
         }
 
         /// <summary>Seul le segment actif affiche son nom (l'autre se réduit à son icône), et aucun
