@@ -5,7 +5,9 @@ using WaseBoard.Services.MicFx;
 // Écoute le micro quelques secondes (ce qui fait charger l'effet par Windows), envoie le bip de test
 // (880 Hz) et cherche ce bip dans le signal capté. Rien n'est enregistré sur disque.
 //
-//   dotnet run --project native/WaseBoardMicFx/tools/MicFxCheck [-- "nom partiel du micro"]
+//   dotnet run --project native/WaseBoardMicFx/tools/MicFxCheck [-- "nom partiel du micro"] [--echo]
+//
+// --echo : mesure en plus l'effet de l'annulation d'écho de Windows (voir EchoCheck.cs).
 
 const string MicFeedRingName = @"Global\WaseBoardMicFeed";
 
@@ -22,8 +24,9 @@ string Header()
 }
 
 using var enumerator = new MMDeviceEnumerator();
-var mic = args.Length > 0
-    ? enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active).First(d => d.FriendlyName.Contains(args[0], StringComparison.OrdinalIgnoreCase))
+var micName = args.FirstOrDefault(a => !a.StartsWith("--"));
+var mic = micName is not null
+    ? enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active).First(d => d.FriendlyName.Contains(micName, StringComparison.OrdinalIgnoreCase))
     : enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications);
 Console.WriteLine($"Micro : {mic.FriendlyName}");
 
@@ -78,6 +81,11 @@ lock (samples)
         detected |= hit;
         Console.WriteLine($"  {t / (double)rate,4:F1} s   880 Hz = {tone:F4}   témoin 700 Hz = {control:F4}{(hit ? "   <-- bip" : "")}");
     }
+}
+if (args.Contains("--echo"))
+{
+    Console.WriteLine("Annulation d'écho :");
+    EchoCheck.Run(mic);
 }
 Console.WriteLine(detected ? "OK : le bip est bien dans le micro." : @"ÉCHEC : pas de bip dans le micro (voir le journal de l'effet, C:\ProgramData\WaseBoard\MicFx\apo.log).");
 return detected ? 0 : 1;

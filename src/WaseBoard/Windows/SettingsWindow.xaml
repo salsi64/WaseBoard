@@ -182,7 +182,8 @@
                         </Grid>
 
                         <CheckBox x:Name="MicFeedMonitorCheckBox" Content="M'entendre aussi (retour sur mon casque ou mes enceintes)"
-                                  Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                                  Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
+                        <TextBlock Text="Avec un casque, aucun souci. Avec des enceintes et un micro qui applique une annulation d'écho (fréquent sur les micros intégrés des portables), cette annulation peut effacer les sons : décochez si vos coéquipiers ne les entendent pas." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,8" TextWrapping="Wrap"/>
                         <CheckBox x:Name="MicFeedAlsoDiscordCheckBox" Content="Jouer aussi dans Discord via le bot"
                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
                         <TextBlock Text="À éviter si Discord utilise ce même micro : les autres y entendraient le son deux fois." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,16" TextWrapping="Wrap"/>

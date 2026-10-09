@@ -116,9 +116,25 @@ Elle a été compilée avec le CRT statique, sans manifeste embarqué. Elle ne d
 
 - **Pas de périphérique séparé.** Les sons partent dans le micro pour **toutes** les applications.
   C'est pourquoi l'option « Jouer aussi dans Discord via le bot » est désactivée par défaut.
-- **Annulation d'écho ou suppression de bruit de l'application.** Celles de Discord (Krisp) ou d'un
-  jeu peuvent atténuer un son qui est aussi joué sur les enceintes (retour local). Si c'est le cas,
-  décocher « M'entendre aussi », ou couper l'annulation d'écho dans l'application.
+- **Annulation d'écho et suppression de bruit.** L'effet s'insère *avant* les traitements par
+  mode (MFX/SFX), donc avant une éventuelle annulation d'écho de Windows ou du fabricant. Mesures du
+  9 octobre 2026 (BlackShark V3, Windows 11 25H2, bip de 880 Hz injecté à 0,25) :
+
+  | Catégorie du flux | Effets déclarés par Windows | Bip reçu, sans / avec retour local |
+  |---|---|---|
+  | Défaut, Communications, GameChat | aucun | 0 dB / 0 dB |
+  | Speech | annulation d'écho, suppression de bruit, contrôle de gain | −10 dB / −13 à −23 dB |
+
+  Les chats vocaux des jeux et Discord ouvrent le micro en Communications/GameChat. Leur annulation
+  d'écho interne (WebRTC, Vivox…) prend comme référence ce que l'application joue elle-même, pas
+  notre retour local.
+
+  Restent les risques suivants :
+  - **micros intégrés de portables** avec une annulation d'écho du fabricant en mode
+    communications, quand le retour local sort sur les enceintes : décocher « M'entendre aussi »
+    (la page Paramètres le signale) ;
+  - **suppression de bruit des applications** (Krisp dans Discord, etc.), qui peut atténuer des sons
+    qu'elle ne reconnaît pas comme de la voix. Pour Discord, le bot reste la meilleure voie.
 - **Push-to-talk.** Avec le PTT du jeu, les sons ne passent que touche enfoncée.
 - **Pilotes non compatibles.** Un micro sans section `FxProperties` (certains périphériques
   virtuels) n'accepte pas d'effet : il apparaît comme non compatible.
