@@ -37,6 +37,8 @@ Sans `ffmpeg`/`libopus0` installés, les vérifications correspondantes de `diag
 | `test_pcm_cache.py` | cache des sons décodés en mémoire : plafond/éviction/invalidation, mêmes octets que ffmpeg (avec et sans découpe), démarrage instantané mesuré, volume, mixeur, réglage `pcm_cache_mb` |
 | `test_polling_log_filter.py` | journal d'accès : les sondages `/activity` et `/status` réussis ne sont plus journalisés, tout le reste l'est toujours |
 | `test_security.py` | jeton partagé comparé à temps constant, expiration des sessions inactives, déconnexion `POST /oauth/logout`, réglage `session_max_idle_days` |
+| `test_membership_cache.py` | cache de résolution des serveurs d'un membre (`find_memberships`) : pas d'appel REST à Discord pour un serveur au cache de membres complet, expiration, isolation entre membres |
+| `test_migrate_legacy_catalog.py` | migration ponctuelle du catalogue d'avant l'isolation par serveur (`deploy/migrate_legacy_catalog.py`) sur un jeu de données fabriqué |
 | `test_invite.py` | bouton d'invitation Discord → page `/connect/<code>` → lien `waseboard://` |
 | `test_diagnostic.py` | configuration (fichier + variables d'environnement), `/health`, `/diagnostic`, `--check`/`--invite-url` |
 | `test_capacity.py` | plafonds de ressources, quotas/plafonds de guilde, limitation de débit par IP, `/instance` |
