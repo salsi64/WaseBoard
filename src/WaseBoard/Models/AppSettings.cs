@@ -122,6 +122,19 @@ namespace WaseBoard.Models
         /// (une seule ligne), l'avatar de qui joue passe alors à droite de la ligne du nom.</summary>
         public bool ShowWaveforms { get; set; } = true;
 
+        /// <summary>Derniers sons joués (identifiants, du plus récent au plus ancien) : alimente la section « Récents ».
+        /// Local à cet ordinateur, jamais envoyé au serveur (voir Services/RecentSounds.cs).</summary>
+        public List<string> RecentSoundIds { get; set; } = new();
+
+        /// <summary>Affiche la section « Récents » sur la page principale.</summary>
+        public bool ShowRecents { get; set; } = true;
+
+        /// <summary>Raccourci clavier global (ex. « Ctrl+Alt+M ») qui bascule le mode 🎮 Jeu / 🎧 Discord ; vide = aucun.</summary>
+        public string? MicModeHotkey { get; set; }
+
+        /// <summary>Petit signal sonore à chaque bascule par le raccourci : en plein jeu, le message à l'écran ne se voit pas.</summary>
+        public bool MicModeBeep { get; set; } = true;
+
         /// <summary>Vrai dès que l'assistant de premier lancement a été fermé une fois (Terminer ou Passer) —
         /// évite de le rouvrir à chaque démarrage tant que le jeton/la connexion Discord ne sont pas remplis.</summary>
         public bool HasSeenOnboarding { get; set; }

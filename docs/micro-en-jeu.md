@@ -30,6 +30,8 @@ Un bouton apparaît dans la barre du haut. Un clic bascule entre les deux modes 
 
 ![Interrupteur Jeu / Discord](img/micro-en-jeu-interrupteur.png)
 
+**Au clavier, même en plein jeu** : Paramètres › Micro en jeu › « Raccourci pour basculer Jeu / Discord » › **Définir…**, puis tapez la combinaison voulue (par exemple `Ctrl+Alt+M`). Elle marche même quand WaseBoard n'est pas au premier plan. Un petit signal sonore confirme chaque bascule : **deux notes qui montent** = mode Jeu, **deux notes qui descendent** = mode Discord (décochable). Si une autre application a déjà pris cette combinaison, WaseBoard vous le dit : choisissez-en une autre.
+
 Le mode actif est allumé. Vos raccourcis clavier suivent le mode choisi.
 
 ## Réglages

@@ -24,6 +24,8 @@
   <ItemGroup>
     <Compile Include="..\WaseBoard\AppIdentity.cs" Link="Linked\AppIdentity.cs" />
     <Compile Include="..\WaseBoard\Services\LatencyRecorder.cs" Link="Linked\LatencyRecorder.cs" />
+    <Compile Include="..\WaseBoard\Services\RecentSounds.cs" Link="Linked\RecentSounds.cs" />
+    <Compile Include="..\WaseBoard\Services\BeepTone.cs" Link="Linked\BeepTone.cs" />
     <Compile Include="..\WaseBoard\Services\Localization\Loc.cs" Link="Linked\Loc.cs" />
     <EmbeddedResource Include="..\WaseBoard\Localization\*.json" LogicalName="Localization.%(Filename)%(Extension)" />
   </ItemGroup>

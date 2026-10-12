@@ -20,6 +20,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using WaseBoard.Models;
 using WaseBoard.Services;
+using WaseBoard.Services.Localization;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
 
@@ -37,8 +38,9 @@ namespace WaseBoard
         /// En mode jeu (bouton 🎮 de la barre d'outils), le son part dans le micro, et dans Discord
         /// seulement si demandé (sinon un Discord branché sur ce même micro l'entendrait deux fois).
         /// </summary>
-        private void Play(SoundItem item)
+        private void Play(SoundItem item, bool keepRecentsOrder = false)
         {
+            RememberRecent(item, keepRecentsOrder);
             if (!IsGameMode)
             {
                 _ = PlayAndPollAsync(item);
@@ -57,6 +59,57 @@ namespace WaseBoard
             _library.Settings.MicFeedEnabled = !_library.Settings.MicFeedEnabled;
             _library.SaveSettings();
             ApplyMicModeButton();
+        }
+
+        // ----- Raccourci clavier global : bascule Jeu / Discord -----
+
+        private string? _micHotkeyWarnedFor;
+        private System.Media.SoundPlayer? _beepPlayer;
+
+        /// <summary>Enregistre le raccourci de bascule Jeu/Discord (réglage MicModeHotkey) ; appelé avec tous les autres
+        /// raccourcis (RegisterAllHotkeys). Sans effet si la fonction « micro en jeu » est désactivée ou si aucun raccourci
+        /// n'est défini. Un raccourci déjà pris par une autre application est signalé une seule fois.</summary>
+        private void RegisterMicModeHotkey()
+        {
+            var text = _library.Settings.MicModeHotkey;
+            if (_hotkeys is null || !_library.Settings.MicFeatureEnabled || string.IsNullOrEmpty(text)) return;
+            if (!HotkeyParser.TryParse(text, out var modifiers, out var key)) return;
+
+            if (_hotkeys.Register(modifiers, key, () => Dispatcher.Invoke(ToggleMicModeFromHotkey)) is null && _micHotkeyWarnedFor != text)
+            {
+                _micHotkeyWarnedFor = text;
+                ToastService.Show(Loc.T("toast.hotkey_taken", text), ToastKind.Warning);
+            }
+        }
+
+        /// <summary>Bascule le mode comme l'interrupteur de la barre d'outils, puis le confirme par un message et, par défaut,
+        /// un petit signal sonore : en plein jeu, la fenêtre WaseBoard n'est pas visible.</summary>
+        private void ToggleMicModeFromHotkey()
+        {
+            if (!_library.Settings.MicFeatureEnabled) return;
+
+            _library.Settings.MicFeedEnabled = !_library.Settings.MicFeedEnabled;
+            _library.SaveSettings();
+            ApplyMicModeButton();
+
+            var game = IsGameMode;
+            ToastService.Show(Loc.T(game ? "toast.mode_game" : "toast.mode_discord"), ToastKind.Info);
+            if (_library.Settings.MicModeBeep) PlayModeBeep(game);
+        }
+
+        private void PlayModeBeep(bool game)
+        {
+            try
+            {
+                var wav = BeepTone.BuildWav(game ? BeepTone.RisingTones : BeepTone.FallingTones);
+                _beepPlayer?.Dispose();
+                _beepPlayer = new System.Media.SoundPlayer(new MemoryStream(wav));
+                _beepPlayer.Play();
+            }
+            catch
+            {
+                // Pas de signal sonore possible (périphérique audio absent...) : le message à l'écran suffit.
+            }
         }
 
         /// <summary>L'interrupteur n'existe que si la fonction est activée (Paramètres > Micro en jeu) ;

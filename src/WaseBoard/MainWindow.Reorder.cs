@@ -143,6 +143,9 @@ namespace WaseBoard
 
             if (ReferenceEquals(draggedItem, targetItem)) return;
 
+            // « Récents » est classée par date de lecture : on n'y réordonne rien (ni son ordre propre, ni l'ordre général).
+            if (FindEnclosingSection(button)?.CategoryKey == RecentsKey) return;
+
             // Espace les réordonnancements en direct d'au moins ~220ms pour éviter une animation
             // nerveuse ; le highlight de la cible, lui, reste instantané.
             if (DateTime.Now - _lastLiveReorder < LiveReorderThrottle) return;
@@ -185,6 +188,14 @@ namespace WaseBoard
         {
             if (sender is not FrameworkElement { Tag: SectionViewModel section }) return;
             if (e.Data.GetData(typeof(SoundItem)) is not SoundItem draggedItem) return;
+
+            // On ne dépose rien dans « Récents » : elle se remplit toute seule.
+            if (section.CategoryKey == RecentsKey)
+            {
+                ClearDragOverHighlight();
+                e.Handled = true;
+                return;
+            }
 
             // Déjà membre ? Le survol a déjà tout réordonné (SoundButton_DragOver) ; reconstruire
             // casserait l'animation. Seul un nouveau classement nécessite RefreshSections().

@@ -43,13 +43,16 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 - **🎮 Micro en jeu** *(expérimental)* : vos sons passent aussi dans votre micro, pour le vocal des jeux
   (Valorant, CS2…), sans logiciel tiers ni changement dans le jeu. Un bouton **🎮 Jeu / 🎧 Discord**
   dans la barre choisit où vont les sons. Guide : [`docs/micro-en-jeu.md`](docs/micro-en-jeu.md).
+- **Section « Récents »** : vos derniers sons joués, juste après les favoris (historique local, jamais envoyé au serveur ;
+  clic droit sur son titre pour la vider ou la masquer).
 - **Favoris**, **catégories personnelles** et **catégorie automatique par serveur Discord**,
   glisser-déposer pour classer/réorganiser, recherche en temps réel.
 - **Emoji obligatoire par son**, en 3D brillante (Fluent Emoji), palette prédéfinie ou personnalisée.
 - **Fenêtre « Éditer le son »** (clic droit › Éditer) : nom, emoji, couleur du bouton, catégories, volume propre
   à chaque son, favori, **découpe waveform** non destructive (le son complet est conservé, on recoupe quand on
   veut) et **remplacement du fichier audio** sans perdre le reste (nom, catégories, réglages).
-- **Raccourcis clavier globaux**, thème clair/sombre et interface **Flat** (par défaut), moderne ou classique,
+- **Raccourcis clavier globaux** (un par son, et un pour basculer 🎮 Jeu / 🎧 Discord, avec un petit signal sonore
+  de confirmation), **Se déconnecter** de Discord depuis Paramètres, thème clair/sombre et interface **Flat** (par défaut), moderne ou classique,
   au choix, avec des palettes de couleurs indépendantes. La forme d'onde des boutons est optionnelle : masquée, les boutons
   tiennent sur une seule ligne et l'avatar de la personne qui joue reste affiché à droite du nom.
 - **Identification automatique** (connexion Discord) : votre compte suffit, WaseBoard retrouve

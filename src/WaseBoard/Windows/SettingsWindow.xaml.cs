@@ -48,6 +48,13 @@ namespace WaseBoard.Windows
         /// restauration) : l'appelant doit alors recharger les sons, même si les Paramètres n'ont pas été enregistrés.</summary>
         public bool AdminCatalogChanged { get; private set; }
 
+        /// <summary>Vrai si l'utilisateur s'est déconnecté de Discord depuis cette fenêtre (effet immédiat, sans « Enregistrer ») :
+        /// l'appelant doit vider la page au lieu de recharger un catalogue auquel il n'a plus accès.</summary>
+        public bool LoggedOut { get; private set; }
+
+        // Raccourci de bascule Jeu/Discord en cours d'édition (écrit dans les réglages par « Enregistrer »).
+        private string? _micModeHotkey;
+
         public SettingsWindow(AppSettings settings, SoundLibraryService library, string initialPage = "Server",
             IEnumerable<SoundLibraryService.SharedCategoryInfo>? adminGuilds = null, IEnumerable<SoundItem>? knownSounds = null,
             MicFeedService? micFeed = null)
@@ -79,6 +86,7 @@ namespace WaseBoard.Windows
             if (!string.IsNullOrEmpty(_settings.DiscordSessionToken))
             {
                 ConnectDiscordButton.Content = "Changer de compte";
+                LogoutDiscordButton.Visibility = Visibility.Visible;
                 ShowVerifyResult(true, $"✅ Connecté en tant que {_settings.DiscordUsername}", _settings.DiscordAvatarUrl);
             }
 
@@ -90,6 +98,10 @@ namespace WaseBoard.Windows
             UpdateVolumeLabel(MicFeedVolumeLabel, _settings.MicFeedVolume);
             MicFeedMonitorCheckBox.IsChecked = _settings.MicFeedMonitor;
             MicFeedAlsoDiscordCheckBox.IsChecked = _settings.MicFeedAlsoDiscord;
+            _micModeHotkey = _settings.MicModeHotkey;
+            UpdateMicModeHotkeyText();
+            MicModeBeepCheckBox.IsChecked = _settings.MicModeBeep;
+            ShowRecentsCheckBox.IsChecked = _settings.ShowRecents;
 
             _selectedBgColorHex = _settings.BackgroundColorHex;
             CustomColorBox.Text = _selectedBgColorHex ?? "";
@@ -667,12 +679,66 @@ namespace WaseBoard.Windows
                 _library.SaveSettings();
 
                 ConnectDiscordButton.Content = "Changer de compte";
+                LogoutDiscordButton.Visibility = Visibility.Visible;
+                LoggedOut = false;
                 ShowVerifyResult(true, $"✅ Connecté en tant que {result.Username}", result.AvatarUrl);
             }
             else
             {
                 ShowVerifyResult(false, "❌ " + (result.Error ?? "Connexion échouée."), null);
             }
+        }
+
+        private async void LogoutDiscordButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!ConfirmDialog.Show(this, Loc.T("settings.discord.logout_confirm"), Loc.T("settings.discord.logout_title"))) return;
+
+            LogoutDiscordButton.IsEnabled = false;
+            ConnectDiscordButton.IsEnabled = false;
+            ShowVerifyResult(true, Loc.T("settings.discord.logging_out"), null);
+
+            var outcome = await _library.LogoutAsync();
+            if (_isClosed) { LoggedOut = true; return; }
+
+            LoggedOut = true;
+            LogoutDiscordButton.IsEnabled = true;
+            ConnectDiscordButton.IsEnabled = true;
+            LogoutDiscordButton.Visibility = Visibility.Collapsed;
+            ConnectDiscordButton.Content = Loc.T("settings.discord.connect");
+            ShowVerifyResult(outcome == SoundLibraryService.LogoutOutcome.Done,
+                Loc.T(outcome == SoundLibraryService.LogoutOutcome.Done ? "settings.discord.logged_out" : "settings.discord.logged_out_unconfirmed"), null);
+        }
+
+        // ---------- Raccourci de bascule Jeu / Discord ----------
+
+        private void UpdateMicModeHotkeyText()
+        {
+            MicModeHotkeyText.Text = string.IsNullOrEmpty(_micModeHotkey) ? Loc.T("settings.mic.hotkey_none") : _micModeHotkey;
+            MicModeHotkeyText.Opacity = string.IsNullOrEmpty(_micModeHotkey) ? 0.6 : 1.0;
+            MicModeHotkeyClearButton.IsEnabled = !string.IsNullOrEmpty(_micModeHotkey);
+        }
+
+        private void MicModeHotkeySetButton_Click(object sender, RoutedEventArgs e)
+        {
+            var capture = new HotkeyCaptureWindow { Owner = this };
+            if (capture.ShowDialog() != true || capture.CapturedHotkey is not { } hotkey) return;
+
+            // Un raccourci ne peut servir qu'à une chose : refus s'il appartient déjà à un son.
+            var taken = _knownSounds.FirstOrDefault(s => string.Equals(s.Hotkey, hotkey, StringComparison.OrdinalIgnoreCase));
+            if (taken is not null)
+            {
+                AlertDialog.Show(this, Loc.T("settings.mic.hotkey_conflict", taken.Name), "WaseBoard", AlertKind.Warning);
+                return;
+            }
+
+            _micModeHotkey = hotkey;
+            UpdateMicModeHotkeyText();
+        }
+
+        private void MicModeHotkeyClearButton_Click(object sender, RoutedEventArgs e)
+        {
+            _micModeHotkey = null;
+            UpdateMicModeHotkeyText();
         }
 
         private void ShowVerifyResult(bool success, string message, string? avatarUrl)
@@ -757,6 +823,9 @@ namespace WaseBoard.Windows
             _settings.FollowSystemTheme = FollowSystemThemeCheckBox.IsChecked == true;
             _settings.FollowSystemAccent = FollowSystemAccentCheckBox.IsChecked == true;
             _settings.ShowWaveforms = ShowWaveformsCheckBox.IsChecked == true;
+            _settings.ShowRecents = ShowRecentsCheckBox.IsChecked == true;
+            _settings.MicModeHotkey = _micModeHotkey;
+            _settings.MicModeBeep = MicModeBeepCheckBox.IsChecked == true;
 
             DialogResult = true;
             Close();

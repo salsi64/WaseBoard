@@ -29,6 +29,7 @@ namespace WaseBoard
     public partial class MainWindow : Window
     {
         private const string FavoritesKey = "__favorites__";
+        private const string RecentsKey = "__recents__";
 
         private readonly SoundLibraryService _library = new();
 

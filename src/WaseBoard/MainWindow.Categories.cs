@@ -20,6 +20,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using WaseBoard.Models;
 using WaseBoard.Services;
+using WaseBoard.Services.Localization;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
 
@@ -239,6 +240,25 @@ namespace WaseBoard
         private void SectionHeader_RightClick(object sender, MouseButtonEventArgs e)
         {
             if (sender is not FrameworkElement { Tag: SectionViewModel section }) return;
+
+            // « Récents » n'est pas une catégorie : ni renommage, ni export, ni suppression — seulement la vider ou la masquer.
+            if (section.CategoryKey == RecentsKey)
+            {
+                var recentsMenu = new ContextMenu();
+                var clearItem = new MenuItem { Header = Loc.T("menu.recents.clear") };
+                clearItem.Click += (_, _) => ClearRecents();
+                recentsMenu.Items.Add(clearItem);
+                var hideItem = new MenuItem { Header = Loc.T("menu.recents.hide") };
+                hideItem.Click += (_, _) =>
+                {
+                    _library.Settings.ShowRecents = false;
+                    _library.SaveSettings();
+                    RefreshSections();
+                };
+                recentsMenu.Items.Add(hideItem);
+                recentsMenu.IsOpen = true;
+                return;
+            }
 
             var menu = new ContextMenu();
             var canManage = section.IsManageable && !section.IsShared;

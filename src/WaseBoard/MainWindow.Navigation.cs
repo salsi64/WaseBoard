@@ -20,6 +20,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using WaseBoard.Models;
 using WaseBoard.Services;
+using WaseBoard.Services.Localization;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
 
@@ -129,6 +130,14 @@ namespace WaseBoard
             Sounds.Clear();
             foreach (var item in items) Sounds.Add(item);
             RegisterAllHotkeys();
+
+            // Historique « Récents » : on oublie les sons supprimés — seulement si le catalogue s'est bien chargé (un
+            // échec réseau ne doit pas effacer l'historique).
+            if (items.Count > 0)
+            {
+                var known = items.Select(i => i.Id).ToHashSet();
+                if (RecentSounds.Prune(_library.Settings.RecentSoundIds, known.Contains) > 0) ScheduleRecentsSave();
+            }
             RefreshSections();
 
             // Ni le texte ni l'infobulle n'affichent l'adresse du serveur (confidentialité) : juste
@@ -293,6 +302,9 @@ namespace WaseBoard
                 }
             };
 
+            // « Récents » vient juste après les favoris (jamais d'entrée dans la barre latérale : ce n'est pas une catégorie).
+            if (BuildRecentsSection(Filtered) is { } recentsSection) sections.Add(recentsSection);
+
             // Ordre unifié (personnelles + partagées) : permet de réordonner les catégories
             // partagées au même titre que les personnelles, avec les mêmes flèches ↑/↓.
             foreach (var key in _library.GetCategoriesInOrder(_sharedCategories.Select(s => s.GuildId)))
@@ -352,7 +364,7 @@ namespace WaseBoard
                         IsReorderable = s.IsReorderable
                     });
                 })
-                .Where(t => t.Section.CategoryKey != FavoritesKey)
+                .Where(t => t.Section.CategoryKey != FavoritesKey && t.Section.CategoryKey != RecentsKey)
                 .ToList();
 
             var categories = navItems.Where(t => !t.Section.IsShared).Select(t => t.Item).ToList();

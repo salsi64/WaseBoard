@@ -36,12 +36,25 @@ namespace WaseBoard
             // administre au moins un serveur (le serveur re-vérifie de toute façon chaque requête).
             var adminGuilds = _sharedCategories.Where(s => s.IsAdmin).ToList();
             var window = new SettingsWindow(_library.Settings, _library, adminGuilds: adminGuilds, knownSounds: Sounds, micFeed: _micFeed) { Owner = this };
-            if (window.ShowDialog() == true)
+            var saved = window.ShowDialog() == true;
+            if (saved)
             {
                 _library.SaveSettings();
                 ApplyColorScheme();
                 ApplyTheme();
                 ApplyMicModeButton();
+            }
+
+            // « Se déconnecter » agit tout de suite (sans passer par « Enregistrer ») : plus de session, donc plus de
+            // catalogue à rafraîchir — on le dit à l'écran au lieu d'enchaîner des appels qui échoueraient.
+            if (window.LoggedOut)
+            {
+                HandleLoggedOut();
+                return;
+            }
+
+            if (saved)
+            {
                 await RefreshCatalogAsync();
                 await RefreshSharedCategoriesAsync();
                 await RefreshVoiceStatusAsync();
@@ -158,6 +171,7 @@ namespace WaseBoard
         {
             foreach (var item in Sounds)
                 RegisterHotkeyFor(item);
+            RegisterMicModeHotkey();
         }
 
         private void RegisterHotkeyFor(SoundItem item)

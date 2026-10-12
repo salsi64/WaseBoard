@@ -77,9 +77,15 @@
                         <TextBlock Text="Connexion Discord" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                         <TextBlock Text="Permet d'afficher votre avatar quand vous jouez un son, et de retrouver automatiquement le bon salon vocal. Obligatoire." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
-                        <Button x:Name="ConnectDiscordButton" Content="Se connecter avec Discord" Height="34" Click="ConnectDiscordButton_Click"
-                                HorizontalAlignment="Left" Padding="14,0"
-                                Style="{StaticResource PrimaryButtonStyle}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="ConnectDiscordButton" Content="{loc:Loc settings.discord.connect}" Height="34" Click="ConnectDiscordButton_Click"
+                                    HorizontalAlignment="Left" Padding="14,0"
+                                    Style="{StaticResource PrimaryButtonStyle}"/>
+                            <Button x:Name="LogoutDiscordButton" Content="{loc:Loc settings.discord.logout}" Height="34" Padding="14,0" Margin="8,0,0,0"
+                                    Click="LogoutDiscordButton_Click" Visibility="Collapsed"
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
+                        </StackPanel>
 
                         <Border x:Name="VerifyResultBorder" CornerRadius="6" Padding="8" Visibility="Collapsed" Margin="0,10,0,4">
                             <StackPanel Orientation="Horizontal">
@@ -121,7 +127,9 @@
                         <TextBlock Text="Boutons de son" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
                         <CheckBox x:Name="ShowWaveformsCheckBox" Content="Afficher la forme d'onde (waveform) sur les boutons"
                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                        <TextBlock Text="Décochée, les boutons tiennent sur une seule ligne (plus de sons visibles à la fois). L'avatar de la personne qui joue reste affiché, à droite du nom." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16" TextWrapping="Wrap"/>
+                        <TextBlock Text="Décochée, les boutons tiennent sur une seule ligne (plus de sons visibles à la fois). L'avatar de la personne qui joue reste affiché, à droite du nom." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12" TextWrapping="Wrap"/>
+                        <CheckBox x:Name="ShowRecentsCheckBox" Content="{loc:Loc settings.appearance.show_recents}"
+                                  Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16"/>
 
                         <StackPanel x:Name="ManualColorSection">
                             <TextBlock Text="Fond personnalisé (avancé)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
@@ -218,6 +226,24 @@
                         <CheckBox x:Name="MicFeedAlsoDiscordCheckBox" Content="Jouer aussi dans Discord (bot)"
                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
                         <TextBlock Text="Laissez décoché si Discord utilise ce micro (sinon, son en double)." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,0" TextWrapping="Wrap"/>
+
+                        <TextBlock Text="{loc:Loc settings.mic.hotkey_title}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,18,0,6"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <Border CornerRadius="6" Padding="12,6" MinWidth="150" Margin="0,0,8,0" Background="{DynamicResource FieldBrush}">
+                                <TextBlock x:Name="MicModeHotkeyText" FontFamily="Consolas" FontSize="12" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
+                            </Border>
+                            <Button x:Name="MicModeHotkeySetButton" Content="{loc:Loc settings.mic.hotkey_set}" Height="30" Padding="14,0" Margin="0,0,6,0"
+                                    Click="MicModeHotkeySetButton_Click"
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
+                            <Button x:Name="MicModeHotkeyClearButton" Content="{loc:Loc settings.mic.hotkey_clear}" Height="30" Padding="14,0"
+                                    Click="MicModeHotkeyClearButton_Click"
+                                    Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                                    BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
+                        </StackPanel>
+                        <TextBlock Text="{loc:Loc settings.mic.hotkey_hint}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <CheckBox x:Name="MicModeBeepCheckBox" Content="{loc:Loc settings.mic.hotkey_beep}"
+                                  Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
                     </StackPanel>
 
                     <!-- Page : Mises à jour -->
