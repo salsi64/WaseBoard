@@ -5,6 +5,10 @@ namespace WaseBoard.Models
 {
     public class AppSettings
     {
+        /// <summary>Langue de l'interface : "auto" (celle de Windows : français, sinon anglais), "fr" ou "en". Lue au
+        /// démarrage par Loc.InitializeFromSettingsFile ; la changer demande de relancer l'application.</summary>
+        public string Language { get; set; } = "auto";
+
         /// <summary>Adresse du serveur WaseBoard (catalogue de sons + bot Discord). Vide par défaut :
         /// chaque installation cible son propre serveur (voir server/README.md pour l'héberger),
         /// aucune adresse par défaut n'est fournie avec l'application.</summary>

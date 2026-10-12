@@ -34,6 +34,8 @@
     <Resource Include="Assets\app.ico" />
     <!-- Index des emojis Fluent 3D (voir EmojiImageResolver). LogicalName : nom stable pour GetManifestResourceStream. -->
     <EmbeddedResource Include="Assets\fluent-emoji-index.txt" LogicalName="fluent-emoji-index.txt" />
+    <!-- Textes de l'interface par langue (voir Services/Localization/Loc.cs) : Localization.fr.json, Localization.en.json. -->
+    <EmbeddedResource Include="Localization\*.json" LogicalName="Localization.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Effet « micro en jeu » (DLL C++ de native/WaseBoardMicFx) : livrée à côté de WaseBoard.exe,

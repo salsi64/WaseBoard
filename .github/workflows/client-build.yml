@@ -8,14 +8,14 @@ on:
       - "src/**"
       - "installer/**"
       - "native/**"
-      - "tools/check-versions.ps1"
+      - "tools/*.ps1"
       - ".github/workflows/client-build.yml"
   pull_request:
     paths:
       - "src/**"
       - "installer/**"
       - "native/**"
-      - "tools/check-versions.ps1"
+      - "tools/*.ps1"
       - ".github/workflows/client-build.yml"
   workflow_dispatch:
   workflow_call:
@@ -37,6 +37,10 @@ jobs:
         run: |
           $tag = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { '' }
           ./tools/check-versions.ps1 -Tag $tag
+
+      - name: Traductions (mêmes clés et paramètres dans toutes les langues)
+        shell: pwsh
+        run: ./tools/check-localization.ps1
 
       - uses: actions/setup-dotnet@v4
         with:

@@ -20,6 +20,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using WaseBoard.Models;
 using WaseBoard.Services;
+using WaseBoard.Services.Localization;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
 
@@ -299,7 +300,7 @@ namespace WaseBoard
             var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0);
             var result = await UpdateCheckService.CheckForUpdateAsync(currentVersion);
             if (result.Available)
-                ToastService.Show($"🎉 Une nouvelle version de WaseBoard est disponible (v{result.LatestVersion}) — voir Paramètres.", ToastKind.Info);
+                ToastService.Show(Loc.T("update.available", result.LatestVersion), ToastKind.Info);
         }
 
         private bool _reloginPromptShowing;

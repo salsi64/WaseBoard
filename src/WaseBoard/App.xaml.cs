@@ -3,6 +3,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
+using WaseBoard.Services.Localization;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
 
@@ -48,6 +49,9 @@ namespace WaseBoard
             }
 
             PendingDeepLink = deepLink;
+
+            // La langue doit être connue avant la création de la première fenêtre (les textes du XAML sont résolus à ce moment).
+            Loc.InitializeFromSettingsFile();
 
             base.OnStartup(e);
 
