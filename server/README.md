@@ -390,6 +390,12 @@ et sous forme de variable d'environnement (`WASEBOARD_` + le nom en majuscules, 
 | `max_ffmpeg_processes` | sons joués en même temps, tous serveurs confondus (un processus ffmpeg chacun). |
 | `http_rate_limit_per_min` | requêtes par minute et par adresse IP sur les seules routes publiques ou coûteuses : `/connect/…`, `/oauth/…` (compteur commun) et l'envoi de sons. Les routes utilisées en continu par l'appli (`/activity`, `/status`, `/play`…) ne sont **jamais** freinées. Derrière nginx/Caddy, l'adresse du client est lue dans `X-Forwarded-For` (dernière entrée, celle vue par votre proxy). |
 
+### Sessions de connexion Discord
+
+| Réglage | Effet |
+|---|---|
+| `session_max_idle_days` | jours sans utilisation au bout desquels la session d'une personne (et les jetons Discord qu'elle contient) est supprimée du serveur. **90 par défaut**, 0 = jamais. Une personne peut aussi se déconnecter à tout moment (`POST /oauth/logout`). |
+
 ### Démarrage instantané des sons
 
 | Réglage | Effet |

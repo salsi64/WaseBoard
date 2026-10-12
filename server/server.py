@@ -8,6 +8,7 @@ Voir README.md pour la mise en place complète.
 
 import asyncio
 import hashlib
+import hmac
 import html
 import ipaddress
 import json
@@ -109,6 +110,9 @@ audio.VOICE_IDLE_SLEEP_S = VOICE_IDLE_SLEEP_S  # lu par MixingAudioSource (modul
 # Mémoire (Mo) réservée aux sons déjà décodés : un clic démarre alors instantanément au lieu d'attendre ~50 ms le
 # démarrage de ffmpeg. 0 (défaut) = désactivé (chaque lecture lance ffmpeg). Voir PCMCache.
 PCM_CACHE_MB: float = CONFIG.get("pcm_cache_mb", 0)
+# Jours d'inactivité au bout desquels une session de connexion Discord est supprimée (0 = jamais) : une personne
+# qui n'ouvre plus l'appli ne laisse pas ses jetons Discord sur le serveur indéfiniment.
+SESSION_MAX_IDLE_DAYS: float = CONFIG.get("session_max_idle_days", 90)
 # Réglages imposés par l'hébergeur aux guildes : valeurs PAR DÉFAUT de celles qui n'ont encore rien enregistré
 # (leurs admins peuvent les modifier) et PLAFONDS (que leurs admins ne peuvent pas dépasser ; « illimité » n'est alors
 # plus permis pour ce réglage). Clés possibles : voir wb_config.GUILD_LIMIT_KEYS.
@@ -232,6 +236,20 @@ def save_oauth_sessions(data: dict) -> None:
     # token, et contient des jetons Discord vivants : écriture atomique, lisible par le seul
     # propriétaire.
     _atomic_write_json(OAUTH_SESSIONS_PATH, data, private=True)
+
+
+def purge_idle_sessions(sessions: dict, max_idle_days: float, now: Optional[float] = None) -> list[str]:
+    """Retire de `sessions` celles qui n'ont servi depuis plus de `max_idle_days` jours (0 = jamais) et renvoie leurs
+    jetons. Une session sans `last_used_at` (ancienne) est datée de sa création, à défaut de maintenant."""
+    if max_idle_days <= 0:
+        return []
+    now = time.time() if now is None else now
+    limit = now - max_idle_days * 86400
+    expired = [token for token, session in sessions.items()
+               if (session.get("last_used_at") or session.get("created_at") or now) < limit]
+    for token in expired:
+        del sessions[token]
+    return expired
 
 
 # ---------- Réglages par guilde, journal d'actions, corbeille ----------
@@ -1093,6 +1111,13 @@ class WaseBoardServer(commands.Bot):
                     log.info("Corbeille : « %s » purgé définitivement (%s).", record.get("name"), record["id"])
             except Exception:
                 log.exception("Échec de la purge de la corbeille")
+            try:
+                expired = purge_idle_sessions(self.oauth_sessions, SESSION_MAX_IDLE_DAYS)
+                if expired:
+                    save_oauth_sessions(self.oauth_sessions)
+                    log.info("Sessions inactives depuis plus de %g jours supprimées : %d.", SESSION_MAX_IDLE_DAYS, len(expired))
+            except Exception:
+                log.exception("Échec de la purge des sessions inactives")
             await asyncio.sleep(6 * 3600)
 
     # ---------- Salons vocaux ----------
@@ -1521,12 +1546,16 @@ class WaseBoardServer(commands.Bot):
         app.router.add_post("/admin/guilds/{guild_id}/blocked", self._handle_admin_blocked)
         app.router.add_get("/oauth/client-id", self._handle_oauth_client_id)
         app.router.add_post("/oauth/exchange", self._handle_oauth_exchange)
+        app.router.add_post("/oauth/logout", self._handle_oauth_logout)
 
         self._web_runner = web.AppRunner(app)
         await self._web_runner.setup()
         site = web.TCPSite(self._web_runner, HTTP_HOST, HTTP_PORT)
         await site.start()
         log.info("Serveur HTTP prêt sur %s:%s (catalogue + ordres de lecture WaseBoard).", HTTP_HOST, HTTP_PORT)
+        if not SHARED_SECRET:
+            log.warning("Aucun shared_secret configuré : les routes de l'API ne sont PAS protégées par le jeton partagé. "
+                        "Renseignez-en un (32 caractères aléatoires ou plus) avant d'exposer ce serveur.")
         if self.pcm_cache.enabled:
             asyncio.create_task(self._prewarm_pcm_cache())
 
@@ -1607,7 +1636,9 @@ class WaseBoardServer(commands.Bot):
     def _check_auth(self, request: web.Request) -> bool:
         if not SHARED_SECRET:
             return True
-        return request.headers.get("X-WaseBoard-Token") == SHARED_SECRET
+        sent = request.headers.get("X-WaseBoard-Token", "")
+        # Comparaison à temps constant (pas de fuite du secret par mesure de durée) ; en octets pour accepter tout texte.
+        return hmac.compare_digest(sent.encode("utf-8"), SHARED_SECRET.encode("utf-8"))
 
     async def _handle_connect_page(self, request: web.Request) -> web.Response:
         """GET /connect/{code} : page ouverte depuis le bouton Discord (donc SANS en-tête d'authentification, par
@@ -2014,6 +2045,20 @@ class WaseBoardServer(commands.Bot):
         if not client_id:
             return web.json_response({"error": "identifiant client OAuth2 indisponible côté serveur"}, status=500)
         return web.json_response({"client_id": client_id})
+
+    async def _handle_oauth_logout(self, request: web.Request) -> web.Response:
+        """POST /oauth/logout : supprime la session de l'appelant (jetons Discord compris) du serveur. Idempotent :
+        une session déjà absente répond aussi « ok »."""
+        if not self._check_auth(request):
+            return web.json_response({"error": "unauthorized"}, status=401)
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[len("Bearer "):].strip()
+            session = self.oauth_sessions.pop(token, None)
+            if session is not None:
+                save_oauth_sessions(self.oauth_sessions)
+                log.info("Session OAuth2 fermée par %s (%s).", session.get("user_id"), session.get("username"))
+        return web.json_response({"status": "ok"})
 
     async def _handle_oauth_exchange(self, request: web.Request) -> web.Response:
         """Échange un code d'autorisation Discord contre une session WaseBoard. Le
