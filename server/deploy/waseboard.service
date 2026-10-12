@@ -9,15 +9,15 @@ Wants=network-online.target
 Type=simple
 User=VOTRE_USER
 WorkingDirectory=/home/VOTRE_USER/waseboard-server
-# NetworkManager peut signaler le réseau "en ligne" une seconde avant que la résolution DNS vers
-# Discord ne soit vraiment utilisable juste après un redémarrage (constaté au boot) ; on attend que
-# discord.com soit résolvable (30s max) avant de lancer le bot, pour éviter l'erreur "Network is
-# unreachable" au tout premier démarrage.
-ExecStartPre=/bin/sh -c "for i in $(seq 1 30); do getent hosts discord.com >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1"
+# Au démarrage, le réseau peut être « en ligne » pour NetworkManager avant qu'une route vers Internet existe
+# (constaté au boot : « Network is unreachable »). On attend donc une vraie connexion TCP à Discord (60 s max)
+# plutôt qu'une simple résolution DNS, qui aboutissait trop tôt. Requiert bash et timeout (coreutils).
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do timeout 3 bash -c "exec 3<>/dev/tcp/discord.com/443" 2>/dev/null && exit 0; sleep 1; done; exit 1'
 ExecStart=/home/VOTRE_USER/waseboard-server/venv/bin/python3 server.py
 Restart=on-failure
 RestartSec=5
-# Laisse au bot le temps de quitter proprement ses salons vocaux à l'arrêt.
+# Laisse au bot le temps de quitter proprement ses salons vocaux à l'arrêt (les 10 s par défaut ne suffisent pas :
+# le processus était tué par SIGKILL à chaque redémarrage pendant qu'il était en vocal).
 TimeoutStopSec=30
 
 # --- Durcissement : le serveur ne peut écrire que dans son propre dossier, ni élever ses droits ---
