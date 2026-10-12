@@ -1,0 +1,70 @@
+name: Client — compilation et installeur
+
+# Compile le client Windows (publication Release auto-contenue), construit l'installeur Inno Setup et dépose
+# WaseBoard-Setup-X.Y.Z.exe en artefact. Appelé tel quel par release.yml quand un tag vX.Y.Z est poussé.
+on:
+  push:
+    paths:
+      - "src/**"
+      - "installer/**"
+      - "native/**"
+      - "tools/check-versions.ps1"
+      - ".github/workflows/client-build.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "installer/**"
+      - "native/**"
+      - "tools/check-versions.ps1"
+      - ".github/workflows/client-build.yml"
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  # La publication Release exige native/WaseBoardMicFx/dist/WaseBoardMicFx.dll (voir WaseBoard.csproj) : on la
+  # compile ici, pour CE commit, plutôt que de reprendre celle d'une exécution plus ancienne.
+  micfx:
+    uses: ./.github/workflows/micfx-build.yml
+
+  build:
+    needs: micfx
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cohérence des versions (csproj, installeur, tag)
+        shell: pwsh
+        run: |
+          $tag = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME } else { '' }
+          ./tools/check-versions.ps1 -Tag $tag
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: WaseBoardMicFx-x64
+          path: native/WaseBoardMicFx/dist
+
+      - name: Publier le client (Release, win-x64, auto-contenu)
+        run: dotnet publish src/WaseBoard/WaseBoard.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+
+      - name: Compiler l'installeur (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) {
+            $candidate = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            if (-not (Test-Path $candidate)) { choco install innosetup -y --no-progress }
+            $iscc = $candidate
+          }
+          & $iscc installer\setup.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC a échoué ($LASTEXITCODE)" }
+          Get-ChildItem installer\Output\*.exe | ForEach-Object { Write-Host ("{0} ({1:N1} Mo)" -f $_.Name, ($_.Length / 1MB)) }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WaseBoard-Setup
+          path: installer/Output/WaseBoard-Setup-*.exe
+          if-no-files-found: error
