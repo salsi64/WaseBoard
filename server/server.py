@@ -126,6 +126,9 @@ TRASH_DIR.mkdir(exist_ok=True)
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma"}
 
 
+#: Version du serveur, annoncée par /status (page Diagnostic du client, rapports de support).
+SERVER_VERSION = "3.4.0-dev"
+
 #: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
 #: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).
 SERVER_FEATURES = ["replace_file"]
@@ -2154,6 +2157,8 @@ class WaseBoardServer(commands.Bot):
             "connected_guild_count": len(self.voice_clients_map),
             "channel_members": channel_members,
             "features": SERVER_FEATURES,
+            "server_version": SERVER_VERSION,
+            "uptime_s": int(time.time() - STARTED_AT),
         })
 
     # ---------- Activité en temps réel & présence ----------
@@ -2561,13 +2566,15 @@ class WaseBoardServer(commands.Bot):
         on_finish = (lambda: self.clear_activity(sound_id, str_user_id)) if str_user_id else None
 
         mixer.add(sound_id, source, on_finish=on_finish)
-        log.info("Lecture « %s » (%s) : %.0f ms de traitement.", entry.get("name", sound_id), kind,
-                 (time.perf_counter() - started) * 1000)
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        log.info("Lecture « %s » (%s) : %d ms de traitement.", entry.get("name", sound_id), kind, elapsed_ms)
 
         if str_user_id:
             asyncio.create_task(self._record_play_activity(sound_id, str_user_id, guild_id))
 
-        return web.json_response({"status": "ok"})
+        # « ms » : temps passé côté serveur entre la réception de la requête et l'ajout au mixeur (le client le
+        # compare à sa propre mesure pour séparer réseau et traitement, voir la page Diagnostic).
+        return web.json_response({"status": "ok", "ms": elapsed_ms})
 
     def _check_play_rate(self, guild_id: int, user_id: str) -> Optional[int]:
         """Anti-spam à la lecture : None si ce son peut partir (et le comptabilise), sinon le

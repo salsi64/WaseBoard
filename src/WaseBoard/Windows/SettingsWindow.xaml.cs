@@ -10,6 +10,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using WaseBoard.Models;
 using WaseBoard.Services;
+using WaseBoard.Services.Localization;
 using WaseBoard.Services.MicFx;
 
 namespace WaseBoard.Windows
@@ -130,6 +131,7 @@ namespace WaseBoard.Windows
                 ("Volume", PageVolume, NavVolumeButton),
                 ("Mic", PageMic, NavMicButton),
                 ("Updates", PageUpdates, NavUpdatesButton),
+                ("Diagnostic", PageDiagnostic, NavDiagnosticButton),
                 ("Admin", PageAdmin, NavAdminButton),
             };
 
@@ -140,6 +142,13 @@ namespace WaseBoard.Windows
                 page.Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed;
                 nav.Background = isSelected ? accent : Brushes.Transparent;
                 nav.Foreground = (Brush)FindResource(isSelected ? "OnAccentBrush" : "TextBrush");
+            }
+
+            // La page « Diagnostic » mesure le réseau : une première fois à l'ouverture, ensuite à la demande.
+            if (key == "Diagnostic" && !_diagnosticStarted)
+            {
+                _diagnosticStarted = true;
+                _ = RunDiagnosticAsync();
             }
 
             // La page « Micro en jeu » lit l'état du registre et de l'effet : seulement quand elle est affichée.
@@ -153,6 +162,99 @@ namespace WaseBoard.Windows
             {
                 _micLiveTimer.Stop();
             }
+        }
+
+        // ---------- Diagnostic ----------
+
+        private bool _diagnosticStarted;
+        private string _diagnosticReport = "";
+
+        private async void RunDiagnosticButton_Click(object sender, RoutedEventArgs e) => await RunDiagnosticAsync();
+
+        private async System.Threading.Tasks.Task RunDiagnosticAsync()
+        {
+            RunDiagnosticButton.IsEnabled = false;
+            CopyDiagnosticButton.IsEnabled = false;
+            DiagnosticText.Text = Loc.T("settings.diagnostic.running");
+            try
+            {
+                _diagnosticReport = await BuildDiagnosticReportAsync();
+            }
+            catch (Exception ex)
+            {
+                _diagnosticReport = ex.Message;
+            }
+            DiagnosticText.Text = _diagnosticReport;
+            RunDiagnosticButton.IsEnabled = true;
+            CopyDiagnosticButton.IsEnabled = _diagnosticReport.Length > 0;
+        }
+
+        /// <summary>Le rapport affiché ET copié : versions, latence réseau, durée des derniers clics, vocal, micro. Jamais de jeton.</summary>
+        private async System.Threading.Tasks.Task<string> BuildDiagnosticReportAsync()
+        {
+            var report = new System.Text.StringBuilder();
+            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?";
+#if WASEBOARD_DEV
+            const string build = "Dev";
+#else
+            const string build = "Release";
+#endif
+            report.AppendLine(Loc.T("report.title"));
+            report.AppendLine(Loc.T("report.client", version, build, "Windows " + Environment.OSVersion.Version,
+                System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription));
+            report.AppendLine(Loc.T("report.language", Loc.Language, _settings.UiTheme));
+            report.AppendLine();
+
+            var serverUrl = _library.Settings.ServerUrl;
+            var host = Uri.TryCreate(serverUrl, UriKind.Absolute, out var uri) ? uri.Host : serverUrl;
+            report.AppendLine(Loc.T("report.server", host));
+
+            // Un seul tour de /status : rafraîchit la version et les fonctions annoncées par le serveur.
+            await _library.GetServerStatusAsync();
+            report.AppendLine(_library.ServerVersion is { } serverVersion
+                ? Loc.T("report.server_version", serverVersion)
+                : Loc.T("report.server_version_unknown"));
+            if (_library.ServerFeatures is { Count: > 0 } features)
+                report.AppendLine(Loc.T("report.server_features", string.Join(", ", features.OrderBy(f => f, StringComparer.Ordinal))));
+
+            var probe = await _library.MeasureLatencyAsync(5);
+            report.AppendLine(probe.Ok
+                ? Loc.T("report.ping", probe.SamplesMs.Count, probe.Median, probe.Min, probe.Max)
+                : Loc.T("report.ping_failed", probe.Error ?? "?"));
+
+            if (_library.Latency.Summarize() is { } plays)
+            {
+                var line = Loc.T("report.plays", plays.Count, plays.MedianTotalMs, plays.MaxTotalMs);
+                if (plays.MedianServerMs is { } serverMs) line += Loc.T("report.plays_server", serverMs);
+                report.AppendLine(line);
+            }
+            else
+            {
+                report.AppendLine(Loc.T("report.plays_none"));
+            }
+            report.AppendLine();
+
+            var voice = await _library.GetLiveVoiceStatusAsync();
+            report.AppendLine(voice.Connected
+                ? Loc.T("report.voice_connected", voice.Channel ?? "?", voice.GuildName ?? "?")
+                : Loc.T("report.voice_disconnected"));
+            report.AppendLine(Loc.T("report.mic", _settings.MicFeatureEnabled
+                ? Loc.T("report.mic_on", Loc.T(_settings.MicFeedEnabled ? "report.mode_game" : "report.mode_discord"))
+                : Loc.T("report.mic_off")));
+            report.AppendLine(Loc.T("report.session", Loc.T(string.IsNullOrEmpty(_settings.DiscordSessionToken) ? "report.session_off" : "report.session_on")));
+            return report.ToString().TrimEnd();
+        }
+
+        private void CopyDiagnosticButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_diagnosticReport.Length == 0) return;
+            Clipboard.SetText(_diagnosticReport);
+
+            var original = CopyDiagnosticButton.Content;
+            CopyDiagnosticButton.Content = Loc.T("settings.diagnostic.copied");
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            timer.Tick += (_, _) => { CopyDiagnosticButton.Content = original; timer.Stop(); };
+            timer.Start();
         }
 
         private void OpenAdminPanelButton_Click(object sender, RoutedEventArgs e)

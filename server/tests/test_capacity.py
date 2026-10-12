@@ -254,6 +254,9 @@ async def main():
         st, _, _ = await play(21, f"s{n}", G1.id)
         assert st == 200
     check("sans plafond : 6 sons simultanés, tous acceptés", bot.mixers[G1.id].count() == 6)
+    st, payload, _ = await play(21, "s1", G1.id)
+    check("/play répond le temps de traitement serveur (ms, entier >= 0) en plus de status ok",
+          st == 200 and payload.get("status") == "ok" and isinstance(payload.get("ms"), int) and payload["ms"] >= 0, payload)
 
     fresh_mixers()
     # max_sources_per_guild est un réglage PAR SERVEUR (pas un plafond d'instance global, voir migration) :

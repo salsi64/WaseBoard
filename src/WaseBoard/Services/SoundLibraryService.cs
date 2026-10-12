@@ -833,18 +833,35 @@ namespace WaseBoard.Services
                 var payload = JsonSerializer.Serialize(new { id = soundId, volume });
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
+                var timer = System.Diagnostics.Stopwatch.StartNew();
                 using var response = await SendAsync(request);
+                timer.Stop();
                 if (!response.IsSuccessStatusCode)
                 {
                     LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
                     return false;
                 }
+                Latency.Add(timer.ElapsedMilliseconds, await ReadServerPlayMsAsync(response));
                 return true;
             }
             catch (Exception ex)
             {
                 LastErrorDetail = ex.Message;
                 return false;
+            }
+        }
+
+        /// <summary>Temps de traitement annoncé par le serveur dans la réponse de /play (champ « ms »), null s'il est absent.</summary>
+        private static async Task<int?> ReadServerPlayMsAsync(HttpResponseMessage response)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                return doc.RootElement.TryGetProperty("ms", out var ms) && ms.ValueKind == JsonValueKind.Number ? ms.GetInt32() : null;
+            }
+            catch
+            {
+                return null; // serveur plus ancien ou réponse inattendue : la mesure du client reste valable
             }
         }
 
@@ -901,6 +918,7 @@ namespace WaseBoard.Services
                 foreach (var item in list.EnumerateArray())
                     if (item.ValueKind == JsonValueKind.String && item.GetString() is { } name) features.Add(name);
             ServerFeatures = features;
+            ReadServerVersion(root);
         }
 
         public async Task<(ServerStatusResult Result, string? Channel)> GetServerStatusAsync()
