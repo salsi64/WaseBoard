@@ -47,6 +47,25 @@ class FakeGuild:
         raise S.discord.NotFound(response=FakeResponse(), message="introuvable")
 
 
+class FakeChunkedGuild:
+    """Serveur dont le cache de membres est complet (Guild.chunked) : un compte absent n'en est PAS membre,
+    Discord ne doit jamais être interrogé pour lui."""
+    chunked = True
+
+    def __init__(self, gid, members):
+        self.id = gid
+        self.name = f"chunked-{gid}"
+        self._members = members
+        self.fetch_calls = 0
+
+    def get_member(self, uid):
+        return FakeMember(uid) if uid in self._members else None
+
+    async def fetch_member(self, uid):
+        self.fetch_calls += 1
+        raise AssertionError("appel REST inutile sur un serveur dont le cache de membres est complet")
+
+
 bot = S.bot
 G1 = FakeGuild(1001, members_present={42})
 G2 = FakeGuild(1002, members_present={42})
@@ -88,6 +107,29 @@ async def main():
     await bot.find_memberships(42)  # déclenche la purge opportuniste (taille > 500)
     check("les entrées expirées ont été purgées (ne reste que celle qu'on vient d'écrire)",
           len(bot._membership_cache) == 1 and 42 in bot._membership_cache, len(bot._membership_cache))
+
+
+    print("\n--- serveur au cache de membres complet : jamais d'appel REST ---")
+    G3 = FakeGuild(1001, members_present={42})          # cache incomplet : peut avoir besoin de Discord
+    C1 = FakeChunkedGuild(2001, members={42})
+    C2 = FakeChunkedGuild(2002, members={7})            # 42 n'en fait pas partie
+    S.WaseBoardServer.guilds = property(lambda self: [G3, C1, C2])
+    bot._membership_cache.clear()
+    found = await bot.find_memberships(42)
+    check("trouve le serveur à cache incomplet (via REST) et celui à cache complet (via le cache)",
+          {g.id for g, _ in found} == {1001, 2001}, [g.id for g, _ in found])
+    check("aucun appel REST pour les serveurs à cache complet, membre ou non",
+          (C1.fetch_calls, C2.fetch_calls) == (0, 0), (C1.fetch_calls, C2.fetch_calls))
+    check("le serveur à cache incomplet est toujours interrogé (comportement inchangé)", G3.fetch_calls == 1, G3.fetch_calls)
+    bot._membership_cache.clear()
+    found_other = await bot.find_memberships(99)
+    check("un compte inconnu : aucun serveur, et toujours aucun appel REST sur les serveurs à cache complet",
+          found_other == [] and (C1.fetch_calls, C2.fetch_calls) == (0, 0), (found_other, C1.fetch_calls, C2.fetch_calls))
+    S.WaseBoardServer.guilds = property(lambda self: [C1, C2])
+    bot._membership_cache.clear()
+    found_all = await bot.find_memberships(7)
+    check("tous les serveurs à cache complet : résolution sans aucun appel réseau",
+          {g.id for g, _ in found_all} == {2002} and (C1.fetch_calls, C2.fetch_calls) == (0, 0))
 
 
 asyncio.run(main())

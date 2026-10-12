@@ -41,6 +41,19 @@ from wb_config import DATA_DIR, ConfigError, load_config
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("waseboard-server")
 
+
+class QuietPollingFilter(logging.Filter):
+    """Retire du journal d'accès les sondages réguliers de l'appli quand ils réussissent (/activity toutes les 300 ms,
+    /status toutes les 3 s : ~46 000 lignes par jour pour un seul utilisateur, qui noyaient tout le reste). Les
+    échecs (401, 5xx…) et toutes les autres requêtes restent journalisés."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        return not (" 200 " in message and ('"GET /activity ' in message or '"GET /status' in message))
+
+
+logging.getLogger("aiohttp.access").addFilter(QuietPollingFilter())
+
 # Configuration : config.json + variables d'environnement WASEBOARD_* (voir wb_config.py) ; toutes les données vivent
 # dans DATA_DIR (à côté de ce script par défaut, ou WASEBOARD_DATA_DIR — le volume /data en Docker).
 SOUNDS_DIR = DATA_DIR / "sounds_data"
@@ -1560,8 +1573,12 @@ class WaseBoardServer(commands.Bot):
             member = guild.get_member(user_id)
             if member is not None:
                 member_by_guild_id[guild.id] = member
-            else:
+            elif not getattr(guild, "chunked", False):
                 guilds_to_fetch.append(guild)
+            # Sinon : le cache de membres de ce serveur est COMPLET (intent « Membres » + chargement des membres,
+            # voir Guild.chunked) — absent du cache veut dire « pas membre », inutile de demander à Discord.
+            # Sans cette règle, tout compte absent d'un des serveurs du bot coûtait ~270 ms (un appel REST) au
+            # premier clic suivant chaque expiration du cache (MEMBERSHIP_CACHE_TTL).
 
         if guilds_to_fetch:
             async def _safe_fetch(guild: discord.Guild):
@@ -1573,9 +1590,12 @@ class WaseBoardServer(commands.Bot):
             # En parallèle (pas guilde par guilde) : un cache froid coûte alors le temps du PLUS
             # LENT appel REST, pas leur somme — c'est ce qui rendait perceptible le tout premier
             # clic (ou le premier après un moment d'inactivité, une fois le cache expiré).
+            started = time.perf_counter()
             for gid, member in await asyncio.gather(*(_safe_fetch(g) for g in guilds_to_fetch)):
                 if member is not None:
                     member_by_guild_id[gid] = member
+            log.info("Résolution des membres : %d appel(s) REST à Discord (%s) en %.0f ms.", len(guilds_to_fetch),
+                     ", ".join(str(getattr(g, "name", g.id)) for g in guilds_to_fetch), (time.perf_counter() - started) * 1000)
 
         found = [(guild, member_by_guild_id[guild.id]) for guild in self.guilds if guild.id in member_by_guild_id]
         self._membership_cache[user_id] = (now, found)

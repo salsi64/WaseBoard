@@ -35,6 +35,7 @@ Sans `ffmpeg`/`libopus0` installés, les vérifications correspondantes de `diag
 | `test_replace_file.py` | remplacement du fichier d'un son (`PUT /sounds/<id>/file`) : identité conservée, droits, plafonds, changement d'extension, refus sans effet de bord |
 | `test_voice_idle.py` | voyant « en train de parler » du bot : pause du lecteur vocal quand rien ne joue, reprise à l'arrivée d'un son (sans jamais en bloquer un), mixeur lié à la connexion vocale, fonctionnalités annoncées par `/status` |
 | `test_pcm_cache.py` | cache des sons décodés en mémoire : plafond/éviction/invalidation, mêmes octets que ffmpeg (avec et sans découpe), démarrage instantané mesuré, volume, mixeur, réglage `pcm_cache_mb` |
+| `test_polling_log_filter.py` | journal d'accès : les sondages `/activity` et `/status` réussis ne sont plus journalisés, tout le reste l'est toujours |
 | `test_invite.py` | bouton d'invitation Discord → page `/connect/<code>` → lien `waseboard://` |
 | `test_diagnostic.py` | configuration (fichier + variables d'environnement), `/health`, `/diagnostic`, `--check`/`--invite-url` |
 | `test_capacity.py` | plafonds de ressources, quotas/plafonds de guilde, limitation de débit par IP, `/instance` |
