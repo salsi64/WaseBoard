@@ -33,7 +33,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Vérifier la syntaxe (compilation seule, rapide)
-        run: python -m py_compile server.py diagnostics.py wb_config.py
+        run: python -m py_compile server.py audio.py diagnostics.py wb_config.py
 
       - name: Lancer la suite de tests
         run: ./tests/run_all.sh
