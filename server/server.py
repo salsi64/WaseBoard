@@ -119,9 +119,6 @@ SESSION_MAX_IDLE_DAYS: float = CONFIG.get("session_max_idle_days", 90)
 # Boucles (un son qui recommence tant qu'on ne l'arrête pas) : durée maximale en minutes avant arrêt automatique ;
 # 0 = boucles désactivées. Le son doit tenir en mémoire une fois décodé (LOOP_MAX_BYTES).
 LOOP_MAX_MINUTES: float = CONFIG.get("loop_max_minutes", 30)
-# Niveau (0 à 1) des sons « d'ambiance » quand un autre son joue ; 1 = pas de réduction automatique.
-DUCK_GAIN: float = CONFIG.get("duck_gain", 0.3)
-audio.DUCK_GAIN = DUCK_GAIN  # lu par MixingAudioSource (module audio)
 LOOP_MAX_BYTES = 32 * 1024 * 1024  # un son plus long (~170 s décodé) ne peut pas tourner en boucle
 SEQUENCE_MAX_STEPS = 8           # sons dans un enchaînement
 SEQUENCE_MAX_DELAY_MS = 10_000   # attente maximale avant UNE étape
@@ -144,7 +141,7 @@ SERVER_VERSION = "3.4.0-dev"
 
 #: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
 #: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).
-SERVER_FEATURES = ["replace_file", "ambience", "stop_sound", "sequence", "play_effects"] + (["loop"] if LOOP_MAX_MINUTES > 0 else [])
+SERVER_FEATURES = ["replace_file", "stop_sound", "sequence", "play_effects"] + (["loop"] if LOOP_MAX_MINUTES > 0 else [])
 
 # Filet de sécurité seulement : l'activité est normalement effacée précisément à la fin
 # réelle du son (voir MixingAudioSource.on_finish), pas après un délai fixe. Cette valeur ne
@@ -2629,7 +2626,7 @@ class WaseBoardServer(commands.Bot):
         if err is not None:
             return err
 
-        # Options facultatives (voir SERVER_FEATURES) : volume, boucle, son d'ambiance, effets.
+        # Options facultatives (voir SERVER_FEATURES) : volume, boucle, effets.
         try:
             volume = self._parse_volume(data.get("volume"))
             effects_ = effects.parse_effects(data.get("effects"))
@@ -2667,7 +2664,7 @@ class WaseBoardServer(commands.Bot):
         str_user_id = str(user_id) if user_id else None
         on_finish = (lambda: self.clear_activity(sound_id, str_user_id)) if str_user_id else None
 
-        mixer.add(sound_id, source, on_finish=on_finish, bed=bool(data.get("ambience")))
+        mixer.add(sound_id, source, on_finish=on_finish)
         elapsed_ms = round((time.perf_counter() - started) * 1000)
         log.info("Lecture « %s » (%s) : %d ms de traitement.", entry.get("name", sound_id), kind, elapsed_ms)
 

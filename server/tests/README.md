@@ -37,9 +37,9 @@ Sans `ffmpeg`/`libopus0` installés, les vérifications correspondantes de `diag
 | `test_pcm_cache.py` | cache des sons décodés en mémoire : plafond/éviction/invalidation, mêmes octets que ffmpeg (avec et sans découpe), démarrage instantané mesuré, volume, mixeur, réglage `pcm_cache_mb` |
 | `test_polling_log_filter.py` | journal d'accès : les sondages `/activity` et `/status` réussis ne sont plus journalisés, tout le reste l'est toujours |
 | `test_security.py` | jeton partagé comparé à temps constant, expiration des sessions inactives, déconnexion `POST /oauth/logout`, réglage `session_max_idle_days` |
-| `test_audio_engine.py` | limiteur doux, boucle sans coupure et plafond de durée, arrêt d'un seul son, réduction automatique des sons d'ambiance, fin de plusieurs sons de durées différentes (régression : un son terminé qui n'était pas le dernier restait dans le mixeur) |
+| `test_audio_engine.py` | limiteur doux, boucle sans coupure et plafond de durée, arrêt d'un seul son, fin de plusieurs sons de durées différentes (régression : un son terminé qui n'était pas le dernier restait dans le mixeur) |
 | `test_effects.py` | effets (hauteur, vitesse, écho, basses) : validation stricte, chaîne ffmpeg sûre, durée et hauteur mesurées sur un vrai son |
-| `test_play_options.py` | `POST /play` avec boucle/ambiance/effets, `POST /stop` d'un seul son, `POST /play-sequence` (tout ou rien, `after_end`, annulation, anti-spam), droits et réglages |
+| `test_play_options.py` | `POST /play` avec boucle/effets, `POST /stop` d'un seul son, `POST /play-sequence` (tout ou rien, `after_end`, annulation, anti-spam), droits et réglages |
 | `test_membership_cache.py` | cache de résolution des serveurs d'un membre (`find_memberships`) : pas d'appel REST à Discord pour un serveur au cache de membres complet, expiration, isolation entre membres |
 | `test_migrate_legacy_catalog.py` | migration ponctuelle du catalogue d'avant l'isolation par serveur (`deploy/migrate_legacy_catalog.py`) sur un jeu de données fabriqué |
 | `test_invite.py` | bouton d'invitation Discord → page `/connect/<code>` → lien `waseboard://` |

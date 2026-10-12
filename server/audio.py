@@ -1,7 +1,7 @@
 """Audio du serveur : décodage des sons, cache de sons décodés en mémoire et mixeur persistant d'un salon vocal.
 
-Ce module ne lit aucune configuration : server.py règle `VOICE_IDLE_SLEEP_S` (réglage `voice_idle_sleep_s`) et
-`DUCK_GAIN` (réglage `duck_gain`) après avoir chargé config.json.
+Ce module ne lit aucune configuration : server.py règle `VOICE_IDLE_SLEEP_S` (réglage `voice_idle_sleep_s`) après avoir
+chargé config.json.
 """
 import logging
 import os
@@ -24,12 +24,6 @@ RTP_CLOCK_HZ = 48000  # horloge RTP de l'audio Discord (Opus 48 kHz) : l'horodat
 
 #: Secondes sans aucun son avant que le bot cesse d'émettre (0 = flux continu). Réglé par server.py depuis la config.
 VOICE_IDLE_SLEEP_S: float = 0
-
-#: Niveau (0 à 1) auquel descendent les sons « d'ambiance » quand un autre son joue ; 1 = pas de réduction. Réglé par
-#: server.py depuis la config (duck_gain).
-DUCK_GAIN: float = 0.3
-DUCK_ATTACK_FRAMES = 2     # la réduction s'installe en 2 trames (40 ms) : assez vite pour ne pas couvrir le son qui arrive
-DUCK_RELEASE_FRAMES = 25   # le retour au niveau normal prend 500 ms : pas de « pompage » audible entre deux sons rapprochés
 
 PCM_BYTES_PER_MS = RTP_CLOCK_HZ * 2 * 2 // 1000  # s16le, 48 kHz, stéréo : 192 octets par milliseconde
 
@@ -203,9 +197,6 @@ class MixingAudioSource(discord.AudioSource):
     Mélange : les sons sont additionnés puis passés dans un limiteur doux (soft_limit) : un son seul n'est jamais
     modifié, un mélange trop fort est comprimé en douceur au lieu d'être écrêté.
 
-    Sons « d'ambiance » (add(..., bed=True)) : une boucle de fond (pluie, musique) qui baisse automatiquement (DUCK_GAIN)
-    pendant qu'un autre son joue, puis remonte en douceur — voir _next_duck_gain.
-
     Voyant « en train de parler » (facultatif, voice_idle_sleep_s) : par défaut le lecteur ne s'arrête jamais — le
     flux reste continu et le premier son part sans la moindre latence, mais le voyant du bot reste allumé. Si
     voice_idle_sleep_s > 0, le lecteur est mis en PAUSE (le voyant s'éteint, plus aucun paquet audio n'est envoyé) après
@@ -217,15 +208,12 @@ class MixingAudioSource(discord.AudioSource):
     RTP après un silence (voir _sync_rtp_timestamp).
     """
 
-    def __init__(self, idle_sleep_frames: Optional[int] = None, duck_gain: Optional[float] = None) -> None:
+    def __init__(self, idle_sleep_frames: Optional[int] = None) -> None:
         self._entries: dict[str, tuple[discord.AudioSource, Optional[callable]]] = {}
-        self._bed: set[str] = set()  # clés des sons d'ambiance (sous-ensemble de _entries)
         self._lock = threading.Lock()
         self._voice_client = None
         # Trames de 20 ms sans aucun son avant la pause ; 0 = jamais de pause.
         self._sleep_after = round(VOICE_IDLE_SLEEP_S * 50) if idle_sleep_frames is None else idle_sleep_frames
-        self._duck_gain = min(1.0, max(0.0, DUCK_GAIN if duck_gain is None else duck_gain))
-        self._duck_current = 1.0
         self._idle_frames = 0
         self._asleep = False
         self._slept_at = 0.0
@@ -264,14 +252,10 @@ class MixingAudioSource(discord.AudioSource):
             self._idle_frames = 0  # on réessaiera dans 200 ms plutôt qu'à chaque frame
             log.exception("Pause du lecteur vocal impossible")
 
-    def add(self, key: str, source: discord.AudioSource, on_finish: Optional[callable] = None, bed: bool = False) -> None:
+    def add(self, key: str, source: discord.AudioSource, on_finish: Optional[callable] = None) -> None:
         with self._lock:
             previous = self._entries.get(key)
             self._entries[key] = (source, on_finish)
-            if bed:
-                self._bed.add(key)
-            else:
-                self._bed.discard(key)
             self._wake_locked()
         # Coupe l'ancienne instance après avoir publié la nouvelle (jamais de trou pour cette
         # clé), hors du verrou (cleanup/on_finish peuvent être lents).
@@ -300,7 +284,6 @@ class MixingAudioSource(discord.AudioSource):
         """Coupe UN son (ex. une boucle) sans toucher aux autres ; déclenche son callback on_finish. False s'il ne jouait pas."""
         with self._lock:
             entry = self._entries.pop(key, None)
-            self._bed.discard(key)
         if entry is None:
             return False
         self._finish_entries([entry])
@@ -310,7 +293,6 @@ class MixingAudioSource(discord.AudioSource):
         """Coupe immédiatement tous les sons en cours sur ce mixeur (bouton "Stop tout")."""
         with self._lock:
             entries, self._entries = self._entries, {}
-            self._bed.clear()
         self._finish_entries(entries.values())
 
     def read(self) -> bytes:
@@ -339,23 +321,9 @@ class MixingAudioSource(discord.AudioSource):
         except Exception:
             log.exception("Resynchronisation de l'horodatage RTP impossible")
 
-    def _next_duck_gain(self, bed_playing: bool, foreground_playing: bool) -> float:
-        """Gain à appliquer aux sons d'ambiance pour cette trame : ils baissent vite (attaque) dès qu'un autre son joue,
-        puis remontent lentement (relâchement) quand il s'arrête. Une seule trame de décalage au plus par palier."""
-        target = self._duck_gain if (bed_playing and foreground_playing) else 1.0
-        current = self._duck_current
-        depth = 1.0 - self._duck_gain
-        if target < current:
-            current = max(target, current - depth / DUCK_ATTACK_FRAMES)
-        elif target > current:
-            current = min(target, current + depth / DUCK_RELEASE_FRAMES)
-        self._duck_current = current
-        return current
-
     def _read_frame(self) -> bytes:
         with self._lock:
             snapshot = list(self._entries.items())
-            beds = set(self._bed)
             if snapshot:
                 self._idle_frames = 0
             else:
@@ -365,7 +333,7 @@ class MixingAudioSource(discord.AudioSource):
         if not snapshot:
             return SILENCE
 
-        frames: list[tuple[str, bytes]] = []
+        frames: list[bytes] = []
         finished: list[tuple[str, discord.AudioSource]] = []
         for key, (source, _) in snapshot:
             try:
@@ -373,7 +341,7 @@ class MixingAudioSource(discord.AudioSource):
             except Exception:
                 data = b""
             if data:
-                frames.append((key, data))
+                frames.append(data)
             else:
                 finished.append((key, source))
 
@@ -387,28 +355,21 @@ class MixingAudioSource(discord.AudioSource):
                     # (voir add()) — dans ce cas, il ne faut surtout pas effacer la nouvelle entrée.
                     if current is not None and current[0] is source:
                         del self._entries[key]
-                        self._bed.discard(key)
                         finished_entries.append(current)
             self._finish_entries(finished_entries)
 
         if not frames:
             return SILENCE
 
-        gain = self._next_duck_gain(any(k in beds for k, _ in frames), any(k not in beds for k, _ in frames))
-
         if len(frames) == 1:
-            key, data = frames[0]
-            if not (key in beds and gain != 1.0):
-                return data if len(data) == FRAME_BYTES else data.ljust(FRAME_BYTES, b"\x00")
+            data = frames[0]
+            return data if len(data) == FRAME_BYTES else data.ljust(FRAME_BYTES, b"\x00")
 
         mixed = np.zeros(FRAME_SAMPLES, dtype=np.float32)
-        for key, data in frames:
+        for data in frames:
             if len(data) < FRAME_BYTES:
                 data = data.ljust(FRAME_BYTES, b"\x00")
-            samples = np.frombuffer(data[:FRAME_BYTES], dtype=np.int16).astype(np.float32)
-            if key in beds and gain != 1.0:
-                samples *= gain
-            mixed += samples
+            mixed += np.frombuffer(data[:FRAME_BYTES], dtype=np.int16).astype(np.float32)
 
         return soft_limit(mixed).tobytes()
 
@@ -431,5 +392,4 @@ class MixingAudioSource(discord.AudioSource):
     def cleanup(self) -> None:
         with self._lock:
             entries, self._entries = self._entries, {}
-            self._bed.clear()
         self._finish_entries(entries.values())

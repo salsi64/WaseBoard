@@ -1,4 +1,4 @@
-"""Options de lecture de POST /play (boucle, ambiance, effets), POST /stop d'un seul son, POST /play-sequence
+"""Options de lecture de POST /play (boucle, effets), POST /stop d'un seul son, POST /play-sequence
 (enchaînements) et leurs garde-fous. Vrai code de server.py et vrai ffmpeg (boucles et effets décodés pour de bon),
 faux objets Discord. Dossier de données isolé (_env.py)."""
 import asyncio
@@ -123,9 +123,9 @@ class VC:
     def is_connected(self): return True
 
 
-def reset(duck=None):
+def reset():
     bot.voice_clients_map = {G1.id: VC()}
-    bot.mixers = {G1.id: A.MixingAudioSource(duck_gain=duck)}
+    bot.mixers = {G1.id: A.MixingAudioSource()}
     bot._pending_steps.clear()
     bot._play_history.clear()
     S.save_guild_settings(G1.id, {**S.DEFAULT_GUILD_SETTINGS})
@@ -192,15 +192,6 @@ async def main():
     await call(bot._handle_play, 20, {"id": "a", "loop": True, "effects": {"speed": 2.0}})
     frames(mixer, 80)
     check("boucle + effets : décodée avec le filtre (1 s à vitesse x2 = 0,5 s, boucle toujours en cours)", mixer.has("a"))
-
-    print("\n--- Sons d'ambiance ---")
-    mixer = reset(duck=0.3)
-    await call(bot._handle_play, 20, {"id": "a", "loop": True, "ambience": True})
-    check("ambiance : marquée dans le mixeur", "a" in mixer._bed)
-    await call(bot._handle_play, 20, {"id": "b"})
-    check("un son normal n'est pas marqué", "b" not in mixer._bed)
-    st, p = await call(bot._handle_play, 20, {"id": "a", "loop": True})
-    check("relancer le même son sans « ambience » retire le marquage", "a" not in mixer._bed)
 
     print("\n--- Effets ---")
     mixer = reset()
@@ -294,19 +285,19 @@ async def main():
     bot._cancel_pending_steps(G1.id)
 
     print("\n--- Réglages et fonctions annoncées ---")
-    check("/status annonce loop, ambience, stop_sound, sequence, play_effects", {"loop", "ambience", "stop_sound", "sequence", "play_effects"} <= set(S.SERVER_FEATURES), S.SERVER_FEATURES)
-    check("réglages par défaut : boucles 30 min, réduction 0,3", S.LOOP_MAX_MINUTES == 30 and S.DUCK_GAIN == 0.3)
+    check("/status annonce loop, stop_sound, sequence, play_effects", {"loop", "stop_sound", "sequence", "play_effects"} <= set(S.SERVER_FEATURES), S.SERVER_FEATURES)
+    check("réglage par défaut : boucles de 30 min au plus", S.LOOP_MAX_MINUTES == 30)
     bad_ok = True
-    for key, values in (("loop_max_minutes", (-1, "x", True, 1000, None)), ("duck_gain", (-0.1, 1.5, "x", True, None))):
+    for key, values in (("loop_max_minutes", (-1, "x", True, 1000, None)),):
         for bad in values:
             try:
                 wb_config.validate_limits({key: bad}); bad_ok = False
             except wb_config.ConfigError:
                 pass
     check("valeurs invalides refusées au démarrage", bad_ok)
-    wb_config.validate_limits({"loop_max_minutes": 0, "duck_gain": 1}); wb_config.validate_limits({"loop_max_minutes": 12.5, "duck_gain": 0})
-    cfg = wb_config.load_config(environ={"WASEBOARD_LOOP_MAX_MINUTES": "10", "WASEBOARD_DUCK_GAIN": "0.5"}, config_path=_env.DATA_DIR / "inexistant.json")
-    check("variables d'environnement WASEBOARD_LOOP_MAX_MINUTES / WASEBOARD_DUCK_GAIN prises en compte", cfg.get("loop_max_minutes") == 10.0 and cfg.get("duck_gain") == 0.5, cfg)
+    wb_config.validate_limits({"loop_max_minutes": 0}); wb_config.validate_limits({"loop_max_minutes": 12.5})
+    cfg = wb_config.load_config(environ={"WASEBOARD_LOOP_MAX_MINUTES": "10"}, config_path=_env.DATA_DIR / "inexistant.json")
+    check("variable d'environnement WASEBOARD_LOOP_MAX_MINUTES prise en compte", cfg.get("loop_max_minutes") == 10.0, cfg)
 
 
 assert S.DATA_DIR == _env.DATA_DIR, f"refus de nettoyer un dossier qui n'est pas celui créé par _env.py : {S.DATA_DIR}"

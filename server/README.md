@@ -390,19 +390,17 @@ et sous forme de variable d'environnement (`WASEBOARD_` + le nom en majuscules, 
 | `max_ffmpeg_processes` | sons joués en même temps, tous serveurs confondus (un processus ffmpeg chacun). |
 | `http_rate_limit_per_min` | requêtes par minute et par adresse IP sur les seules routes publiques ou coûteuses : `/connect/…`, `/oauth/…` (compteur commun) et l'envoi de sons. Les routes utilisées en continu par l'appli (`/activity`, `/status`, `/play`…) ne sont **jamais** freinées. Derrière nginx/Caddy, l'adresse du client est lue dans `X-Forwarded-For` (dernière entrée, celle vue par votre proxy). |
 
-### Boucles, ambiance, effets et enchaînements (API de lecture)
+### Boucles, effets et enchaînements (API de lecture)
 
-Ces options sont annoncées par `/status` dans `features` (`loop`, `ambience`, `stop_sound`, `sequence`, `play_effects`) :
+Ces options sont annoncées par `/status` dans `features` (`loop`, `stop_sound`, `sequence`, `play_effects`) :
 un client ne les propose que si le serveur les gère, et un ancien client les ignore.
 
 | Réglage | Effet |
 |---|---|
 | `loop_max_minutes` | durée maximale d'une boucle avant arrêt automatique. **30 par défaut**, 0 = boucles désactivées. Le son doit tenir en mémoire une fois décodé (~170 s). |
-| `duck_gain` | niveau (0 à 1) auquel descendent les sons d'ambiance quand un autre son joue. **0,3 par défaut**, 1 = pas de réduction. |
 
 `POST /play` accepte en plus de `id`, `volume` et `guild_id` : `"loop": true` (le son recommence sans coupure jusqu'à un
-arrêt), `"ambience": true` (le son baisse automatiquement quand un autre son joue, puis remonte en 500 ms) et
-`"effects": {"pitch": -12..12 (demi-tons), "speed": 0.5..2, "bass": 0..15 (dB), "echo": true | 0..1}`. Un effet inconnu ou une
+arrêt) et `"effects": {"pitch": -12..12 (demi-tons), "speed": 0.5..2, "bass": 0..15 (dB), "echo": true | 0..1}`. Un effet inconnu ou une
 valeur hors limites est refusé (400) sans rien lancer. `POST /stop` avec `{"sound_id": "…"}` coupe ce seul son (la
 réponse indique `stopped`) ; sans `sound_id` il coupe tout, y compris les étapes d'enchaînement pas encore parties.
 `POST /play-sequence` lance jusqu'à 8 sons d'un seul appel : `{"steps": [{"id", "delay_ms"?, "after_end"?, "volume"?,

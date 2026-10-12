@@ -1,5 +1,5 @@
-"""Moteur audio (audio.py) : limiteur doux, boucle sans coupure, plafond de durée, arrêt d'un seul son, réduction
-automatique (ducking) des sons d'ambiance, et fin de lecture de plusieurs sons de durées différentes.
+"""Moteur audio (audio.py) : limiteur doux, boucle sans coupure, plafond de durée, arrêt d'un seul son
+et fin de lecture de plusieurs sons de durées différentes.
 Vrai code, fausses sources de trames : ni ffmpeg ni Discord. Dossier de données isolé (_env.py)."""
 import sys
 
@@ -120,42 +120,11 @@ print("\n--- Arrêt d'un seul son ---")
 ended = []
 a, b = Const(5000), Const(3000)
 m = A.MixingAudioSource()
-m.add("a", a, on_finish=lambda: ended.append("a")); m.add("b", b, on_finish=lambda: ended.append("b"), bed=True)
+m.add("a", a, on_finish=lambda: ended.append("a")); m.add("b", b, on_finish=lambda: ended.append("b"))
 check("stop(a) : renvoie True, le son est nettoyé et son callback appelé", m.stop("a") is True and a.cleaned and ended == ["a"])
 check("les autres sons continuent", m.has("b") and not m.has("a") and first_sample(m.read()) == 3000)
 check("stop d'un son absent : False, rien ne bouge", m.stop("zzz") is False and m.has("b"))
-check("stop retire aussi le marquage d'ambiance", "b" not in m._bed or (m.stop("b") and "b" not in m._bed))
-m.add("x", Const(1), bed=True); m.add("x", Const(1), bed=False)
-check("rejouer un son comme son normal retire son marquage d'ambiance", "x" not in m._bed)
-
-# ------------------------------------------------------------------ ducking
-print("\n--- Sons d'ambiance : réduction automatique ---")
-m = A.MixingAudioSource(duck_gain=0.3)
-m.add("pluie", Const(10000), bed=True)
-check("l'ambiance seule joue à son niveau normal", all(first_sample(m.read()) == 10000 for _ in range(5)))
-m.add("bruit", Const(5000, 10))
-levels = [first_sample(m.read()) for _ in range(10)]
-bed_levels = [v - 5000 for v in levels]
-check("un autre son arrive : l'ambiance descend en 2 trames (40 ms)", bed_levels[0] == 6500 and bed_levels[1] == 3000, bed_levels[:3])
-check("puis reste réduite tant que l'autre son joue", all(v == 3000 for v in bed_levels[1:]), bed_levels)
-after = [first_sample(m.read()) for _ in range(30)]
-check("à la fin de l'autre son, l'ambiance remonte progressivement (jamais de saut)", after[0] > 3000 and after[0] < 4000 and after == sorted(after), after[:5])
-check("et retrouve exactement son niveau normal au bout de 500 ms", after[-1] == 10000 and after[24] == 10000, (after[23], after[24]))
-m = A.MixingAudioSource(duck_gain=0.3)
-m.add("pluie", Const(10000), bed=True); m.add("vent", Const(8000), bed=True)
-check("deux ambiances ensemble : aucune réduction (rien ne les couvre)", first_sample(m.read()) == 18000)
-m = A.MixingAudioSource(duck_gain=0.3)
-m.add("a", Const(6000)); m.add("b", Const(6000))
-check("deux sons normaux : aucune réduction", first_sample(m.read()) == 12000)
-m = A.MixingAudioSource(duck_gain=1.0)
-m.add("pluie", Const(10000), bed=True); m.add("bruit", Const(5000))
-check("duck_gain = 1 : réduction désactivée", all(first_sample(m.read()) == 15000 for _ in range(4)))
-m = A.MixingAudioSource(duck_gain=0.0)
-m.add("pluie", Const(10000), bed=True); m.add("bruit", Const(5000))
-for _ in range(3):
-    m.read()
-check("duck_gain = 0 : l'ambiance se tait complètement pendant l'autre son", first_sample(m.read()) == 5000)
-check("réglage par défaut : 0,3 (lu depuis la configuration)", S.DUCK_GAIN == 0.3 and A.DUCK_GAIN == S.DUCK_GAIN, (S.DUCK_GAIN, A.DUCK_GAIN))
+check("on peut arrêter les sons un à un jusqu'au silence", m.stop("b") is True and m.count() == 0 and m.read() == A.SILENCE)
 
 print()
 print(f"{sum(results)}/{len(results)} vérifications OK")
