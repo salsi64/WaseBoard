@@ -17,6 +17,8 @@
   "voice_idle_sleep_s": 0,
   "pcm_cache_mb": 0,
   "session_max_idle_days": 90,
+  "loop_max_minutes": 30,
+  "duck_gain": 0.3,
   "default_guild_limits": {},
   "guild_limit_ceilings": {}
 }

@@ -13,6 +13,7 @@ import html
 import ipaddress
 import json
 import logging
+import math
 import os
 import secrets
 import shutil
@@ -25,6 +26,7 @@ from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 from urllib.parse import quote
 
@@ -36,6 +38,7 @@ from aiohttp import web
 
 import audio
 import diagnostics
+import effects
 # Le code audio vit dans audio.py ; ces noms restent importables depuis server (les tests lisent S.SILENCE, S.FRAME_BYTES…).
 from audio import (FRAME_BYTES, PCM_BYTES_PER_MS, RTP_CLOCK_HZ, SILENCE, MixingAudioSource, PCMBufferSource,
                    PCMCache, decode_to_pcm)
@@ -113,6 +116,16 @@ PCM_CACHE_MB: float = CONFIG.get("pcm_cache_mb", 0)
 # Jours d'inactivité au bout desquels une session de connexion Discord est supprimée (0 = jamais) : une personne
 # qui n'ouvre plus l'appli ne laisse pas ses jetons Discord sur le serveur indéfiniment.
 SESSION_MAX_IDLE_DAYS: float = CONFIG.get("session_max_idle_days", 90)
+# Boucles (un son qui recommence tant qu'on ne l'arrête pas) : durée maximale en minutes avant arrêt automatique ;
+# 0 = boucles désactivées. Le son doit tenir en mémoire une fois décodé (LOOP_MAX_BYTES).
+LOOP_MAX_MINUTES: float = CONFIG.get("loop_max_minutes", 30)
+# Niveau (0 à 1) des sons « d'ambiance » quand un autre son joue ; 1 = pas de réduction automatique.
+DUCK_GAIN: float = CONFIG.get("duck_gain", 0.3)
+audio.DUCK_GAIN = DUCK_GAIN  # lu par MixingAudioSource (module audio)
+LOOP_MAX_BYTES = 32 * 1024 * 1024  # un son plus long (~170 s décodé) ne peut pas tourner en boucle
+SEQUENCE_MAX_STEPS = 8           # sons dans un enchaînement
+SEQUENCE_MAX_DELAY_MS = 10_000   # attente maximale avant UNE étape
+SEQUENCE_MAX_SPAN_MS = 60_000    # délai total maximal avant la dernière étape
 # Réglages imposés par l'hébergeur aux guildes : valeurs PAR DÉFAUT de celles qui n'ont encore rien enregistré
 # (leurs admins peuvent les modifier) et PLAFONDS (que leurs admins ne peuvent pas dépasser ; « illimité » n'est alors
 # plus permis pour ce réglage). Clés possibles : voir wb_config.GUILD_LIMIT_KEYS.
@@ -131,7 +144,7 @@ SERVER_VERSION = "3.4.0-dev"
 
 #: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
 #: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).
-SERVER_FEATURES = ["replace_file"]
+SERVER_FEATURES = ["replace_file", "ambience", "stop_sound", "sequence", "play_effects"] + (["loop"] if LOOP_MAX_MINUTES > 0 else [])
 
 # Filet de sécurité seulement : l'activité est normalement effacée précisément à la fin
 # réelle du son (voir MixingAudioSource.on_finish), pas après un délai fixe. Cette valeur ne
@@ -998,6 +1011,8 @@ class WaseBoardServer(commands.Bot):
         self._trash_purge_task: Optional[asyncio.Task] = None
         # Anti-spam à la lecture : (guild_id, user_id) -> horodatages (monotonic) des lectures récentes
         self._play_history: dict[tuple[int, str], deque] = {}
+        # Étapes d'enchaînement programmées mais pas encore parties : guild_id -> {TimerHandle: id du son}.
+        self._pending_steps: dict[int, dict] = {}
 
     async def setup_hook(self) -> None:
         self.http_session = aiohttp.ClientSession()
@@ -1465,12 +1480,13 @@ class WaseBoardServer(commands.Bot):
 
     # ---------- Activité (highlight + avatars partagés) & présence ----------
 
-    def record_activity(self, sound_id: str, user_id: str, username: Optional[str], avatar_url: Optional[str], guild_id: int) -> None:
+    def record_activity(self, sound_id: str, user_id: str, username: Optional[str], avatar_url: Optional[str], guild_id: int,
+                        ttl: Optional[float] = None) -> None:
         with self._activity_lock:
             self.active_plays.setdefault(sound_id, {})[user_id] = {
                 "username": username or "?",
                 "avatar_url": avatar_url or "",
-                "expires_at": time.time() + ACTIVITY_TTL_SECONDS,
+                "expires_at": time.time() + (ACTIVITY_TTL_SECONDS if ttl is None else ttl),
                 "guild_id": guild_id,
             }
 
@@ -1531,6 +1547,7 @@ class WaseBoardServer(commands.Bot):
         app.router.add_delete("/sounds/{id}", self._handle_delete_sound)
         app.router.add_post("/play", self._handle_play)
         app.router.add_post("/stop", self._handle_stop_all)
+        app.router.add_post("/play-sequence", self._handle_play_sequence)
         app.router.add_post("/join-my-channel", self._handle_join_my_channel)
         app.router.add_get("/status", self._handle_status)
         app.router.add_get("/health", self._handle_health)  # publique et minimale : sonde Docker/Caddy/supervision
@@ -1627,6 +1644,51 @@ class WaseBoardServer(commands.Bot):
             if key is not None:
                 self._schedule_pcm_load(key, file_path)
         return discord.PCMVolumeTransformer(source, volume=min(max(volume, 0.0), 2.0)), kind
+
+    @staticmethod
+    def _effect_stream_options(entry: dict, audio_filter: str):
+        """(before_options, options) de FFmpegPCMAudio pour un son AVEC effets : la portion gardée est découpée à l'ENTRÉE
+        (-ss/-t avant -i), de sorte que les filtres — dont la vitesse, qui change la durée — s'appliquent à la bonne portion."""
+        start, end = entry.get("trim_start_ms"), entry.get("trim_end_ms")
+        trimmed = isinstance(start, int) and isinstance(end, int) and end > start
+        before = f"-ss {start / 1000:.3f} -t {(end - start) / 1000:.3f}" if trimmed else None
+        return before, f'-af "{audio_filter}"'
+
+    async def _build_play_source(self, sound_id: str, entry: dict, file_path: Path, volume: float, *,
+                                 loop: bool = False, effects_: Optional[dict] = None):
+        """La source audio d'une lecture : le chemin rapide d'un clic simple (_make_play_source : mémoire, sinon ffmpeg),
+        avec effets (ffmpeg et filtres, sans passer par le cache), ou en boucle (son décodé en mémoire qui recommence sans
+        coupure, durée plafonnée par loop_max_minutes). Lève ValueError, avec un message lisible, si la boucle est impossible."""
+        audio_filter = effects.build_audio_filter(effects_)
+        if loop:
+            return await self._build_loop_source(sound_id, entry, file_path, volume, audio_filter)
+        if audio_filter:
+            before, options = self._effect_stream_options(entry, audio_filter)
+            source = discord.FFmpegPCMAudio(str(file_path), before_options=before, options=options)
+            return discord.PCMVolumeTransformer(source, volume=volume), "effets"
+        return self._make_play_source(sound_id, entry, file_path, volume)
+
+    async def _build_loop_source(self, sound_id: str, entry: dict, file_path: Path, volume: float, audio_filter: Optional[str]):
+        start, end = entry.get("trim_start_ms"), entry.get("trim_end_ms")
+        trimmed = isinstance(start, int) and isinstance(end, int) and end > start
+
+        buffer, slice_start, slice_end = None, None, None
+        if not audio_filter:
+            key = self._pcm_key(sound_id, file_path) if self.pcm_cache.enabled else None
+            buffer = self.pcm_cache.get(key) if key is not None else None
+            if buffer is not None and trimmed:
+                slice_start, slice_end = start, end
+        if buffer is None:
+            # Pas en mémoire (ou avec effets) : décodage maintenant, dans le fil d'arrière-plan, plafonné à LOOP_MAX_BYTES.
+            buffer = await asyncio.get_running_loop().run_in_executor(
+                self._pcm_executor,
+                lambda: decode_to_pcm(str(file_path), LOOP_MAX_BYTES, start_ms=start if trimmed else None,
+                                      end_ms=end if trimmed else None, audio_filter=audio_filter))
+            if buffer is None:
+                raise ValueError("Ce son est trop long (ou illisible) pour tourner en boucle.")
+
+        source = PCMBufferSource(buffer, slice_start, slice_end, loop=True, max_frames=round(LOOP_MAX_MINUTES * 60 * 50))
+        return discord.PCMVolumeTransformer(source, volume=volume), "boucle"
 
     async def _handle_health(self, request: web.Request) -> web.Response:
         """GET /health : 200 quand le bot est connecté à Discord, 503 tant qu'il démarre (ou s'il est déconnecté).
@@ -2484,23 +2546,26 @@ class WaseBoardServer(commands.Bot):
 
     # ---------- Lecture / arrêt ----------
 
-    async def _handle_play(self, request: web.Request) -> web.Response:
-        started = time.perf_counter()
+    async def _play_context(self, request: web.Request):
+        """Ce que /play et /play-sequence ont en commun : authentification, session, corps JSON, serveur Discord ciblé,
+        appartenance de l'appelant à ce serveur, salon vocal connecté. Renvoie (contexte, None) ou (None, réponse d'erreur)."""
         if not self._check_auth(request):
-            return web.json_response({"error": "unauthorized"}, status=401)
+            return None, web.json_response({"error": "unauthorized"}, status=401)
         session, err = await self._require_session(request)
         if err is not None:
-            return err
+            return None, err
 
         try:
             data = await request.json()
         except Exception:
-            return web.json_response({"error": "corps JSON invalide"}, status=400)
+            return None, web.json_response({"error": "corps JSON invalide"}, status=400)
+        if not isinstance(data, dict):
+            return None, web.json_response({"error": "corps JSON invalide"}, status=400)
 
         user_id = session["user_id"]
         guild_id = self.resolve_guild_id(data.get("guild_id"), user_id)
         if guild_id is None:
-            return web.json_response({
+            return None, web.json_response({
                 "error": "Impossible de déterminer le salon Discord cible : rejoignez un salon "
                          "vocal où le bot est présent (/join), puis réessayez."
             }, status=400)
@@ -2510,7 +2575,7 @@ class WaseBoardServer(commands.Bot):
         # resolve_guild_id) permettrait de faire jouer des sons dans le vocal d'une guilde étrangère.
         visible = await self.resolve_visible_guild_ids(int(user_id))
         if str(guild_id) not in visible:
-            return web.json_response(
+            return None, web.json_response(
                 {"error": "Vous n'êtes pas membre du serveur Discord ciblé."},
                 status=403,
             )
@@ -2518,27 +2583,61 @@ class WaseBoardServer(commands.Bot):
         vc = self.voice_clients_map.get(guild_id)
         mixer = self.mixers.get(guild_id)
         if vc is None or not vc.is_connected() or mixer is None:
-            return web.json_response({"error": "Le bot n'est connecté à aucun salon vocal sur ce serveur (utilisez /join)."}, status=409)
+            return None, web.json_response({"error": "Le bot n'est connecté à aucun salon vocal sur ce serveur (utilisez /join)."}, status=409)
 
-        sound_id = data.get("id")
-        volume = float(data.get("volume", 1.0))
+        return SimpleNamespace(data=data, user_id=user_id, guild_id=guild_id, visible=visible, mixer=mixer), None
 
+    def _locate_sound(self, sound_id, visible: set):
+        """(entrée du catalogue, chemin du fichier, None) ou (None, None, réponse d'erreur) pour un son demandé à la lecture."""
         entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
         if entry is None:
-            return web.json_response({"error": f"son introuvable : {sound_id}"}, status=404)
+            return None, None, web.json_response({"error": f"son introuvable : {sound_id}"}, status=404)
 
         # Visibilité du son sur TOUTES les guildes de l'utilisateur (`visible`, calculé plus haut),
         # pas seulement celle où il se trouve en vocal : un membre de plusieurs guildes peut jouer
         # n'importe lequel de ses sons dans le salon où il est, sans partage explicite préalable.
         if not self.sound_visible_to(entry, visible):
-            return web.json_response(
+            return None, None, web.json_response(
                 {"error": "Ce son n'appartient à aucune de vos guildes Discord connues."},
                 status=403,
             )
 
         file_path = SOUNDS_DIR / f"{sound_id}{entry['extension']}"
         if not file_path.exists():
-            return web.json_response({"error": "fichier manquant sur le serveur"}, status=404)
+            return None, None, web.json_response({"error": "fichier manquant sur le serveur"}, status=404)
+        return entry, file_path, None
+
+    @staticmethod
+    def _parse_volume(raw) -> float:
+        try:
+            volume = float(1.0 if raw is None else raw)
+        except (TypeError, ValueError):
+            raise ValueError("« volume » doit être un nombre.")
+        if not math.isfinite(volume):
+            raise ValueError("« volume » doit être un nombre.")
+        return min(max(volume, 0.0), 2.0)
+
+    async def _handle_play(self, request: web.Request) -> web.Response:
+        started = time.perf_counter()
+        ctx, err = await self._play_context(request)
+        if err is not None:
+            return err
+        data, user_id, guild_id, mixer = ctx.data, ctx.user_id, ctx.guild_id, ctx.mixer
+
+        sound_id = data.get("id")
+        entry, file_path, err = self._locate_sound(sound_id, ctx.visible)
+        if err is not None:
+            return err
+
+        # Options facultatives (voir SERVER_FEATURES) : volume, boucle, son d'ambiance, effets.
+        try:
+            volume = self._parse_volume(data.get("volume"))
+            effects_ = effects.parse_effects(data.get("effects"))
+        except ValueError as ex:
+            return web.json_response({"error": str(ex)}, status=400)
+        loop_requested = bool(data.get("loop"))
+        if loop_requested and LOOP_MAX_MINUTES <= 0:
+            return web.json_response({"error": "Les boucles sont désactivées sur ce serveur."}, status=400)
 
         # Plafonds de ressources de l'hébergeur : vérifiés AVANT l'anti-spam (un refus ne doit pas compter dans le quota).
         capacity_error = self._play_capacity_error(sound_id, guild_id, mixer)
@@ -2557,7 +2656,10 @@ class WaseBoardServer(commands.Bot):
         # On AJOUTE au mixeur plutôt que de remplacer la lecture en cours : plusieurs sons
         # (déclenchés par le même utilisateur ou des utilisateurs différents) se superposent
         # au lieu de s'annuler mutuellement.
-        source, kind = self._make_play_source(sound_id, entry, file_path, volume)
+        try:
+            source, kind = await self._build_play_source(sound_id, entry, file_path, volume, loop=loop_requested, effects_=effects_)
+        except ValueError as ex:
+            return web.json_response({"error": str(ex)}, status=400)
 
         # Le son part D'ABORD ; la résolution du membre Discord (highlight/avatar) — un appel
         # réseau si non déjà en cache — se fait ENSUITE en tâche de fond, pour ne jamais
@@ -2565,20 +2667,131 @@ class WaseBoardServer(commands.Bot):
         str_user_id = str(user_id) if user_id else None
         on_finish = (lambda: self.clear_activity(sound_id, str_user_id)) if str_user_id else None
 
-        mixer.add(sound_id, source, on_finish=on_finish)
+        mixer.add(sound_id, source, on_finish=on_finish, bed=bool(data.get("ambience")))
         elapsed_ms = round((time.perf_counter() - started) * 1000)
         log.info("Lecture « %s » (%s) : %d ms de traitement.", entry.get("name", sound_id), kind, elapsed_ms)
 
         if str_user_id:
-            asyncio.create_task(self._record_play_activity(sound_id, str_user_id, guild_id))
+            # Une boucle dure jusqu'à son arrêt : son highlight aussi (le filet de 30 s habituel l'éteindrait trop tôt).
+            ttl = LOOP_MAX_MINUTES * 60 + 5 if loop_requested else None
+            asyncio.create_task(self._record_play_activity(sound_id, str_user_id, guild_id, ttl))
 
         # « ms » : temps passé côté serveur entre la réception de la requête et l'ajout au mixeur (le client le
         # compare à sa propre mesure pour séparer réseau et traitement, voir la page Diagnostic).
         return web.json_response({"status": "ok", "ms": elapsed_ms})
 
-    def _check_play_rate(self, guild_id: int, user_id: str) -> Optional[int]:
-        """Anti-spam à la lecture : None si ce son peut partir (et le comptabilise), sinon le
-        nombre de secondes à attendre. Fenêtre glissante de 60 s par (guilde, utilisateur) ;
+    async def _handle_play_sequence(self, request: web.Request) -> web.Response:
+        """POST /play-sequence : une suite de sons lancée d'un seul appel (« enchaînement »). Corps :
+        {"steps": [{"id", "delay_ms"?, "after_end"?, "volume"?, "effects"?}, ...]}. delay_ms : attente avant ce son, comptée
+        depuis le DÉBUT du son précédent (ou depuis sa FIN si after_end est vrai) ; pour le premier, depuis maintenant.
+        Chaque étape est soumise aux mêmes contrôles (visibilité, quotas) qu'un /play isolé, le tout validé AVANT que
+        quoi que ce soit ne parte : une séquence est acceptée en entier ou refusée en entier."""
+        started = time.perf_counter()
+        ctx, err = await self._play_context(request)
+        if err is not None:
+            return err
+        data, user_id, guild_id, mixer = ctx.data, ctx.user_id, ctx.guild_id, ctx.mixer
+
+        raw_steps = data.get("steps")
+        if not isinstance(raw_steps, list) or not 1 <= len(raw_steps) <= SEQUENCE_MAX_STEPS:
+            return web.json_response({"error": f"« steps » doit contenir de 1 à {SEQUENCE_MAX_STEPS} sons."}, status=400)
+
+        steps = []
+        offset_ms = 0
+        previous_duration_ms = 0
+        for index, raw in enumerate(raw_steps, start=1):
+            if not isinstance(raw, dict):
+                return web.json_response({"error": f"Étape {index} : un objet est attendu."}, status=400)
+            entry, file_path, err = self._locate_sound(raw.get("id"), ctx.visible)
+            if err is not None:
+                return err
+            try:
+                delay_ms = raw.get("delay_ms", 0)
+                if isinstance(delay_ms, bool) or not isinstance(delay_ms, (int, float)) or not 0 <= delay_ms <= SEQUENCE_MAX_DELAY_MS:
+                    raise ValueError(f"« delay_ms » doit être un nombre de 0 à {SEQUENCE_MAX_DELAY_MS}.")
+                volume = self._parse_volume(raw.get("volume"))
+                effects_ = effects.parse_effects(raw.get("effects"))
+            except ValueError as ex:
+                return web.json_response({"error": f"Étape {index} : {ex}"}, status=400)
+
+            if index > 1:
+                offset_ms += previous_duration_ms if raw.get("after_end") else 0
+            offset_ms += int(delay_ms)
+            if offset_ms > SEQUENCE_MAX_SPAN_MS:
+                return web.json_response({"error": f"Séquence trop longue (plus de {SEQUENCE_MAX_SPAN_MS // 1000} s avant la dernière étape)."}, status=400)
+
+            next_raw = raw_steps[index] if index < len(raw_steps) else None
+            needs_end = isinstance(next_raw, dict) and bool(next_raw.get("after_end"))
+            previous_duration_ms = await self._played_duration_ms(entry, file_path, effects_) if needs_end else 0
+            steps.append((offset_ms, entry, file_path, volume, effects_))
+
+        retry_after = self._check_play_rate(guild_id, str(user_id), count=len(steps))
+        if retry_after is not None:
+            return web.json_response({
+                "error": f"Trop de sons envoyés : réessayez dans {retry_after} s.",
+                "retry_after": retry_after,
+            }, status=429)
+
+        loop = asyncio.get_running_loop()
+        pending = self._pending_steps.setdefault(guild_id, {})
+        for step_offset, entry, file_path, volume, effects_ in steps:
+            if step_offset <= 0:
+                await self._play_step(guild_id, str(user_id), entry, file_path, volume, effects_)
+                continue
+            handle_box: list = []
+
+            def fire(step=(entry, file_path, volume, effects_), box=handle_box):
+                pending.pop(box[0], None)
+                asyncio.ensure_future(self._play_step(guild_id, str(user_id), *step))
+
+            handle = loop.call_later(step_offset / 1000, fire)
+            handle_box.append(handle)
+            pending[handle] = entry["id"]
+
+        return web.json_response({"status": "ok", "steps": len(steps), "ms": round((time.perf_counter() - started) * 1000)})
+
+    async def _played_duration_ms(self, entry: dict, file_path: Path, effects_: Optional[dict]) -> int:
+        """Durée jouée d'un son (portion gardée, vitesse comprise), pour enchaîner « après la fin » : le catalogue ne
+        garde pas la durée, on la lit avec ffprobe quand une étape suivante en a besoin."""
+        start, end = entry.get("trim_start_ms"), entry.get("trim_end_ms")
+        if isinstance(start, int) and isinstance(end, int) and end > start:
+            duration_ms = end - start
+        else:
+            seconds = await probe_duration_seconds(file_path)
+            duration_ms = round((seconds or 0) * 1000)
+        speed = (effects_ or {}).get("speed") or 1.0
+        return round(duration_ms / speed)
+
+    async def _play_step(self, guild_id: int, user_id: str, entry: dict, file_path: Path, volume: float, effects_: Optional[dict]) -> None:
+        """Lance une étape d'enchaînement (tout a déjà été validé) : le salon peut avoir changé depuis, donc on revérifie."""
+        try:
+            mixer, vc = self.mixers.get(guild_id), self.voice_clients_map.get(guild_id)
+            if mixer is None or vc is None or not vc.is_connected():
+                return
+            sound_id = entry["id"]
+            if self._play_capacity_error(sound_id, guild_id, mixer) is not None:
+                return
+            source, kind = await self._build_play_source(sound_id, entry, file_path, volume, effects_=effects_)
+            mixer.add(sound_id, source, on_finish=lambda: self.clear_activity(sound_id, user_id))
+            log.info("Enchaînement : « %s » (%s).", entry.get("name", sound_id), kind)
+            asyncio.create_task(self._record_play_activity(sound_id, user_id, guild_id))
+        except Exception:
+            log.exception("Échec d'une étape d'enchaînement")
+
+    def _cancel_pending_steps(self, guild_id: int, sound_id: Optional[str] = None) -> int:
+        """Annule les étapes d'enchaînement pas encore parties (toutes, ou celles d'un son) ; renvoie leur nombre."""
+        pending = self._pending_steps.get(guild_id, {})
+        cancelled = 0
+        for handle, step_sound in list(pending.items()):
+            if sound_id is None or step_sound == sound_id:
+                handle.cancel()
+                del pending[handle]
+                cancelled += 1
+        return cancelled
+
+    def _check_play_rate(self, guild_id: int, user_id: str, count: int = 1) -> Optional[int]:
+        """Anti-spam à la lecture : None si ce son (ou ces `count` sons d'un enchaînement) peut partir (et le
+        comptabilise), sinon le nombre de secondes à attendre. Fenêtre glissante de 60 s par (guilde, utilisateur) ;
         limite à 0 = désactivé ; admins de la guilde exemptés."""
         settings = get_guild_settings(guild_id)
         limit = settings["play_rate_per_min"]
@@ -2594,25 +2807,27 @@ class WaseBoardServer(commands.Bot):
         history = self._play_history.setdefault((guild_id, user_id), deque())
         while history and now - history[0] >= 60:
             history.popleft()
-        if len(history) >= limit:
-            return max(1, int(60 - (now - history[0]) + 0.999))
-        history.append(now)
+        if len(history) + count > limit:
+            return max(1, int(60 - (now - history[0]) + 0.999)) if history else 60
+        history.extend([now] * count)
         return None
 
-    async def _record_play_activity(self, sound_id: str, user_id: str, guild_id: int) -> None:
+    async def _record_play_activity(self, sound_id: str, user_id: str, guild_id: int, ttl: Optional[float] = None) -> None:
         """Résout le membre et enregistre l'activité partagée (highlight/avatar) en arrière-plan,
-        après que le son a déjà été lancé — voir _handle_play."""
+        après que le son a déjà été lancé — voir _handle_play. `ttl` : durée du highlight (boucle)."""
         try:
             member = await self.find_member_async(int(user_id)) if user_id.isdigit() else None
             username = member.display_name if member else None
             avatar_url = str(member.display_avatar.url) if member else None
-            self.record_activity(sound_id, user_id, username, avatar_url, guild_id)
+            self.record_activity(sound_id, user_id, username, avatar_url, guild_id, ttl)
             guild = self.get_guild(guild_id)
             record_play_stat(sound_id, user_id, username, avatar_url, guild_id, guild.name if guild else None)
         except Exception:
             log.exception("Échec de l'enregistrement d'activité en arrière-plan")
 
     async def _handle_stop_all(self, request: web.Request) -> web.Response:
+        """POST /stop : coupe tous les sons du salon ; avec {"sound_id": ...} dans le corps, coupe seulement ce son
+        (typiquement une boucle) — les autres continuent. Annule aussi les étapes d'enchaînement pas encore parties."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
         session, err = await self._require_session(request)
@@ -2622,6 +2837,8 @@ class WaseBoardServer(commands.Bot):
         try:
             data = await request.json()
         except Exception:
+            data = {}
+        if not isinstance(data, dict):
             data = {}
 
         guild_id = self.resolve_guild_id(data.get("guild_id"), session["user_id"])
@@ -2637,6 +2854,12 @@ class WaseBoardServer(commands.Bot):
         if mixer is None:
             return web.json_response({"error": "Le bot n'est connecté à aucun salon vocal sur ce serveur."}, status=409)
 
+        sound_id = data.get("sound_id")
+        if isinstance(sound_id, str) and sound_id:
+            self._cancel_pending_steps(guild_id, sound_id)
+            return web.json_response({"status": "ok", "stopped": mixer.stop(sound_id)})
+
+        self._cancel_pending_steps(guild_id)
         mixer.clear()  # déclenche aussi les callbacks on_finish : l'activité est effacée immédiatement
         return web.json_response({"status": "ok"})
 

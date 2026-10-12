@@ -64,6 +64,8 @@ ENV_OVERRIDES: dict[str, tuple[str, Callable]] = {
     "voice_idle_sleep_s": ("WASEBOARD_VOICE_IDLE_SLEEP_S", float),
     "pcm_cache_mb": ("WASEBOARD_PCM_CACHE_MB", float),
     "session_max_idle_days": ("WASEBOARD_SESSION_MAX_IDLE_DAYS", float),
+    "loop_max_minutes": ("WASEBOARD_LOOP_MAX_MINUTES", float),
+    "duck_gain": ("WASEBOARD_DUCK_GAIN", float),
     "default_guild_limits": ("WASEBOARD_DEFAULT_GUILD_LIMITS", _json_object),
     "guild_limit_ceilings": ("WASEBOARD_GUILD_LIMIT_CEILINGS", _json_object),
 }
@@ -82,6 +84,14 @@ def validate_limits(config: dict) -> None:
         value = config["voice_idle_sleep_s"]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 3600:
             raise ConfigError(f"voice_idle_sleep_s doit être un nombre de secondes entre 0 (jamais) et 3600, pas {value!r}.")
+    if "loop_max_minutes" in config:
+        value = config["loop_max_minutes"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 720:
+            raise ConfigError(f"loop_max_minutes doit être un nombre de minutes entre 0 (boucles désactivées) et 720, pas {value!r}.")
+    if "duck_gain" in config:
+        value = config["duck_gain"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+            raise ConfigError(f"duck_gain doit être un nombre entre 0 (silence) et 1 (pas de réduction), pas {value!r}.")
     if "session_max_idle_days" in config:
         value = config["session_max_idle_days"]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 3650:

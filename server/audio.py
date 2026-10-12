@@ -1,7 +1,7 @@
 """Audio du serveur : décodage des sons, cache de sons décodés en mémoire et mixeur persistant d'un salon vocal.
 
-Extrait de server.py sans changement de comportement. Ce module ne lit aucune configuration : server.py règle
-`VOICE_IDLE_SLEEP_S` (réglage `voice_idle_sleep_s`) après avoir chargé config.json.
+Ce module ne lit aucune configuration : server.py règle `VOICE_IDLE_SLEEP_S` (réglage `voice_idle_sleep_s`) et
+`DUCK_GAIN` (réglage `duck_gain`) après avoir chargé config.json.
 """
 import logging
 import os
@@ -18,20 +18,52 @@ log = logging.getLogger("waseboard-server")
 
 # Format attendu par discord.py pour une frame audio : 20ms de PCM stéréo 16 bits @ 48kHz.
 FRAME_BYTES = 3840
+FRAME_SAMPLES = FRAME_BYTES // 2
 SILENCE = b"\x00" * FRAME_BYTES
 RTP_CLOCK_HZ = 48000  # horloge RTP de l'audio Discord (Opus 48 kHz) : l'horodatage d'un paquet avance de 960 par trame de 20 ms
 
 #: Secondes sans aucun son avant que le bot cesse d'émettre (0 = flux continu). Réglé par server.py depuis la config.
 VOICE_IDLE_SLEEP_S: float = 0
 
+#: Niveau (0 à 1) auquel descendent les sons « d'ambiance » quand un autre son joue ; 1 = pas de réduction. Réglé par
+#: server.py depuis la config (duck_gain).
+DUCK_GAIN: float = 0.3
+DUCK_ATTACK_FRAMES = 2     # la réduction s'installe en 2 trames (40 ms) : assez vite pour ne pas couvrir le son qui arrive
+DUCK_RELEASE_FRAMES = 25   # le retour au niveau normal prend 500 ms : pas de « pompage » audible entre deux sons rapprochés
+
 PCM_BYTES_PER_MS = RTP_CLOCK_HZ * 2 * 2 // 1000  # s16le, 48 kHz, stéréo : 192 octets par milliseconde
 
+# Limiteur doux : en dessous du genou le signal est laissé tel quel (un son seul, ou un mélange raisonnable, n'est jamais
+# modifié) ; au-delà il est comprimé en douceur (tangente hyperbolique) et ne dépasse jamais la pleine échelle.
+_LIMITER_KNEE = 0.85 * 32767.0
+_LIMITER_SPAN = 32767.0 - _LIMITER_KNEE
 
-def decode_to_pcm(path: str, limit_bytes: int) -> Optional[bytes]:
-    """Décode tout un fichier audio en PCM s16le 48 kHz stéréo (exactement ce que produit FFmpegPCMAudio), avec la
-    priorité la plus basse. None si le son dépasse `limit_bytes` une fois décodé ou si ffmpeg échoue : l'appelant le
-    lira alors en flux, comme avant. Bloquant : à appeler depuis un fil, jamais depuis la boucle d'évènements."""
-    cmd = ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", path, "-f", "s16le", "-ar", "48000", "-ac", "2", "pipe:1"]
+
+def soft_limit(samples: np.ndarray) -> np.ndarray:
+    """Échantillons (somme de plusieurs sons, en virgule flottante) -> int16 sans écrêtage dur. Identité tant que
+    |x| <= 85 % de la pleine échelle, puis compression douce qui tend vers la pleine échelle sans jamais la dépasser."""
+    x = np.array(samples, dtype=np.float32, copy=True)
+    magnitude = np.abs(x)
+    over = magnitude > _LIMITER_KNEE
+    if over.any():
+        x[over] = np.sign(x[over]) * (_LIMITER_KNEE + _LIMITER_SPAN * np.tanh((magnitude[over] - _LIMITER_KNEE) / _LIMITER_SPAN))
+    return np.clip(np.rint(x), -32768, 32767).astype(np.int16)
+
+
+def decode_to_pcm(path: str, limit_bytes: int, *, start_ms: Optional[int] = None, end_ms: Optional[int] = None,
+                  audio_filter: Optional[str] = None) -> Optional[bytes]:
+    """Décode un fichier audio en PCM s16le 48 kHz stéréo (exactement ce que produit FFmpegPCMAudio), avec la priorité
+    la plus basse. `start_ms`/`end_ms` ne décodent que cette portion ; `audio_filter` applique une chaîne de filtres
+    ffmpeg (effets, voir effects.py). None si le son dépasse `limit_bytes` une fois décodé ou si ffmpeg échoue :
+    l'appelant le lira alors en flux, comme avant. Bloquant : à appeler depuis un fil, jamais depuis la boucle
+    d'évènements."""
+    cmd = ["ffmpeg", "-nostdin", "-loglevel", "error"]
+    if start_ms is not None and end_ms is not None and end_ms > start_ms:
+        cmd += ["-ss", f"{start_ms / 1000:.3f}", "-t", f"{(end_ms - start_ms) / 1000:.3f}"]
+    cmd += ["-i", path]
+    if audio_filter:
+        cmd += ["-af", audio_filter]
+    cmd += ["-f", "s16le", "-ar", "48000", "-ac", "2", "pipe:1"]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                             preexec_fn=(lambda: os.nice(10)) if hasattr(os, "nice") else None)
     try:
@@ -117,18 +149,39 @@ class PCMCache:
 
 class PCMBufferSource(discord.AudioSource):
     """Lit un son déjà décodé (voir PCMCache) par trames de 20 ms, sans aucun processus ni attente : le premier échantillon
-    part immédiatement. `start_ms`/`end_ms` = la portion gardée d'un son découpé (le tampon contient le fichier entier)."""
+    part immédiatement. `start_ms`/`end_ms` = la portion gardée d'un son découpé (le tampon contient le fichier entier).
 
-    def __init__(self, buffer: bytes, start_ms: Optional[int] = None, end_ms: Optional[int] = None) -> None:
+    `loop` : le son recommence tout seul à la fin, sans coupure ni silence (la trame de raccord prend la fin puis le début).
+    `max_frames` : nombre maximal de trames de 20 ms lues, après quoi la source se termine (plafond de durée d'une boucle)."""
+
+    def __init__(self, buffer: bytes, start_ms: Optional[int] = None, end_ms: Optional[int] = None,
+                 loop: bool = False, max_frames: Optional[int] = None) -> None:
         begin = 0 if start_ms is None else min(len(buffer), start_ms * PCM_BYTES_PER_MS // 4 * 4)
         end = len(buffer) if end_ms is None else min(len(buffer), end_ms * PCM_BYTES_PER_MS // 4 * 4)
         self._view = memoryview(buffer)[begin:max(begin, end)]
         self._pos = 0
+        self._loop = loop and len(self._view) >= 4
+        self._max_frames = max_frames
+        self._frames = 0
 
     def read(self) -> bytes:
-        chunk = self._view[self._pos:self._pos + FRAME_BYTES]
-        self._pos += FRAME_BYTES
-        return bytes(chunk)
+        if self._max_frames is not None and self._frames >= self._max_frames:
+            return b""
+        self._frames += 1
+        view = self._view
+        if not self._loop:
+            chunk = view[self._pos:self._pos + FRAME_BYTES]
+            self._pos += FRAME_BYTES
+            return bytes(chunk)
+
+        out = bytearray()
+        while len(out) < FRAME_BYTES:
+            take = min(FRAME_BYTES - len(out), len(view) - self._pos)
+            out += view[self._pos:self._pos + take]
+            self._pos += take
+            if self._pos >= len(view):
+                self._pos = 0
+        return bytes(out)
 
     def is_opus(self) -> bool:
         return False
@@ -147,6 +200,12 @@ class MixingAudioSource(discord.AudioSource):
     Le callback "on_finish" optionnel se déclenche à la fin réelle du son (ou à son remplacement),
     utilisé pour effacer le highlight partagé au bon moment.
 
+    Mélange : les sons sont additionnés puis passés dans un limiteur doux (soft_limit) : un son seul n'est jamais
+    modifié, un mélange trop fort est comprimé en douceur au lieu d'être écrêté.
+
+    Sons « d'ambiance » (add(..., bed=True)) : une boucle de fond (pluie, musique) qui baisse automatiquement (DUCK_GAIN)
+    pendant qu'un autre son joue, puis remonte en douceur — voir _next_duck_gain.
+
     Voyant « en train de parler » (facultatif, voice_idle_sleep_s) : par défaut le lecteur ne s'arrête jamais — le
     flux reste continu et le premier son part sans la moindre latence, mais le voyant du bot reste allumé. Si
     voice_idle_sleep_s > 0, le lecteur est mis en PAUSE (le voyant s'éteint, plus aucun paquet audio n'est envoyé) après
@@ -158,12 +217,15 @@ class MixingAudioSource(discord.AudioSource):
     RTP après un silence (voir _sync_rtp_timestamp).
     """
 
-    def __init__(self, idle_sleep_frames: Optional[int] = None) -> None:
+    def __init__(self, idle_sleep_frames: Optional[int] = None, duck_gain: Optional[float] = None) -> None:
         self._entries: dict[str, tuple[discord.AudioSource, Optional[callable]]] = {}
+        self._bed: set[str] = set()  # clés des sons d'ambiance (sous-ensemble de _entries)
         self._lock = threading.Lock()
         self._voice_client = None
         # Trames de 20 ms sans aucun son avant la pause ; 0 = jamais de pause.
         self._sleep_after = round(VOICE_IDLE_SLEEP_S * 50) if idle_sleep_frames is None else idle_sleep_frames
+        self._duck_gain = min(1.0, max(0.0, DUCK_GAIN if duck_gain is None else duck_gain))
+        self._duck_current = 1.0
         self._idle_frames = 0
         self._asleep = False
         self._slept_at = 0.0
@@ -202,10 +264,14 @@ class MixingAudioSource(discord.AudioSource):
             self._idle_frames = 0  # on réessaiera dans 200 ms plutôt qu'à chaque frame
             log.exception("Pause du lecteur vocal impossible")
 
-    def add(self, key: str, source: discord.AudioSource, on_finish: Optional[callable] = None) -> None:
+    def add(self, key: str, source: discord.AudioSource, on_finish: Optional[callable] = None, bed: bool = False) -> None:
         with self._lock:
             previous = self._entries.get(key)
             self._entries[key] = (source, on_finish)
+            if bed:
+                self._bed.add(key)
+            else:
+                self._bed.discard(key)
             self._wake_locked()
         # Coupe l'ancienne instance après avoir publié la nouvelle (jamais de trou pour cette
         # clé), hors du verrou (cleanup/on_finish peuvent être lents).
@@ -230,10 +296,21 @@ class MixingAudioSource(discord.AudioSource):
         with self._lock:
             return key in self._entries
 
+    def stop(self, key: str) -> bool:
+        """Coupe UN son (ex. une boucle) sans toucher aux autres ; déclenche son callback on_finish. False s'il ne jouait pas."""
+        with self._lock:
+            entry = self._entries.pop(key, None)
+            self._bed.discard(key)
+        if entry is None:
+            return False
+        self._finish_entries([entry])
+        return True
+
     def clear(self) -> None:
         """Coupe immédiatement tous les sons en cours sur ce mixeur (bouton "Stop tout")."""
         with self._lock:
             entries, self._entries = self._entries, {}
+            self._bed.clear()
         self._finish_entries(entries.values())
 
     def read(self) -> bytes:
@@ -262,9 +339,23 @@ class MixingAudioSource(discord.AudioSource):
         except Exception:
             log.exception("Resynchronisation de l'horodatage RTP impossible")
 
+    def _next_duck_gain(self, bed_playing: bool, foreground_playing: bool) -> float:
+        """Gain à appliquer aux sons d'ambiance pour cette trame : ils baissent vite (attaque) dès qu'un autre son joue,
+        puis remontent lentement (relâchement) quand il s'arrête. Une seule trame de décalage au plus par palier."""
+        target = self._duck_gain if (bed_playing and foreground_playing) else 1.0
+        current = self._duck_current
+        depth = 1.0 - self._duck_gain
+        if target < current:
+            current = max(target, current - depth / DUCK_ATTACK_FRAMES)
+        elif target > current:
+            current = min(target, current + depth / DUCK_RELEASE_FRAMES)
+        self._duck_current = current
+        return current
+
     def _read_frame(self) -> bytes:
         with self._lock:
             snapshot = list(self._entries.items())
+            beds = set(self._bed)
             if snapshot:
                 self._idle_frames = 0
             else:
@@ -274,48 +365,52 @@ class MixingAudioSource(discord.AudioSource):
         if not snapshot:
             return SILENCE
 
-        frames, finished = [], []
+        frames: list[tuple[str, bytes]] = []
+        finished: list[tuple[str, discord.AudioSource]] = []
         for key, (source, _) in snapshot:
             try:
                 data = source.read()
             except Exception:
                 data = b""
             if data:
-                frames.append(data)
+                frames.append((key, data))
             else:
-                finished.append(key)
+                finished.append((key, source))
 
         if finished:
             finished_entries = []
             with self._lock:
-                for key in finished:
+                for key, source in finished:
                     current = self._entries.get(key)
                     # Ne retire QUE si c'est toujours la même instance qu'au moment du snapshot :
                     # entre-temps, un nouvel appui a pu déjà remplacer cette clé par une relance
                     # (voir add()) — dans ce cas, il ne faut surtout pas effacer la nouvelle entrée.
                     if current is not None and current[0] is source:
                         del self._entries[key]
+                        self._bed.discard(key)
                         finished_entries.append(current)
             self._finish_entries(finished_entries)
 
         if not frames:
             return SILENCE
 
-        if len(frames) == 1:
-            data = frames[0]
-            return data if len(data) == FRAME_BYTES else data.ljust(FRAME_BYTES, b"\x00")
+        gain = self._next_duck_gain(any(k in beds for k, _ in frames), any(k not in beds for k, _ in frames))
 
-        # Saturation appliquée après chaque son ajouté (pas une somme brute clampée une seule
-        # fois à la fin) : reproduit exactement le comportement de l'ancienne boucle scalaire,
-        # où l'ordre d'empilement des sons peut influencer un résultat déjà saturé.
-        mixed = np.zeros(1920, dtype=np.int32)
-        for data in frames:
+        if len(frames) == 1:
+            key, data = frames[0]
+            if not (key in beds and gain != 1.0):
+                return data if len(data) == FRAME_BYTES else data.ljust(FRAME_BYTES, b"\x00")
+
+        mixed = np.zeros(FRAME_SAMPLES, dtype=np.float32)
+        for key, data in frames:
             if len(data) < FRAME_BYTES:
                 data = data.ljust(FRAME_BYTES, b"\x00")
-            samples = np.frombuffer(data[:FRAME_BYTES], dtype=np.int16).astype(np.int32)
-            mixed = np.clip(mixed + samples, -32768, 32767)
+            samples = np.frombuffer(data[:FRAME_BYTES], dtype=np.int16).astype(np.float32)
+            if key in beds and gain != 1.0:
+                samples *= gain
+            mixed += samples
 
-        return mixed.astype(np.int16).tobytes()
+        return soft_limit(mixed).tobytes()
 
     @staticmethod
     def _finish_entries(entries) -> None:
@@ -336,4 +431,5 @@ class MixingAudioSource(discord.AudioSource):
     def cleanup(self) -> None:
         with self._lock:
             entries, self._entries = self._entries, {}
+            self._bed.clear()
         self._finish_entries(entries.values())
