@@ -18,6 +18,9 @@ namespace WaseBoard.Services
         /// <summary>Mode Discord : deux notes qui descendent (« retour à la normale »).</summary>
         public static readonly int[] FallingTones = { 659, 440 };
 
+        /// <summary>Clip gardé : une seule note aiguë, distincte des deux notes de la bascule Jeu/Discord.</summary>
+        public static readonly int[] ClipTones = { 1319 };
+
         /// <summary>WAV mono 16 bits : une note par fréquence, <paramref name="noteMs"/> chacune, avec un fondu d'entrée
         /// et de sortie de 8 ms pour éviter tout « clac » (un son tronqué net claque dans les haut-parleurs).</summary>
         public static byte[] BuildWav(int[] frequencies, int noteMs = 90, double volume = 0.35)

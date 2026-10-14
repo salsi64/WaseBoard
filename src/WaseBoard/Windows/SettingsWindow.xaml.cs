@@ -55,6 +55,9 @@ namespace WaseBoard.Windows
         // Raccourci de bascule Jeu/Discord en cours d'édition (écrit dans les réglages par « Enregistrer »).
         private string? _micModeHotkey;
 
+        // Idem pour le raccourci du clip des dernières secondes.
+        private string? _clipHotkey;
+
         public SettingsWindow(AppSettings settings, SoundLibraryService library, string initialPage = "Server",
             IEnumerable<SoundLibraryService.SharedCategoryInfo>? adminGuilds = null, IEnumerable<SoundItem>? knownSounds = null,
             MicFeedService? micFeed = null)
@@ -102,6 +105,14 @@ namespace WaseBoard.Windows
             UpdateMicModeHotkeyText();
             MicModeBeepCheckBox.IsChecked = _settings.MicModeBeep;
 
+            ClipEnabledCheckBox.IsChecked = _settings.ClipEnabled;
+            foreach (var seconds in LoopbackClipService.SecondsChoices)
+                ClipSecondsCombo.Items.Add(new ComboBoxItem { Content = Loc.T("settings.clip.seconds_option", seconds), Tag = seconds });
+            ClipSecondsCombo.SelectedIndex = Array.IndexOf(LoopbackClipService.SecondsChoices, LoopbackClipService.NormalizeSeconds(_settings.ClipSeconds));
+            _clipHotkey = _settings.ClipHotkey;
+            UpdateClipHotkeyText();
+            ClipBeepCheckBox.IsChecked = _settings.ClipBeep;
+
             _selectedBgColorHex = _settings.BackgroundColorHex;
             CustomColorBox.Text = _selectedBgColorHex ?? "";
             UpdateColorPreview();
@@ -141,6 +152,7 @@ namespace WaseBoard.Windows
                 ("Appearance", PageAppearance, NavAppearanceButton),
                 ("Volume", PageVolume, NavVolumeButton),
                 ("Mic", PageMic, NavMicButton),
+                ("Clip", PageClip, NavClipButton),
                 ("Updates", PageUpdates, NavUpdatesButton),
                 ("Diagnostic", PageDiagnostic, NavDiagnosticButton),
                 ("Admin", PageAdmin, NavAdminButton),
@@ -729,6 +741,11 @@ namespace WaseBoard.Windows
                 AlertDialog.Show(this, Loc.T("settings.mic.hotkey_conflict", taken.Name), "WaseBoard", AlertKind.Warning);
                 return;
             }
+            if (string.Equals(_clipHotkey, hotkey, StringComparison.OrdinalIgnoreCase))
+            {
+                AlertDialog.Show(this, Loc.T("settings.mic.hotkey_conflict_clip"), "WaseBoard", AlertKind.Warning);
+                return;
+            }
 
             _micModeHotkey = hotkey;
             UpdateMicModeHotkeyText();
@@ -738,6 +755,42 @@ namespace WaseBoard.Windows
         {
             _micModeHotkey = null;
             UpdateMicModeHotkeyText();
+        }
+
+        // ---------- Raccourci du clip des dernières secondes ----------
+
+        private void UpdateClipHotkeyText()
+        {
+            ClipHotkeyText.Text = string.IsNullOrEmpty(_clipHotkey) ? Loc.T("settings.mic.hotkey_none") : _clipHotkey;
+            ClipHotkeyText.Opacity = string.IsNullOrEmpty(_clipHotkey) ? 0.6 : 1.0;
+            ClipHotkeyClearButton.IsEnabled = !string.IsNullOrEmpty(_clipHotkey);
+        }
+
+        private void ClipHotkeySetButton_Click(object sender, RoutedEventArgs e)
+        {
+            var capture = new HotkeyCaptureWindow { Owner = this };
+            if (capture.ShowDialog() != true || capture.CapturedHotkey is not { } hotkey) return;
+
+            var taken = _knownSounds.FirstOrDefault(s => string.Equals(s.Hotkey, hotkey, StringComparison.OrdinalIgnoreCase));
+            if (taken is not null)
+            {
+                AlertDialog.Show(this, Loc.T("settings.mic.hotkey_conflict", taken.Name), "WaseBoard", AlertKind.Warning);
+                return;
+            }
+            if (string.Equals(_micModeHotkey, hotkey, StringComparison.OrdinalIgnoreCase))
+            {
+                AlertDialog.Show(this, Loc.T("settings.clip.hotkey_conflict_mic"), "WaseBoard", AlertKind.Warning);
+                return;
+            }
+
+            _clipHotkey = hotkey;
+            UpdateClipHotkeyText();
+        }
+
+        private void ClipHotkeyClearButton_Click(object sender, RoutedEventArgs e)
+        {
+            _clipHotkey = null;
+            UpdateClipHotkeyText();
         }
 
         private void ShowVerifyResult(bool success, string message, string? avatarUrl)
@@ -824,6 +877,10 @@ namespace WaseBoard.Windows
             _settings.ShowWaveforms = ShowWaveformsCheckBox.IsChecked == true;
             _settings.MicModeHotkey = _micModeHotkey;
             _settings.MicModeBeep = MicModeBeepCheckBox.IsChecked == true;
+            _settings.ClipEnabled = ClipEnabledCheckBox.IsChecked == true;
+            _settings.ClipSeconds = ClipSecondsCombo.SelectedItem is ComboBoxItem { Tag: int seconds } ? seconds : LoopbackClipService.DefaultSeconds;
+            _settings.ClipHotkey = _clipHotkey;
+            _settings.ClipBeep = ClipBeepCheckBox.IsChecked == true;
 
             DialogResult = true;
             Close();

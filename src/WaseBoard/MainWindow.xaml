@@ -934,6 +934,16 @@
                             <TextBlock x:Name="StopAllLabel" Text="Stop" Margin="8,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
+                    <!-- Clip des dernières secondes : visible seulement si la fonction est activée (Paramètres > Clip). Le point
+                         rouge est le voyant « la capture tourne » (voir UpdateClipButton). -->
+                    <Button x:Name="ClipButton" Visibility="Collapsed" Width="34" Padding="0"
+                            Style="{StaticResource ToolbarButtonStyle}" Click="ClipButton_Click">
+                        <Grid>
+                            <TextBlock Text="&#xE81C;" Style="{StaticResource ToolbarIcon}"/>
+                            <Ellipse x:Name="ClipRecDot" Width="7" Height="7" Fill="#EF4444" Visibility="Collapsed"
+                                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-6,0"/>
+                        </Grid>
+                    </Button>
                     <Button x:Name="SettingsButton" ToolTip="Paramètres" Width="34" Padding="0"
                             Style="{StaticResource ToolbarButtonStyle}" Click="SettingsButton_Click">
                         <TextBlock Text="&#xE713;" Style="{StaticResource ToolbarIcon}"/>

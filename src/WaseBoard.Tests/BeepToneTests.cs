@@ -74,4 +74,15 @@ public class BeepToneTests
         Assert.Throws<ArgumentException>(() => BeepTone.BuildWav(Array.Empty<int>()));
         Assert.Throws<ArgumentOutOfRangeException>(() => BeepTone.BuildWav(new[] { 440 }, noteMs: 5));
     }
+
+    [Fact]
+    public void The_clip_signal_is_a_single_note_distinct_from_the_mode_signals()
+    {
+        var clip = BeepTone.BuildWav(BeepTone.ClipTones, noteMs: 110);
+
+        Assert.Single(BeepTone.ClipTones);
+        Assert.DoesNotContain(BeepTone.ClipTones[0], BeepTone.RisingTones);
+        Assert.DoesNotContain(BeepTone.ClipTones[0], BeepTone.FallingTones);
+        Assert.Equal(44 + BeepTone.SampleRate * 110 / 1000 * 2, clip.Length);
+    }
 }

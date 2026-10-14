@@ -43,6 +43,7 @@ namespace WaseBoard
                 ApplyColorScheme();
                 ApplyTheme();
                 ApplyMicModeButton();
+                ApplyClipSettings();
             }
 
             // « Se déconnecter » agit tout de suite (sans passer par « Enregistrer ») : plus de session, donc plus de
@@ -172,6 +173,7 @@ namespace WaseBoard
             foreach (var item in Sounds)
                 RegisterHotkeyFor(item);
             RegisterMicModeHotkey();
+            RegisterClipHotkey();
         }
 
         private void RegisterHotkeyFor(SoundItem item)

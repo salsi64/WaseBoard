@@ -46,7 +46,26 @@ namespace WaseBoard
             await AddSoundFiles(dialog.FileNames);
         }
 
-        private async Task AddSoundFiles(IEnumerable<string> filePaths)
+        /// <summary>Ajoute des fichiers audio au catalogue (fenêtre de découpe, doublons, envoi). <paramref name="suggestedName"/> :
+        /// nom proposé à la place de celui du fichier (clip des dernières secondes) ; <paramref name="deleteFilesAfter"/> :
+        /// fichiers temporaires à supprimer ensuite, que l'ajout ait abouti ou non.</summary>
+        private async Task AddSoundFiles(IEnumerable<string> filePaths, string? suggestedName = null, bool deleteFilesAfter = false)
+        {
+            var files = filePaths.ToList();
+            try
+            {
+                await AddSoundFilesCore(files, suggestedName);
+            }
+            finally
+            {
+                if (deleteFilesAfter)
+                {
+                    foreach (var file in files) TryDeleteFile(file);
+                }
+            }
+        }
+
+        private async Task AddSoundFilesCore(List<string> filePaths, string? suggestedNameOverride)
         {
             string? guildId;
             if (_sharedCategories.Count == 0)
@@ -98,7 +117,7 @@ namespace WaseBoard
                     continue;
                 }
 
-                var suggestedName = Path.GetFileNameWithoutExtension(file);
+                var suggestedName = suggestedNameOverride ?? Path.GetFileNameWithoutExtension(file);
                 var trimWindow = new TrimWindow(file, suggestedName) { Owner = this };
 
                 if (trimWindow.ShowDialog() != true)

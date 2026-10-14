@@ -165,6 +165,8 @@ namespace WaseBoard
             _settingsReady = true;
             ApplyColorScheme();
             ApplyMicModeButton();
+            CleanOldClips();
+            ApplyClipSettings();
 
             // Lien waseboard:// reçu en argument de lancement (voir App.OnStartup) — appliqué
             // AVANT le bloc d'onboarding juste en dessous, qui s'ouvrira normalement si c'est un
@@ -300,7 +302,7 @@ namespace WaseBoard
             var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0);
             var result = await UpdateCheckService.CheckForUpdateAsync(currentVersion);
             if (result.Available)
-                ToastService.Show(Loc.T("update.available", result.LatestVersion), ToastKind.Info);
+                ToastService.Show(Loc.T("update.available", result.LatestVersion ?? ""), ToastKind.Info);
         }
 
         private bool _reloginPromptShowing;

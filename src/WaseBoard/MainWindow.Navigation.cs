@@ -439,6 +439,7 @@ namespace WaseBoard
             _themeTimer?.Stop();
             _micDiagTimer?.Stop();
             _hotkeys?.Dispose();
+            _clip?.Dispose();
             _audio.Dispose();
             _micFeed.Dispose();
             ToastService.Requested -= OnToastRequested;

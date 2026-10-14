@@ -96,11 +96,13 @@ namespace WaseBoard
             if (_library.Settings.MicModeBeep) PlayModeBeep(game);
         }
 
-        private void PlayModeBeep(bool game)
+        private void PlayModeBeep(bool game) => PlayBeep(game ? BeepTone.RisingTones : BeepTone.FallingTones);
+
+        private void PlayBeep(int[] tones, int noteMs = 90)
         {
             try
             {
-                var wav = BeepTone.BuildWav(game ? BeepTone.RisingTones : BeepTone.FallingTones);
+                var wav = BeepTone.BuildWav(tones, noteMs);
                 _beepPlayer?.Dispose();
                 _beepPlayer = new System.Media.SoundPlayer(new MemoryStream(wav));
                 _beepPlayer.Play();
