@@ -939,7 +939,7 @@
                     <Button x:Name="ClipButton" Visibility="Collapsed" Width="34" Padding="0"
                             Style="{StaticResource ToolbarButtonStyle}" Click="ClipButton_Click">
                         <Grid>
-                            <TextBlock Text="&#xE81C;" Style="{StaticResource ToolbarIcon}"/>
+                            <TextBlock Text="&#xE8C6;" Style="{StaticResource ToolbarIcon}"/>
                             <Ellipse x:Name="ClipRecDot" Width="7" Height="7" Fill="#EF4444" Visibility="Collapsed"
                                      HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-6,0"/>
                         </Grid>

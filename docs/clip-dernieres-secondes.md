@@ -12,7 +12,7 @@ d'ajout pour que vous le découpiez, le nommiez et l'envoyiez.
 2. Choisissez la durée gardée : **10, 15 ou 30 secondes**.
 3. Cliquez sur **Définir…** pour choisir un raccourci clavier (par exemple `Ctrl+Alt+C`), puis **Enregistrer**.
 
-Un bouton **Clip** (icône d'horloge fléchée, avec un point rouge) apparaît alors dans la barre d'outils. Le point rouge est le voyant « la capture
+Un bouton **Clip** (ciseaux, avec un point rouge) apparaît alors dans la barre d'outils. Le point rouge est le voyant « la capture
 tourne » : il reste allumé tant que WaseBoard garde les dernières secondes en mémoire.
 
 ## S'en servir
