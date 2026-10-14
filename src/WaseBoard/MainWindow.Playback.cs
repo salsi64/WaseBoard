@@ -38,9 +38,8 @@ namespace WaseBoard
         /// En mode jeu (bouton 🎮 de la barre d'outils), le son part dans le micro, et dans Discord
         /// seulement si demandé (sinon un Discord branché sur ce même micro l'entendrait deux fois).
         /// </summary>
-        private void Play(SoundItem item, bool keepRecentsOrder = false)
+        private void Play(SoundItem item)
         {
-            RememberRecent(item, keepRecentsOrder);
             if (!IsGameMode)
             {
                 _ = PlayAndPollAsync(item);

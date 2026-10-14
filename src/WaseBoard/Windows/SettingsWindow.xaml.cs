@@ -101,7 +101,6 @@ namespace WaseBoard.Windows
             _micModeHotkey = _settings.MicModeHotkey;
             UpdateMicModeHotkeyText();
             MicModeBeepCheckBox.IsChecked = _settings.MicModeBeep;
-            ShowRecentsCheckBox.IsChecked = _settings.ShowRecents;
 
             _selectedBgColorHex = _settings.BackgroundColorHex;
             CustomColorBox.Text = _selectedBgColorHex ?? "";
@@ -823,7 +822,6 @@ namespace WaseBoard.Windows
             _settings.FollowSystemTheme = FollowSystemThemeCheckBox.IsChecked == true;
             _settings.FollowSystemAccent = FollowSystemAccentCheckBox.IsChecked == true;
             _settings.ShowWaveforms = ShowWaveformsCheckBox.IsChecked == true;
-            _settings.ShowRecents = ShowRecentsCheckBox.IsChecked == true;
             _settings.MicModeHotkey = _micModeHotkey;
             _settings.MicModeBeep = MicModeBeepCheckBox.IsChecked == true;
 

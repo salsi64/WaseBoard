@@ -159,7 +159,7 @@ namespace WaseBoard
             if (sender is Button { Tag: SoundItem item } button)
             {
                 AnimationHelpers.PlayBounce(button);
-                Play(item, keepRecentsOrder: FindEnclosingSection(button)?.CategoryKey == RecentsKey);
+                Play(item);
             }
         }
 
@@ -193,7 +193,7 @@ namespace WaseBoard
             var isNativeToGuildSection = section is not null && section.IsShared && item.GuildId == section.CategoryKey;
             var canRemoveFromSection = section is not null
                 && (!section.IsShared || CanShareTo(_sharedCategories.FirstOrDefault(s => s.GuildId == section.CategoryKey), item));
-            if (section is not null && !isNativeToGuildSection && canRemoveFromSection && section.CategoryKey != FavoritesKey && section.CategoryKey != RecentsKey)
+            if (section is not null && !isNativeToGuildSection && canRemoveFromSection && section.CategoryKey != FavoritesKey)
             {
                 var label = section.IsShared
                     ? $"Retirer de « {StripSharedPrefix(section.Name)} » (partagée)"

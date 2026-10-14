@@ -43,8 +43,6 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 - **🎮 Micro en jeu** *(expérimental)* : vos sons passent aussi dans votre micro, pour le vocal des jeux
   (Valorant, CS2…), sans logiciel tiers ni changement dans le jeu. Un bouton **🎮 Jeu / 🎧 Discord**
   dans la barre choisit où vont les sons. Guide : [`docs/micro-en-jeu.md`](docs/micro-en-jeu.md).
-- **Section « Récents »** : vos derniers sons joués, juste après les favoris (historique local, jamais envoyé au serveur ;
-  clic droit sur son titre pour la vider ou la masquer).
 - **Favoris**, **catégories personnelles** et **catégorie automatique par serveur Discord**,
   glisser-déposer pour classer/réorganiser, recherche en temps réel.
 - **Emoji obligatoire par son**, en 3D brillante (Fluent Emoji), palette prédéfinie ou personnalisée.
