@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import aiohttp
 import discord
@@ -36,9 +36,11 @@ from discord import app_commands
 from discord.ext import commands
 from aiohttp import web
 
+import alerts
 import audio
 import diagnostics
 import effects
+import reports
 # Le code audio vit dans audio.py ; ces noms restent importables depuis server (les tests lisent S.SILENCE, S.FRAME_BYTES…).
 from audio import (FRAME_BYTES, PCM_BYTES_PER_MS, RTP_CLOCK_HZ, SILENCE, MixingAudioSource, PCMBufferSource,
                    PCMCache, decode_to_pcm)
@@ -67,6 +69,7 @@ CATALOG_PATH = SOUNDS_DIR / "catalog.json"
 SHARED_CATEGORIES_PATH = DATA_DIR / "shared_categories.json"
 OAUTH_SESSIONS_PATH = DATA_DIR / "oauth_sessions.json"
 STATS_PATH = DATA_DIR / "stats.jsonl"
+ALERTS_STATE_PATH = DATA_DIR / "alerts_state.json"
 GUILD_SETTINGS_PATH = DATA_DIR / "guild_settings.json"
 AUDIT_PATH = DATA_DIR / "audit.jsonl"
 TRASH_DIR = SOUNDS_DIR / "trash"
@@ -120,6 +123,16 @@ SESSION_MAX_IDLE_DAYS: float = CONFIG.get("session_max_idle_days", 90)
 # 0 = boucles désactivées. Le son doit tenir en mémoire une fois décodé (LOOP_MAX_BYTES).
 LOOP_MAX_MINUTES: float = CONFIG.get("loop_max_minutes", 30)
 LOOP_MAX_BYTES = 32 * 1024 * 1024  # un son plus long (~170 s décodé) ne peut pas tourner en boucle
+# Alertes d'exploitation (message privé au propriétaire de l'application Discord) : voir alerts.py. Un seuil à 0 désactive
+# l'alerte correspondante ; alerts_enabled = false les coupe toutes.
+ALERTS_ENABLED: bool = CONFIG.get("alerts_enabled", True)
+ALERTS_USER_ID: str = str(CONFIG.get("alerts_user_id") or "")  # vide = le propriétaire de l'application
+ALERTS_DISK_PERCENT: int = CONFIG.get("alerts_disk_percent", 90)
+ALERTS_CERT_DAYS: int = CONFIG.get("alerts_cert_days", 14)
+ALERTS_ERROR_BURST: int = CONFIG.get("alerts_error_burst", 20)  # erreurs en 5 minutes
+ALERTS_RECONNECT_MIN_S = 60  # une coupure de Discord plus courte n'est pas signalée
+ERROR_BURST = alerts.ErrorBurstDetector(ALERTS_ERROR_BURST)
+logging.getLogger().addHandler(ERROR_BURST)
 SEQUENCE_MAX_STEPS = 8           # sons dans un enchaînement
 SEQUENCE_MAX_DELAY_MS = 10_000   # attente maximale avant UNE étape
 SEQUENCE_MAX_SPAN_MS = 60_000    # délai total maximal avant la dernière étape
@@ -633,6 +646,22 @@ intents.members = True  # requis pour résoudre un membre par id ; à activer au
 
 # ---------- Limitation de débit des routes publiques ----------
 
+class PlayRefused(Exception):
+    """Lecture refusée (plafond de ressources, anti-spam, son impossible à préparer) : un message lisible, rendu soit en
+    réponse HTTP (route /play), soit en message Discord (commande /play)."""
+
+    def __init__(self, message: str, status: int = 429, retry_after: Optional[int] = None, retry_header: bool = False) -> None:
+        super().__init__(message)
+        self.message, self.status, self.retry_after, self.retry_header = message, status, retry_after, retry_header
+
+    def response(self) -> web.Response:
+        body: dict = {"error": self.message}
+        if self.retry_after is not None:
+            body["retry_after"] = self.retry_after
+        headers = {"Retry-After": str(self.retry_after)} if self.retry_header and self.retry_after is not None else None
+        return web.json_response(body, status=self.status, headers=headers)
+
+
 class CapacityError(Exception):
     """L'instance a atteint un de ses plafonds de ressources (message destiné à l'utilisateur)."""
 
@@ -1010,10 +1039,18 @@ class WaseBoardServer(commands.Bot):
         self._play_history: dict[tuple[int, str], deque] = {}
         # Étapes d'enchaînement programmées mais pas encore parties : guild_id -> {TimerHandle: id du son}.
         self._pending_steps: dict[int, dict] = {}
+        # Alertes d'exploitation (voir alerts.py) : gestionnaire, tâche périodique, état de la connexion à Discord.
+        self.alerts: Optional[alerts.AlertManager] = None
+        self._alerts_task: Optional[asyncio.Task] = None
+        self._ready_seen = False
+        self._gateway_down_since: Optional[float] = None
 
     async def setup_hook(self) -> None:
         self.http_session = aiohttp.ClientSession()
         self._trash_purge_task = asyncio.create_task(self._trash_purge_loop())
+        if ALERTS_ENABLED:
+            self.alerts = alerts.AlertManager(alerts.AlertState(ALERTS_STATE_PATH), self._send_owner_dm)
+            self._alerts_task = asyncio.create_task(self._alerts_loop())
 
         # Enregistrement persistant (custom_id fixe) : le bouton reste fonctionnel sur le
         # message déjà posté par /configurer-invitation après un redémarrage, sans avoir à
@@ -1046,6 +1083,7 @@ class WaseBoardServer(commands.Bot):
         await self.tree.sync(guild=guild)
 
     async def on_ready(self) -> None:
+        await self._alerts_on_ready()
         if not GUILD_ID or self._commands_synced:
             return
         self._commands_synced = True
@@ -1108,7 +1146,99 @@ class WaseBoardServer(commands.Bot):
         except Exception:
             log.exception("Échec de la synchronisation des commandes sur %s", guild.id)
 
+    # ---------- Alertes d'exploitation ----------
+
+    def _instance_footer(self) -> str:
+        """Ligne discrète ajoutée à chaque alerte : de quelle instance elle vient (test, production…) et sa version."""
+        where = urlparse(PUBLIC_URL).netloc if PUBLIC_URL else f"port {HTTP_PORT}"
+        return f"\n-# Instance : {where} · v{SERVER_VERSION}"
+
+    async def _send_owner_dm(self, text: str) -> bool:
+        """Remet une alerte à la personne qui héberge (alerts_user_id, sinon le propriétaire de l'application Discord).
+        False si les messages privés sont fermés ou que Discord est injoignable : l'appelant réessaiera plus tard."""
+        try:
+            if ALERTS_USER_ID:
+                recipient_id = int(ALERTS_USER_ID)
+            else:
+                info = await self.application_info()
+                recipient_id = info.team.owner_id if info.team else info.owner.id
+            user = await self.fetch_user(recipient_id)
+            await user.send(text + self._instance_footer())
+            return True
+        except Exception as ex:
+            log.warning("Alerte non remise (messages privés fermés ou Discord injoignable) : %s", ex)
+            return False
+
+    async def _alerts_on_ready(self) -> None:
+        """Premier démarrage : signale un arrêt non propre de la fois précédente. Démarrages suivants (nouvelle session
+        après une coupure) : signale la reconnexion."""
+        if self.alerts is None:
+            return
+        if self._ready_seen:
+            await self._alerts_reconnected()
+            return
+        self._ready_seen = True
+        state = self.alerts.state
+        unexpected = state.clean_shutdown is False
+        state.clean_shutdown = False  # remis à True par close() ; resté False = le processus n'a pas pu s'arrêter proprement
+        state.save()
+        if unexpected:
+            await self.alerts.notify("restart", alerts.restart_alert(SERVER_VERSION))
+
+    async def _alerts_reconnected(self) -> None:
+        since, self._gateway_down_since = self._gateway_down_since, None
+        if self.alerts is None or since is None:
+            return
+        down = time.monotonic() - since
+        if down >= ALERTS_RECONNECT_MIN_S:
+            await self.alerts.notify("reconnect", alerts.reconnect_alert(down))
+
+    async def on_disconnect(self) -> None:
+        if self._gateway_down_since is None:
+            self._gateway_down_since = time.monotonic()
+
+    async def on_resumed(self) -> None:
+        await self._alerts_reconnected()
+
+    async def _alerts_loop(self) -> None:
+        """Contrôles périodiques (voir _alerts_tick) : un tour par minute, après un délai laissant le démarrage se terminer."""
+        await asyncio.sleep(90)
+        due = {"disk": 0.0, "cert": 0.0}
+        while True:
+            try:
+                await self._alerts_tick(due)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.warning("Échec d'un contrôle d'alerte", exc_info=True)  # WARNING : ne doit pas compter dans la rafale d'erreurs
+            await asyncio.sleep(60)
+
+    async def _alerts_tick(self, due: dict) -> None:
+        """Un tour de contrôles : rafale d'erreurs (à chaque tour), disque (toutes les 10 min), certificat HTTPS (toutes les
+        6 h). `due` : prochaines échéances (horloge monotone) du disque et du certificat, mises à jour ici."""
+        if self.alerts is None:
+            return
+        burst = ERROR_BURST.burst()
+        if burst is not None:
+            await self.alerts.notify("errors", alerts.error_burst_alert(burst[0], ERROR_BURST.window_s, burst[1]))
+        now = time.monotonic()
+        if now >= due["disk"]:
+            due["disk"] = now + 600
+            message = alerts.disk_alert(DATA_DIR, ALERTS_DISK_PERCENT)
+            if message:
+                await self.alerts.notify("disk", message)
+        if now >= due["cert"]:
+            due["cert"] = now + 6 * 3600
+            message = await asyncio.to_thread(alerts.certificate_alert, PUBLIC_URL, ALERTS_CERT_DAYS)
+            if message:
+                await self.alerts.notify("cert", message)
+
     async def close(self) -> None:
+        if self._alerts_task is not None:
+            self._alerts_task.cancel()
+        if self.alerts is not None:
+            self.alerts.state.clean_shutdown = True  # arrêt voulu (systemctl stop/restart, Ctrl+C) : pas d'alerte au prochain démarrage
+            self.alerts.state.save()
         if self._trash_purge_task is not None:
             self._trash_purge_task.cancel()
         if self.http_session is not None:
@@ -2614,6 +2744,46 @@ class WaseBoardServer(commands.Bot):
             raise ValueError("« volume » doit être un nombre.")
         return min(max(volume, 0.0), 2.0)
 
+    async def _start_playback(self, guild_id: int, user_id, entry: dict, file_path: Path, volume: float,
+                              mixer: "MixingAudioSource", *, loop: bool = False, effects_: Optional[dict] = None) -> str:
+        """Lance un son dans le salon vocal de cette guilde. Tout ce qui précède — qui a le droit, quel serveur, quel son —
+        est déjà vérifié par l'appelant (route HTTP /play ou commande Discord /play) ; ici : plafonds de ressources,
+        anti-spam, préparation de la source, ajout au mixeur, activité partagée et statistiques. Lève PlayRefused ;
+        renvoie le mode de lecture (« flux », « mémoire »…), pour le journal."""
+        sound_id = entry["id"]
+
+        # Plafonds de ressources de l'hébergeur : vérifiés AVANT l'anti-spam (un refus ne doit pas compter dans le quota).
+        capacity_error = self._play_capacity_error(sound_id, guild_id, mixer)
+        if capacity_error is not None:
+            raise PlayRefused(capacity_error, 429, retry_after=2, retry_header=True)
+
+        # Anti-spam réglé par l'admin de la guilde ciblée (où le son sera réellement joué) ;
+        # les admins en sont exemptés. Vérifié en dernier : une requête refusée plus haut ne compte pas.
+        retry_after = self._check_play_rate(guild_id, str(user_id))
+        if retry_after is not None:
+            raise PlayRefused(f"Trop de sons envoyés : réessayez dans {retry_after} s.", 429, retry_after=retry_after)
+
+        # On AJOUTE au mixeur plutôt que de remplacer la lecture en cours : plusieurs sons
+        # (déclenchés par le même utilisateur ou des utilisateurs différents) se superposent
+        # au lieu de s'annuler mutuellement.
+        try:
+            source, kind = await self._build_play_source(sound_id, entry, file_path, volume, loop=loop, effects_=effects_)
+        except ValueError as ex:
+            raise PlayRefused(str(ex), 400)
+
+        # Le son part D'ABORD ; la résolution du membre Discord (highlight/avatar) — un appel
+        # réseau si non déjà en cache — se fait ENSUITE en tâche de fond, pour ne jamais
+        # retarder la lecture elle-même.
+        str_user_id = str(user_id) if user_id else None
+        on_finish = (lambda: self.clear_activity(sound_id, str_user_id)) if str_user_id else None
+        mixer.add(sound_id, source, on_finish=on_finish)
+
+        if str_user_id:
+            # Une boucle dure jusqu'à son arrêt : son highlight aussi (le filet de 30 s habituel l'éteindrait trop tôt).
+            ttl = LOOP_MAX_MINUTES * 60 + 5 if loop else None
+            asyncio.create_task(self._record_play_activity(sound_id, str_user_id, guild_id, ttl))
+        return kind
+
     async def _handle_play(self, request: web.Request) -> web.Response:
         started = time.perf_counter()
         ctx, err = await self._play_context(request)
@@ -2636,42 +2806,13 @@ class WaseBoardServer(commands.Bot):
         if loop_requested and LOOP_MAX_MINUTES <= 0:
             return web.json_response({"error": "Les boucles sont désactivées sur ce serveur."}, status=400)
 
-        # Plafonds de ressources de l'hébergeur : vérifiés AVANT l'anti-spam (un refus ne doit pas compter dans le quota).
-        capacity_error = self._play_capacity_error(sound_id, guild_id, mixer)
-        if capacity_error is not None:
-            return web.json_response({"error": capacity_error, "retry_after": 2}, status=429, headers={"Retry-After": "2"})
-
-        # Anti-spam réglé par l'admin de la guilde ciblée (où le son sera réellement joué) ;
-        # les admins en sont exemptés. Vérifié en dernier : une requête refusée plus haut ne compte pas.
-        retry_after = self._check_play_rate(guild_id, str(user_id))
-        if retry_after is not None:
-            return web.json_response({
-                "error": f"Trop de sons envoyés : réessayez dans {retry_after} s.",
-                "retry_after": retry_after,
-            }, status=429)
-
-        # On AJOUTE au mixeur plutôt que de remplacer la lecture en cours : plusieurs sons
-        # (déclenchés par le même utilisateur ou des utilisateurs différents) se superposent
-        # au lieu de s'annuler mutuellement.
         try:
-            source, kind = await self._build_play_source(sound_id, entry, file_path, volume, loop=loop_requested, effects_=effects_)
-        except ValueError as ex:
-            return web.json_response({"error": str(ex)}, status=400)
-
-        # Le son part D'ABORD ; la résolution du membre Discord (highlight/avatar) — un appel
-        # réseau si non déjà en cache — se fait ENSUITE en tâche de fond, pour ne jamais
-        # retarder la lecture elle-même.
-        str_user_id = str(user_id) if user_id else None
-        on_finish = (lambda: self.clear_activity(sound_id, str_user_id)) if str_user_id else None
-
-        mixer.add(sound_id, source, on_finish=on_finish)
+            kind = await self._start_playback(guild_id, user_id, entry, file_path, volume, mixer,
+                                              loop=loop_requested, effects_=effects_)
+        except PlayRefused as refused:
+            return refused.response()
         elapsed_ms = round((time.perf_counter() - started) * 1000)
         log.info("Lecture « %s » (%s) : %d ms de traitement.", entry.get("name", sound_id), kind, elapsed_ms)
-
-        if str_user_id:
-            # Une boucle dure jusqu'à son arrêt : son highlight aussi (le filet de 30 s habituel l'éteindrait trop tôt).
-            ttl = LOOP_MAX_MINUTES * 60 + 5 if loop_requested else None
-            asyncio.create_task(self._record_play_activity(sound_id, str_user_id, guild_id, ttl))
 
         # « ms » : temps passé côté serveur entre la réception de la requête et l'ajout au mixeur (le client le
         # compare à sa propre mesure pour séparer réseau et traitement, voir la page Diagnostic).
@@ -2853,12 +2994,23 @@ class WaseBoardServer(commands.Bot):
 
         sound_id = data.get("sound_id")
         if isinstance(sound_id, str) and sound_id:
-            self._cancel_pending_steps(guild_id, sound_id)
-            return web.json_response({"status": "ok", "stopped": mixer.stop(sound_id)})
+            return web.json_response({"status": "ok", "stopped": self._stop_guild_sounds(guild_id, sound_id)})
 
+        self._stop_guild_sounds(guild_id)
+        return web.json_response({"status": "ok"})
+
+    def _stop_guild_sounds(self, guild_id: int, sound_id: Optional[str] = None) -> Optional[bool]:
+        """Coupe tous les sons du salon de cette guilde (et les étapes d'enchaînement pas encore parties), ou un seul son.
+        Renvoie True/False selon qu'un son précis jouait (True pour « tout »), ou None si le bot n'est connecté nulle part."""
+        mixer = self.mixers.get(guild_id)
+        if mixer is None:
+            return None
+        if sound_id:
+            self._cancel_pending_steps(guild_id, sound_id)
+            return mixer.stop(sound_id)
         self._cancel_pending_steps(guild_id)
         mixer.clear()  # déclenche aussi les callbacks on_finish : l'activité est effacée immédiatement
-        return web.json_response({"status": "ok"})
+        return True
 
     async def _handle_join_my_channel(self, request: web.Request) -> web.Response:
         """Fait rejoindre le bot au salon vocal où l'utilisateur se trouve actuellement,
@@ -3078,6 +3230,171 @@ async def instance_command(interaction: discord.Interaction) -> None:
         log.exception("Échec de /instance")
         text = "❌ Impossible de calculer les statistiques (voir les journaux du serveur)."
     await interaction.followup.send(text[:1990], ephemeral=True)
+
+
+# ---------- Commandes Discord : jouer, arrêter, classements ----------
+
+def _choice_label(entry: dict) -> str:
+    return f"{entry['emoji'] + ' ' if entry.get('emoji') else ''}{entry['name']}"[:100]
+
+
+async def _catalog_for_user(user_id: int) -> list[dict]:
+    """Sons que cette personne a le droit de jouer (ceux de ses serveurs + les partagés) : même règle que l'API HTTP."""
+    visible = await bot.resolve_visible_guild_ids(user_id)
+    return bot.catalog_visible_to(load_catalog(), visible)
+
+
+def find_sound_for_command(raw: str, catalog: list[dict]) -> tuple[Optional[dict], Optional[str]]:
+    """(son, None) ou (None, message) : `raw` est l'identifiant choisi dans la liste proposée, ou un nom tapé à la main
+    (accepté s'il est sans ambiguïté, un simple morceau de nom à partir de 3 lettres). `catalog` ne contient déjà que les sons visibles par la personne."""
+    raw = (raw or "").strip()
+    by_id = next((e for e in catalog if e["id"] == raw), None)
+    if by_id is not None:
+        return by_id, None
+    needle = raw.casefold()
+    exact = [e for e in catalog if e["name"].casefold() == needle]
+    if len(exact) == 1:
+        return exact[0], None
+    # Un morceau de nom n'est accepté qu'à partir de 3 lettres : « d » ne doit pas jouer le premier son qui contient un d.
+    partial = [e for e in catalog if needle in e["name"].casefold()] if len(needle) >= 3 else []
+    if len(exact) > 1 or len(partial) > 1:
+        return None, f"Plusieurs sons correspondent à « {raw[:60]} » : choisissez-en un dans la liste proposée."
+    if len(partial) == 1:
+        return partial[0], None
+    return None, f"Aucun son ne correspond à « {raw[:60]} »."
+
+
+async def sound_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    """Liste de sons proposée pendant la frappe (25 au plus, limite de Discord) : ceux qui commencent par ce qui est
+    tapé d'abord, puis ceux du serveur courant, puis par ordre alphabétique."""
+    try:
+        catalog = await _catalog_for_user(interaction.user.id)
+    except Exception:
+        log.warning("Autocomplétion impossible", exc_info=True)
+        return []
+    needle = (current or "").strip().casefold()
+    here = str(interaction.guild_id) if interaction.guild_id else None
+    matches = [e for e in catalog if needle in e["name"].casefold()]
+    matches.sort(key=lambda e: (not e["name"].casefold().startswith(needle), e.get("guild_id") != here, e["name"].casefold()))
+    return [app_commands.Choice(name=_choice_label(e), value=e["id"]) for e in matches[:25]]
+
+
+def _embed_from(view: dict) -> discord.Embed:
+    embed = discord.Embed(title=view["title"][:256], description=view["description"], color=discord.Color(0x38BDF8))
+    for name, value in view["fields"]:
+        embed.add_field(name=name, value=value[:1024], inline=False)
+    return embed
+
+
+@bot.tree.command(name="play", description="Joue un son dans votre salon vocal, sans ouvrir l'application")
+@app_commands.guild_only()
+@app_commands.describe(son="Le son à jouer (tapez quelques lettres pour chercher)")
+@app_commands.autocomplete(son=sound_autocomplete)
+async def play_command(interaction: discord.Interaction, son: str) -> None:
+    member = interaction.user
+    if not isinstance(member, discord.Member) or member.voice is None or member.voice.channel is None:
+        await interaction.response.send_message("Vous devez d'abord être connecté à un salon vocal.", ephemeral=True)
+        return
+    channel, guild_id = member.voice.channel, interaction.guild_id
+    await interaction.response.defer(ephemeral=True, thinking=True)  # rejoindre le salon peut prendre un instant
+
+    entry, problem = find_sound_for_command(son, await _catalog_for_user(member.id))
+    if entry is None:
+        await interaction.followup.send(f"❌ {problem}", ephemeral=True)
+        return
+    file_path = SOUNDS_DIR / f"{entry['id']}{entry['extension']}"
+    if not file_path.exists():
+        await interaction.followup.send("❌ Le fichier de ce son est introuvable sur le serveur.", ephemeral=True)
+        return
+
+    vc = bot.voice_clients_map.get(guild_id)
+    if vc is not None and vc.is_connected():
+        if vc.channel.id != channel.id:
+            await interaction.followup.send(
+                f"Le bot est dans « {vc.channel.name} ». Rejoignez ce salon, ou utilisez /join pour l'amener dans le vôtre.",
+                ephemeral=True)
+            return
+    else:
+        try:
+            await bot.join_guild_voice(guild_id, channel)
+        except CapacityError as ex:
+            await interaction.followup.send(f"⚠️ {ex}", ephemeral=True)
+            return
+        except Exception:
+            log.exception("/play : impossible de rejoindre le salon vocal")
+            await interaction.followup.send("❌ Impossible de rejoindre votre salon vocal (le bot a-t-il la permission « Se connecter » ?).", ephemeral=True)
+            return
+
+    try:
+        await bot._start_playback(guild_id, member.id, entry, file_path, 1.0, bot.mixers[guild_id])
+    except PlayRefused as refused:
+        await interaction.followup.send(f"⚠️ {refused.message}", ephemeral=True)
+        return
+    await interaction.followup.send(f"▶️ {_choice_label(entry)}", ephemeral=True)
+
+
+@bot.tree.command(name="stop", description="Coupe les sons en cours dans le salon vocal")
+@app_commands.guild_only()
+@app_commands.describe(son="Couper seulement ce son (une boucle, par exemple) ; sans lui, tous les sons sont coupés")
+@app_commands.autocomplete(son=sound_autocomplete)
+async def stop_command(interaction: discord.Interaction, son: Optional[str] = None) -> None:
+    guild_id = interaction.guild_id
+    if bot.mixers.get(guild_id) is None:
+        await interaction.response.send_message("Je ne suis connecté à aucun salon vocal ici.", ephemeral=True)
+        return
+    if not son:
+        bot._stop_guild_sounds(guild_id)
+        await interaction.response.send_message("⏹️ Sons coupés.", ephemeral=True)
+        return
+
+    entry, problem = find_sound_for_command(son, await _catalog_for_user(interaction.user.id))
+    if entry is None:
+        await interaction.response.send_message(f"❌ {problem}", ephemeral=True)
+        return
+    stopped = bot._stop_guild_sounds(guild_id, entry["id"])
+    await interaction.response.send_message(
+        f"⏹️ {_choice_label(entry)} coupé." if stopped else f"{_choice_label(entry)} ne jouait pas.", ephemeral=True)
+
+
+@bot.tree.command(name="top", description="Les sons les plus joués et les membres les plus actifs du serveur")
+@app_commands.guild_only()
+@app_commands.describe(periode="Période étudiée (30 jours par défaut)",
+                       partager="Poster le classement dans le salon (sinon, vous seul le voyez)")
+@app_commands.choices(periode=[app_commands.Choice(name="7 derniers jours", value=7),
+                               app_commands.Choice(name="30 derniers jours", value=30),
+                               app_commands.Choice(name="90 derniers jours", value=90),
+                               app_commands.Choice(name="12 derniers mois", value=365)])
+async def top_command(interaction: discord.Interaction, periode: int = 30, partager: bool = False) -> None:
+    await interaction.response.defer(ephemeral=not partager, thinking=True)
+    try:
+        names = {e["id"]: e for e in load_catalog()}
+        stats = await asyncio.to_thread(aggregate_play_stats, str(interaction.guild_id), periode, names)
+        view = reports.render_top(stats, interaction.guild.name if interaction.guild else "ce serveur", periode)
+    except Exception:
+        log.exception("Échec de /top")
+        await interaction.followup.send("❌ Impossible de calculer le classement (voir les journaux du serveur).", ephemeral=True)
+        return
+    await interaction.followup.send(embed=_embed_from(view))
+
+
+@bot.tree.command(name="bilan", description="Le bilan de l'année : sons les plus joués, membres les plus actifs, vos chiffres")
+@app_commands.guild_only()
+@app_commands.describe(annee="Année du bilan (l'année en cours par défaut)",
+                       partager="Poster le bilan dans le salon (sinon, vous seul le voyez)")
+async def bilan_command(interaction: discord.Interaction, annee: Optional[app_commands.Range[int, 2020, 2100]] = None,
+                        partager: bool = False) -> None:
+    year = annee or datetime.now().year
+    await interaction.response.defer(ephemeral=not partager, thinking=True)
+    try:
+        names = {e["id"]: e for e in load_catalog()}
+        guild_key, user_key = str(interaction.guild_id), str(interaction.user.id)
+        report = await asyncio.to_thread(lambda: reports.year_report(_read_jsonl(STATS_PATH), guild_key, year, user_key, names))
+        view = reports.render_bilan(report, interaction.guild.name if interaction.guild else "ce serveur")
+    except Exception:
+        log.exception("Échec de /bilan")
+        await interaction.followup.send("❌ Impossible de calculer le bilan (voir les journaux du serveur).", ephemeral=True)
+        return
+    await interaction.followup.send(embed=_embed_from(view))
 
 
 @bot.event

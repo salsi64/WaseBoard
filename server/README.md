@@ -338,6 +338,20 @@ Discord » ci-dessous.
 3. Les sons ajoutés/joués depuis n'importe quel client sont partagés entre tous les
    utilisateurs connectés au même serveur.
 
+### Commandes Discord pour les membres
+
+| Commande | Effet |
+|---|---|
+| `/play son:…` | joue un son dans votre salon vocal **sans ouvrir l'application** (utile sur téléphone). Tapez quelques lettres : Discord propose les sons que vous avez le droit de jouer (ceux de vos serveurs et les partagés). Le bot rejoint votre salon s'il n'est nulle part ; s'il est déjà dans un autre salon du serveur, il ne bouge pas (utilisez `/join`). Mêmes contrôles que l'application : anti-spam et plafonds du serveur. |
+| `/stop` · `/stop son:…` | coupe tous les sons en cours, ou seulement celui-là (une boucle, par exemple). |
+| `/top periode:…` | les sons les plus joués et les membres les plus actifs du serveur (7 jours, 30 jours, 90 jours ou 12 mois). Réponse visible de vous seul ; `partager:True` la poste dans le salon. |
+| `/bilan annee:…` | le bilan de l'année du serveur : totaux, sons et membres les plus actifs, jour et heure de pointe, et **vos** chiffres (rang, sons préférés). Visible de vous seul par défaut, `partager:True` pour le poster. |
+
+Les lectures lancées par `/play` comptent dans les statistiques et allument le bouton chez les utilisateurs de l'application,
+comme un clic. Les classements viennent de `stats.jsonl`, qui n'est jamais purgé : `/bilan` couvre donc toute l'histoire du serveur.
+Les administrateurs d'un serveur peuvent limiter ces commandes à certains rôles ou salons dans Paramètres du serveur ›
+Intégrations › WaseBoard.
+
 ## Rôles et administration
 
 Les droits sont décidés **par le serveur** (le client ne fait que masquer ce qui est interdit),
@@ -459,6 +473,46 @@ Commande Discord réservée à la personne propriétaire de l'application (répo
 fonctionnement, serveurs / salons vocaux / sons en lecture face aux plafonds, applications ouvertes, taille du catalogue,
 espace disque libre, serveurs les plus lourds et plafonds actifs. Pour une sonde externe (UptimeRobot, Kuma…), utilisez
 `GET /health` : `200` quand le bot est connecté à Discord, `503` sinon, sans aucun détail.
+
+### Alertes d'exploitation
+
+Le bot prévient la personne qui héberge (message privé Discord : le propriétaire de l'application, ou `alerts_user_id`) quand
+quelque chose déraille. Chaque message précise de quelle instance il vient (adresse et version) ; chaque type d'alerte a un
+délai avant répétition, mémorisé dans `alerts_state.json` (donc valable aussi après un redémarrage).
+
+| Alerte | Quand | Réglage |
+|---|---|---|
+| 💾 Disque presque plein | le disque des données est rempli à `alerts_disk_percent` % ou plus (contrôle toutes les 10 min, message au plus toutes les 12 h) | `alerts_disk_percent` (**90**, 0 = désactivée) |
+| 🔒 Certificat HTTPS | il expire dans moins de `alerts_cert_days` jours, ou est expiré (contrôle toutes les 6 h, message au plus par jour). Lu sur le serveur web **de la machine** (127.0.0.1, avec le nom de `public_url`) : aucun besoin que la machine se joigne elle-même par Internet. Sans `public_url` en https, jamais d'alerte. | `alerts_cert_days` (**14**, 0 = désactivée) |
+| ⚠️ Rafale d'erreurs | au moins `alerts_error_burst` erreurs journalisées en 5 minutes (message au plus toutes les 30 min, avec la dernière erreur) | `alerts_error_burst` (**20**, 0 = désactivée) |
+| 🔌 Connexion à Discord rétablie | la connexion à Discord a été coupée plus d'une minute | — |
+| 🔁 Redémarrage inattendu | le serveur démarre alors que le précédent ne s'était pas arrêté proprement (plantage, coupure de courant, `kill -9`). Un `systemctl restart`, une mise à jour ou un redémarrage de la machine n'en déclenchent pas. | — |
+
+`alerts_enabled` (**true** par défaut) coupe tout. Si vos messages privés sont fermés ou que Discord est injoignable, le
+serveur réessaie dix minutes plus tard et le note dans le journal (« Alerte non remise »).
+
+**Un serveur complètement tombé ne peut pas se signaler lui-même** : voir la surveillance indépendante ci-dessous.
+
+### Surveillance indépendante (watchdog)
+
+`deploy/watchdog.sh`, lancé chaque minute par un minuteur systemd, vérifie que le service tourne **et** que `GET /health`
+répond (`200` seulement quand le bot est connecté à Discord). Il poste sur un **webhook Discord** (salon privé de votre
+choix) quand ça ne va plus — après 3 contrôles ratés d'affilée, pour qu'un redémarrage ne déclenche rien —, rappelle toutes
+les heures tant que ça dure, puis annonce le retour avec la durée de la panne.
+
+1. Dans Discord : Paramètres du salon › Intégrations › Webhooks › Nouveau webhook, copiez l'adresse (**un secret** : qui l'a peut
+   écrire dans ce salon).
+2. Sur la machine, créez `/etc/waseboard/watchdog.env` (propriétaire root, droits `600`) :
+   ```
+   WEBHOOK_URL=https://discord.com/api/webhooks/…
+   # instance de test ou autre port : NAME=WaseBoard-test  UNIT=waseboard-test.service  HEALTH_URL=http://127.0.0.1:5007/health
+   ```
+3. Copiez `deploy/waseboard-watchdog.service` et `deploy/waseboard-watchdog.timer` dans `/etc/systemd/system/`, remplacez
+   `VOTRE_USER`, puis `sudo systemctl daemon-reload && sudo systemctl enable --now waseboard-watchdog.timer`
+   (`journalctl -u waseboard-watchdog` pour les passages, `systemctl list-timers` pour vérifier).
+
+Sans `WEBHOOK_URL`, le script se contente de journaliser. Réglages facultatifs : `FAILS_BEFORE_ALERT` (3), `REMINDER_EVERY`
+(3600 s), `STATE_DIR`. Les messages n'ouvrent aucune mention (`@everyone` neutralisé).
 
 ### Quelle capacité ? (mesures)
 

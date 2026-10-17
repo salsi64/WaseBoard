@@ -124,6 +124,8 @@ Si votre serveur a un panneau WaseBoard posté dans un salon (commande **/bot-se
 
 Commandes équivalentes à taper dans Discord : `/join`, `/leave` (déconnecte complètement le bot).
 
+Sans ouvrir l'application (sur téléphone, par exemple) : `/play son:…` joue un son dans votre salon vocal (tapez quelques lettres, Discord vous propose les sons disponibles), `/stop` les coupe. `/top` montre les sons et les membres les plus actifs du serveur, `/bilan` le bilan de l'année avec vos propres chiffres ; les deux ne s'affichent que pour vous, sauf avec `partager:True`.
+
 ## Besoin d'aide ?
 
 Demandez à un admin de votre serveur, ou passez sur le

@@ -46,6 +46,10 @@ Sans `ffmpeg`/`libopus0` installés, les vérifications correspondantes de `diag
 | `test_diagnostic.py` | configuration (fichier + variables d'environnement), `/health`, `/diagnostic`, `--check`/`--invite-url` |
 | `test_capacity.py` | plafonds de ressources, quotas/plafonds de guilde, limitation de débit par IP, `/instance` |
 | `test_panel.py` | panneaux de boutons Discord (`/panneau`, `/configurer-invitation`, `/inviter-bot`, `/bot-setup`) |
+| `test_slash_commands.py` | commandes `/play` (autocomplétion, droits, salon vocal, anti-spam, plafonds), `/stop`, `/top`, `/bilan` |
+| `test_reports.py` | calculs et mise en forme de `/top` et `/bilan` (bilan annuel, rangs, texte sûr) — module `reports.py`, sans Discord |
+| `test_alerts.py` | alertes d'exploitation : anti-répétition, rafale d'erreurs, disque, certificat HTTPS, redémarrage inattendu, reconnexion, message privé, configuration |
+| `test_watchdog.py` | `deploy/watchdog.sh` : panne confirmée, rappels, retour, webhook en panne, sans webhook (faux `systemctl` et `curl`) |
 
 Volontairement absent de cette suite : un test de lecture multi-guildes qui lisait le catalogue **réel** de
 l'instance de test de l'auteur (`sons_data` d'un déploiement précis, avec ses propres ID de guilde/son) — pas

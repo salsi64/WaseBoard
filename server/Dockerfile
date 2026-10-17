@@ -11,7 +11,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY server.py audio.py effects.py diagnostics.py wb_config.py ./
+COPY server.py audio.py effects.py diagnostics.py wb_config.py alerts.py reports.py ./
 
 # Utilisateur sans privilèges ; /data lui appartient (un volume nommé hérite de ces droits à sa création).
 RUN useradd --system --uid 10001 --home-dir /app waseboard \

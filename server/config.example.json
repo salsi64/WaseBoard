@@ -18,6 +18,11 @@
   "pcm_cache_mb": 0,
   "session_max_idle_days": 90,
   "loop_max_minutes": 30,
+  "alerts_enabled": true,
+  "alerts_user_id": "",
+  "alerts_disk_percent": 90,
+  "alerts_cert_days": 14,
+  "alerts_error_burst": 20,
   "default_guild_limits": {},
   "guild_limit_ceilings": {}
 }
