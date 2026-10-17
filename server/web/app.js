@@ -10,10 +10,11 @@ import { createPrefsStore } from './prefs.js';
 import {
   PALETTE, buildAuthorizeUrl, buildSections, categoryTabs, colorFor, dedupeById, emptyPrefs, errorText, favoriteSounds, filterSounds, isActivityLocation,
   loadJson, makeState, parseCallback, personalKey, playingMap, sanitizeColors, sanitizeIds, sanitizeSession, saveJson, setColor as setPrefsColor, sortByName,
-  toggleFavorite as toggleFavoritePrefs, trimRange, voiceSummary,
+  toggleFavorite as toggleFavoritePrefs, toggleInSet, trimRange, voiceSummary,
 } from './logic.js';
 
 const KEYS = { session: 'wb.session', favorites: 'wb.favorites', colors: 'wb.colors', lang: 'wb.lang', oauthState: 'wb.oauth_state' };
+const collapsedKey = (userId) => `wb.collapsed.${userId}`;   // sections repliées : un choix d'affichage propre à cet appareil
 const LOGO = '/app/icons/icon-192.png';
 
 // ---------- Stockage (le navigateur peut le refuser : on retombe sur la mémoire de la page) ----------
@@ -43,6 +44,7 @@ const state = {
   voice: voiceSummary(null),
   playing: new Map(),
   tab: 'all', query: '',
+  collapsed: new Set(),               // clés des sections repliées (onglet « Tous »), gardées dans ce navigateur
   favorites: new Set(),               // dérivés de prefs (voir applyPrefs)
   colors: {},
   load: 'idle', // idle | loading | error | ready
@@ -105,6 +107,7 @@ function endSession(messageKey) {
   storage.removeItem(KEYS.session);
   if (prefsStore) prefsStore.stop();
   prefsStore = null;
+  state.collapsed = new Set();
   state.prefs = emptyPrefs();
   state.favorites = new Set();
   state.colors = {};
@@ -206,6 +209,7 @@ function ensurePrefs() {
     onFirstSync: () => { storage.removeItem(KEYS.favorites); storage.removeItem(KEYS.colors); },
   });
   applyPrefs();
+  state.collapsed = sanitizeIds(loadJson(storage, collapsedKey(state.session.user_id), []));
 }
 
 const syncPrefs = () => { if (prefsStore) prefsStore.sync(); };
@@ -339,6 +343,13 @@ function currentView() {
   return { sections, empty: t('empty.none') };
 }
 
+/** Replie ou déplie une section de l'onglet « Tous » ; le choix est gardé dans ce navigateur (comme dans l'application, qui garde le sien). */
+function toggleSection(key) {
+  state.collapsed = toggleInSet(state.collapsed, key);
+  saveJson(storage, collapsedKey(state.session.user_id), [...state.collapsed]);
+  renderContent();
+}
+
 function renderContent() {
   if (!ui.content) return;
   ui.cards = new Map();
@@ -357,11 +368,20 @@ function renderContent() {
     for (const section of view.sections) {
       const personal = section.kind === 'personal';
       const title = personal ? section.name : section.guild ? section.guild.name : t('section.other');
+      const foldable = state.tab === 'all';   // dans l'onglet d'une seule section, la replier ne laisserait qu'une page vide
+      const folded = foldable && state.collapsed.has(section.key);
+      const label = [section.guild ? avatar(section.guild.icon_url, 20) : null, personal ? h('span', { 'aria-hidden': 'true', text: '📁' }) : null,
+        h('span', { class: 'section-name', text: title }), folded ? h('span', { class: 'section-count', text: String(section.sounds.length) }) : null];
       nodes.push(
-        h('h2', { class: 'section-title' }, section.guild ? avatar(section.guild.icon_url, 24) : null,
-          personal ? h('span', { 'aria-hidden': 'true', text: '📁' }) : null, h('span', { class: 'section-name', text: title }),
+        h('h2', { class: `section-title${folded ? ' folded' : ''}` },
+          foldable
+            ? h('button', {
+              class: 'section-toggle', 'aria-expanded': String(!folded), 'aria-label': t(folded ? 'section.expand' : 'section.collapse', title),
+              onclick: () => toggleSection(section.key),
+            }, h('span', { class: 'chevron', 'aria-hidden': 'true', text: '▾' }), label)
+            : h('span', { class: 'section-toggle static' }, label),
           personal ? h('button', { class: 'icon-btn section-more', 'aria-label': t('category.more', section.name), onclick: () => categoryUi.openCategorySheet(section.name), text: '⋯' }) : null),
-        personal && section.sounds.length === 0 ? h('p', { class: 'empty-category', text: t('category.empty') }) : h('div', { class: 'grid' }, section.sounds.map(makeCard)));
+        ...(folded ? [] : [personal && section.sounds.length === 0 ? h('p', { class: 'empty-category', text: t('category.empty') }) : h('div', { class: 'grid' }, section.sounds.map(makeCard))]));
     }
   }
   ui.content.replaceChildren(...nodes);

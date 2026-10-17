@@ -495,7 +495,8 @@ Windows : le serveur refait chaque vérification. La découpe demande que le nav
 **Vos favoris, vos couleurs et vos catégories personnelles** sont les mêmes partout : dans l'application Windows, dans la page web et dans l'Activité.
 On peut les gérer depuis la page comme dans l'application : ★ favoris et couleurs depuis le ⋯ d'un son, **catégories** (créer avec le bouton 📁＋ à la fin
 des onglets, renommer, déplacer, supprimer depuis le ⋯ de leur titre, y mettre ou en retirer un son depuis le ⋯ du son › « Catégories… »), dans le même
-ordre d'affichage que dans l'application. Une modification faite d'un côté apparaît de l'autre en moins d'une minute.
+ordre d'affichage que dans l'application. Une modification faite d'un côté apparaît de l'autre en moins d'une minute. Chaque section de l'onglet « Tous » se
+**replie** d'un clic sur son titre (le nombre de sons reste affiché) ; ce choix d'affichage est gardé dans l'appareil, il n'est pas synchronisé.
 
 Le serveur garde une copie **par personne** (`user_preferences.json`, lisible et modifiable par elle seule, noms de catégories et identifiants de sons
 uniquement, effacée dès qu'il n'y a plus rien) et **fusionne** ce que chaque appareil envoie : chacun envoie son état et l'état du serveur qu'il avait reçu
