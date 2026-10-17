@@ -42,6 +42,18 @@ jobs:
         shell: pwsh
         run: ./tools/check-localization.ps1
 
+      - name: Scripts PowerShell des outils (syntaxe)
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($script in Get-ChildItem tools -Filter *.ps1) {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($script.FullName, [ref]$null, [ref]$errors) | Out-Null
+            if ($errors) { $failed = $true; $errors | ForEach-Object { Write-Error "$($script.Name) : $($_.Message) (ligne $($_.Extent.StartLineNumber))" -ErrorAction Continue } }
+            else { Write-Host "$($script.Name) : syntaxe valide" }
+          }
+          if ($failed) { exit 1 }
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"

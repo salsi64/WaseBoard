@@ -1,0 +1,14 @@
+# /etc/systemd/system/waseboard-weekly-reboot.timer — le dimanche à 5 h (voir waseboard-weekly-reboot.service).
+# Installation : copiez les deux fichiers dans /etc/systemd/system/, puis
+#   sudo systemctl daemon-reload && sudo systemctl enable --now waseboard-weekly-reboot.timer
+# Si vous aviez un redémarrage quotidien (daily-reboot.timer) : sudo systemctl disable --now daily-reboot.timer
+[Unit]
+Description=Redémarrage hebdomadaire de la machine WaseBoard (dimanche 5 h)
+
+[Timer]
+OnCalendar=Sun *-*-* 05:00:00
+# Pas de rattrapage : si la machine était éteinte dimanche à 5 h, on ne redémarre pas dès son allumage.
+Persistent=false
+
+[Install]
+WantedBy=timers.target

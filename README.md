@@ -68,6 +68,8 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 - **Panel d'administration** par serveur (rôles, corbeille avec restauration, statistiques,
   journal d'actions, quotas, anti-spam) et un **panneau de boutons Discord tout-en-un**
   (`/bot-setup`) pour démarrer, rejoindre le vocal ou ajouter le bot ailleurs sans quitter Discord.
+- **Commandes Discord** `/play` (avec recherche), `/stop`, `/top` et `/bilan` : jouer un son ou voir les classements du serveur sans ouvrir l'application ;
+  alertes d'exploitation par message privé à la personne qui héberge.
 - **Interface en français et en anglais** : WaseBoard suit la langue de Windows (ou le réglage Langue dans Apparence) ; les
   messages du serveur la suivent aussi.
 - Formats supportés : mp3, wav, ogg (Vorbis et Opus), flac, m4a, wma.

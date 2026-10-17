@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WaseBoard</title>
+<link rel="alternate" hreflang="fr" href="/">
+<link rel="alternate" hreflang="en" href="/en">
 <meta name="description" content="A shared soundboard for Discord: click a sound and it plays on your speakers and in voice chat, for everyone.">
 <style>
   :root {
@@ -209,8 +211,6 @@
   html.js .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
   html.js .reveal.in { opacity: 1; transform: none; }
 </style>
-<link rel="alternate" hreflang="fr" href="/">
-<link rel="alternate" hreflang="en" href="/en">
 </head>
 <body>
   <script>document.documentElement.classList.add('js');</script>
@@ -222,14 +222,14 @@
       <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
     </header>
 
-    <img class="hero-shot reveal" src="img/hero-flat.png" width="1760" height="1056" alt="Screenshot of WaseBoard 3.2: sound buttons as colored pills with their waveform, collapsible categories, a sidebar with the Discord servers and the people playing a sound right now">
+    <img class="hero-shot reveal" src="img/hero-flat-3.4-en.png" width="1760" height="1056" alt="Screenshot of WaseBoard 3.4: sound buttons as colored pills with their waveform, collapsible categories, the Clip button, a sidebar with the Discord servers and the people playing a sound right now">
 
     <div class="actions">
       <a class="button primary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Download the Windows client</a>
       <a class="button secondary" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Add WaseBoard to my server</a>
       <a class="button secondary" href="https://discord.gg/HAGTNGFyQd">💬 Join the WaseBoard Discord</a>
     </div>
-    <div class="actions-hint">Most people only need the first button — see below. <a class="link" href="#nouveautes">What's new in 3.2 ↓</a></div>
+    <div class="actions-hint">Most people only need the first button — see below. <a class="link" href="#nouveautes">What's new in 3.4 ↓</a></div>
 
     <div class="choice recommended reveal" style="--card-accent: var(--accent-2); margin-bottom: 20px;">
       <span class="badge">MOST COMMON</span>
@@ -253,21 +253,21 @@
       </div>
     </div>
 
-    <div class="section-label" id="nouveautes">New in version 3.2</div>
+    <div class="section-label" id="nouveautes">New in version 3.4</div>
 
     <div class="card news reveal">
-      <img class="news-shot" src="img/editer-son.png" width="360" height="592" loading="lazy" alt="Screenshot of the “Edit sound” window: name, emoji, color, categories, volume from 0 to 200%, trimming on the waveform, audio file replacement">
+      <img class="news-shot" src="img/clip-trim-en.png" width="420" height="411" loading="lazy" alt="Screenshot of the add-a-sound window opened by the clip: name “Clip 18:20”, trimming on the waveform, Listen to the excerpt and Keep everything buttons">
       <div>
-        <h2>A sharper client, and every sound tuned to your taste</h2>
+        <h2>Create sounds in a second, play them from anywhere</h2>
         <ul>
-          <li data-i="🎨"><strong>“Flat” theme</strong>, now the default: inset fields, gradient buttons, an icon toolbar. It is set independently of the color palette.</li>
-          <li data-i="✏️"><strong>“Edit sound” window</strong> (right-click › Edit): name, emoji, color, categories, favorite, trimming on the waveform.</li>
-          <li data-i="🔊"><strong>Per-sound volume</strong>, from 0 to 200%: the scream that is too loud goes down, the whisper comes up.</li>
-          <li data-i="📁"><strong>Replace the audio file</strong> without losing the name, categories or settings.</li>
-          <li data-i="🌈"><strong>Buttons tinted</strong> with the chosen color, collapsible categories (▾/▸) that can be renamed with a right-click.</li>
-          <li data-i="🟢"><strong>The bot's “speaking” indicator</strong> finally turns off when nothing is playing.</li>
+          <li data-i="🎞"><strong>Last-seconds clip</strong>: a shortcut keeps what just played on your PC (game, video, Discord) and opens the add window to turn it into a sound. Off by default; everything stays in memory until you ask.</li>
+          <li data-i="🌐"><strong>Web version</strong>: the same sound list in a browser or on a phone, with sound adding and editing.</li>
+          <li data-i="🚀"><strong>Discord Activity</strong>: WaseBoard opens inside your voice channel, without leaving Discord.</li>
+          <li data-i="⌨️"><strong><code>/play</code>, <code>/stop</code>, <code>/top</code>, <code>/bilan</code> commands</strong>: play a sound (with search), stop everything, server rankings.</li>
+          <li data-i="🇬🇧"><strong>English interface</strong> (and still French): WaseBoard follows the Windows language.</li>
+          <li data-i="🛠"><strong>For hosts</strong>: alerts by direct message, independent monitoring, off-machine backup.</li>
         </ul>
-        <div class="fine">Replacing the file needs an up-to-date WaseBoard server (the public instance is).</div>
+        <div class="fine">The web version and the Activity need an up-to-date WaseBoard server (the public instance is).</div>
         <a class="button secondary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Update · release notes</a>
       </div>
     </div>
@@ -327,7 +327,7 @@
       <a class="link" href="https://github.com/salsi64/WaseBoard">GitHub</a>.<br>
       <a class="link" href="/privacy.html">Privacy (in French)</a> ·
       <a class="link" href="/terms.html">Terms of use (in French)</a> ·
-      <a class="link" href="/">Français</a>
+      <a class="link" href="/" hreflang="fr">Français</a>
     </div>
   </div>
 

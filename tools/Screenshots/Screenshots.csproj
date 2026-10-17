@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Outil de développement (pas livré) : captures d'écran de la vraie interface. À construire avec -c Dev : l'application cible est alors
+       WaseBoard-Dev, qui a son propre dossier de réglages (AppData\WaseBoard-Dev) — jamais celui de l'installation normale. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>WaseBoardScreenshots</AssemblyName>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <Configurations>Debug;Release;Dev</Configurations>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WaseBoard\WaseBoard.csproj" />
+  </ItemGroup>
+
+</Project>

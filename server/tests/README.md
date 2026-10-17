@@ -47,6 +47,8 @@ Sans `ffmpeg`/`libopus0` installés, les vérifications correspondantes de `diag
 | `test_capacity.py` | plafonds de ressources, quotas/plafonds de guilde, limitation de débit par IP, `/instance` |
 | `test_panel.py` | panneaux de boutons Discord (`/panneau`, `/configurer-invitation`, `/inviter-bot`, `/bot-setup`) |
 | `test_slash_commands.py` | commandes `/play` (autocomplétion, droits, salon vocal, anti-spam, plafonds), `/stop`, `/top`, `/bilan` |
+| `test_backup.py` | `deploy/backup.sh` : archive des données, archive séparée des secrets (`-c`), droits 600, conservation, refus d'un dossier qui n'est pas WaseBoard |
+| `test_install_watchdog.py` | `deploy/install-watchdog.sh` : webhook validé et gardé dans un fichier 600, service/minuteur générés, plusieurs instances, refus des entrées invalides |
 | `test_messages.py` | messages d'erreur bilingues : choix de la langue (`Accept-Language`), traduction des messages à trous, **couverture** (chaque message d'erreur de `server.py` / `effects.py` a sa traduction), comportement sur HTTP |
 | `test_reports.py` | calculs et mise en forme de `/top` et `/bilan` (bilan annuel, rangs, texte sûr) — module `reports.py`, sans Discord |
 | `test_alerts.py` | alertes d'exploitation : anti-répétition, rafale d'erreurs, disque, certificat HTTPS, redémarrage inattendu, reconnexion, message privé, configuration |

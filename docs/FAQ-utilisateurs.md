@@ -128,6 +128,9 @@ Si votre serveur a un panneau WaseBoard posté dans un salon (commande **/bot-se
 
 Commandes équivalentes à taper dans Discord : `/join`, `/leave` (déconnecte complètement le bot).
 
+Et, pour jouer **sans ouvrir l'application** (sur téléphone, par exemple) : `/play son:…` (tapez quelques lettres, Discord propose les sons que vous pouvez jouer),
+`/stop` pour tout couper, `/top` et `/bilan` pour les classements du serveur (sons les plus joués, membres les plus actifs, bilan de l'année).
+
 **Depuis un navigateur ou un téléphone** : si votre serveur l'a activée, la page `https://<adresse du serveur>/app/` offre la même chose
 sans rien installer — connexion avec Discord, liste des sons de vos serveurs, un toucher pour jouer, « Rejoindre mon vocal », « Stop ».
 Sur téléphone, le menu du navigateur propose « Ajouter à l'écran d'accueil » : elle s'ouvre alors comme une application. Vos favoris et vos

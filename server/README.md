@@ -631,6 +631,10 @@ Sauvegarde quotidienne automatique (systemd) : copiez `deploy/waseboard-backup.s
 dans `/etc/systemd/system/`, remplacez `VOTRE_USER`, puis `sudo systemctl daemon-reload && sudo systemctl enable --now waseboard-backup.timer`
 (`systemctl list-timers` pour vérifier, `journalctl -u waseboard-backup` pour le résultat).
 
+**Les secrets, à part (`-c`)** : `./deploy/backup.sh -c` écrit en plus `waseboard-config-AAAAMMJJ-HHMMSS.tgz` (droits 600), avec `config.json` (jeton
+du bot, secret partagé) et `oauth_sessions.json`. Sans elle, une machine perdue oblige à recréer le jeton du bot et à reconnecter tout le monde. L'archive des
+données, elle, reste sans secret. `deploy/waseboard-backup.service` l'active déjà. À ne jamais mettre dans un dépôt ni sur un service en ligne.
+
 **Restaurer** (serveur arrêté ; l'existant est mis de côté, pas écrasé) :
 
 ```bash
@@ -644,6 +648,43 @@ sudo systemctl start waseboard
 Avec Docker : la sauvegarde et la restauration du volume sont décrites plus haut (« Données et sauvegarde ») ;
 restaurer = `docker compose stop waseboard`, puis `tar xzf` de l'archive dans le volume avec la même commande
 `docker run … alpine`, puis `docker compose start waseboard`. Pour l'automatiser, une ligne de `crontab` suffit.
+
+### Sauvegarde hors de la machine (depuis un PC Windows)
+
+Les archives ci-dessus sont sur la **même machine** que le serveur : si elle tombe en panne, elles partent avec elle. `tools/pull-backup.ps1` (à lancer sur un PC
+Windows 10 ou plus, qui a une clé SSH pour la machine) copie la dernière archive des données **et** celle des secrets, vérifie qu'elles se relisent
+(`tar -tzf`) et contiennent le catalogue / `config.json`, puis supprime en local les plus anciennes. Rien n'est modifié sur le serveur.
+
+```powershell
+# une fois, à la main (SSH demande de confirmer l'empreinte du serveur : « yes ») :
+.\tools\pull-backup.ps1 -Server 192.168.1.10 -Port 22 -User moi -KeyFile $HOME\.ssh\ma_cle
+# puis tous les jours automatiquement (tâche planifiée Windows, 12 h ou dès que le PC est allumé) :
+.\tools\pull-backup.ps1 -Server 192.168.1.10 -Port 22 -User moi -KeyFile $HOME\.ssh\ma_cle -Install
+```
+
+Destination par défaut : `%USERPROFILE%\WaseBoard-sauvegardes` (14 archives de chaque sorte gardées, `-Keep` pour changer ; journal `pull-backup.log`).
+`-NoSecrets` laisse l'archive des secrets sur le serveur. `-Uninstall` retire la tâche. Pour tester sans risque, pointez `-RemoteDir ~/waseboard-backups-test`.
+
+### Redémarrage hebdomadaire de la machine
+
+`deploy/waseboard-weekly-reboot.service` et `.timer` redémarrent la machine **le dimanche à 5 h** (mémoire propre, mises à jour du noyau appliquées ; le serveur repart
+tout seul, le bot quitte le vocal ~1 minute). Un redémarrage par semaine suffit, un par jour coupe le bot du vocal pour rien. Installation : copier les deux fichiers dans
+`/etc/systemd/system/`, `sudo systemctl daemon-reload && sudo systemctl enable --now waseboard-weekly-reboot.timer` (et `sudo systemctl disable --now daily-reboot.timer` si
+vous aviez un redémarrage quotidien). `systemctl list-timers` donne la prochaine échéance.
+
+### nginx : limitation de débit et scanners
+
+Un site WaseBoard derrière nginx reçoit, comme n'importe quel site public, des scanners qui demandent `/.env`, `/wp-login.php`, `/phpmyadmin`… et parfois des rafales de requêtes.
+`deploy/nginx/` contient deux fichiers à installer une fois :
+
+| Fichier | Où | Effet |
+|---|---|---|
+| `waseboard-limits.conf` | `/etc/nginx/conf.d/` | définit la zone de limitation : **30 requêtes par seconde et par adresse IP** (le client en fait ~3 en usage normal) |
+| `waseboard-hardening.conf` | `/etc/nginx/snippets/`, puis `include /etc/nginx/snippets/waseboard-hardening.conf;` dans le bloc `server { }` | **ferme la connexion sans répondre** (444) aux chemins de scanners, laisse passer `/.well-known/` ; au-delà de 30 req/s (rafale de 60 tolérée) répond **429** |
+
+`sudo nginx -t && sudo systemctl reload nginx` pour appliquer. Ceci complète `http_rate_limit_per_min` (le limiteur interne du serveur, voir « Capacité et exploitation »),
+qui ne freine que les routes publiques et l'envoi de sons : nginx arrête la rafale **avant** qu'elle atteigne le serveur. Vérification : `curl -i https://votre-site/.env`
+doit se terminer par « connection reset » / une réponse vide.
 
 ### Service systemd durci
 

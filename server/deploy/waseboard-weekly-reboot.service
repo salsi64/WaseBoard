@@ -1,0 +1,10 @@
+# /etc/systemd/system/waseboard-weekly-reboot.service — redémarrage hebdomadaire de la machine (lancé par waseboard-weekly-reboot.timer).
+# Un redémarrage par semaine suffit à nettoyer la mémoire, appliquer les mises à jour du noyau et repartir d'un état propre ;
+# le serveur WaseBoard redémarre tout seul (voir waseboard.service : Restart=always, WantedBy=multi-user.target).
+# Pas de redémarrage quotidien : chaque redémarrage coupe le bot du vocal pendant ~1 minute.
+[Unit]
+Description=Redémarrage hebdomadaire de la machine WaseBoard
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl reboot

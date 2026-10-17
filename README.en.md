@@ -9,7 +9,7 @@ noise suppression such as Krisp).
 **[⬇ Download the Windows client](https://github.com/salsi64/WaseBoard/releases/latest)** ·
 **[💬 Join the WaseBoard Discord](https://discord.gg/HAGTNGFyQd)**
 
-![Screenshot of WaseBoard: sound buttons as colored pills, several Discord servers in the sidebar](docs/img/hero.png)
+![Screenshot of WaseBoard: sound buttons as colored pills, several Discord servers in the sidebar](docs/img/hero.en.png)
 
 ## How it works
 
@@ -66,6 +66,8 @@ Full guide and FAQ (in French): [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateu
 - **Administration panel** per server (roles, trash with restore, statistics,
   action log, quotas, anti-spam) and an **all-in-one Discord button panel**
   (`/bot-setup`) to get started, join voice or add the bot elsewhere without leaving Discord.
+- **Discord commands** `/play` (with search), `/stop`, `/top` and `/bilan`: play a sound or see the server rankings without opening the app;
+  operations alerts by direct message to whoever hosts.
 - **English and French interface**: WaseBoard follows your Windows language (or the Language setting in Appearance); the
   server's messages follow it too.
 - Supported formats: mp3, wav, ogg (Vorbis and Opus), flac, m4a, wma.

@@ -151,6 +151,24 @@ vraies données de prod avant d'écrire cette étape (jamais exécuté sur la pr
 - [ ] Une fois tout le monde migré sur `waseboard.salsi.bid` : envisager de retirer
       `waseboard.duckdns.org` du nginx (pas obligatoire, juste pour alléger).
 
+## Exploitation (J11) — à installer en même temps que le reste, jamais avant
+
+Tout ceci a été essayé sur l'instance de test (`waseboard-test.salsi.bid`) ; la machine est partagée, donc ces éléments s'appliquent à la prod dès qu'ils sont installés.
+
+- [ ] **Sauvegarde des secrets** : ajouter `-c` à la commande de `waseboard-backup.service` de prod (`… -k 7 -c`), `sudo systemctl daemon-reload`, lancer une fois
+      `sudo systemctl start waseboard-backup.service` et vérifier la présence d'un `waseboard-config-*.tgz` dans `~/waseboard-backups`.
+- [ ] **Sauvegarde hors machine** : sur le PC Windows, `.\tools\pull-backup.ps1 -Server … -Port … -User … -KeyFile … -RemoteDir '~/waseboard-backups'` une fois à la main,
+      puis `-Install` (tâche planifiée quotidienne). Voir « Sauvegarde hors de la machine » dans `server/README.md`.
+- [ ] **Redémarrage hebdomadaire** : installer `deploy/waseboard-weekly-reboot.service` et `.timer`, puis **désactiver** l'ancien redémarrage quotidien :
+      `sudo systemctl disable --now daily-reboot.timer`.
+- [ ] **nginx** : `deploy/nginx/waseboard-limits.conf` dans `/etc/nginx/conf.d/`, `deploy/nginx/waseboard-hardening.conf` dans `/etc/nginx/snippets/`, et
+      `include /etc/nginx/snippets/waseboard-hardening.conf;` dans le bloc `server { }` du site de prod (`waseboard-salsi-bid` ; `waseboard` pour l'ancien nom),
+      `sudo nginx -t && sudo systemctl reload nginx`. Vérifier : `curl -i https://waseboard.salsi.bid/.env` se termine sans réponse, `/health` répond 200.
+- [ ] **`http_rate_limit_per_min`** : `60` dans le `config.json` de prod (déjà essayé sur le test).
+- [ ] **Surveillance indépendante** : créer un webhook dans un salon **privé** (Intégrations › Webhooks), puis, dans un terminal sur la machine,
+      `~/waseboard-server/deploy/install-watchdog.sh` (le webhook est demandé au clavier, jamais passé en argument), et
+      `install-watchdog.sh -n WaseBoard-test -u waseboard-test.service -p 5007 -i test` pour l'instance de test. Un message d'essai arrive dans le salon.
+
 ## Page d'accueil (landing page)
 
 - [ ] Déployer `deploy/landing-page/index.html` **et `index.en.html`**, puis ajouter au vhost nginx de prod le bloc `location = /en { try_files /index.en.html =404; }`
