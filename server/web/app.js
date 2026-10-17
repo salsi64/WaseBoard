@@ -2,16 +2,19 @@
 // Règles : jamais de HTML construit à partir de données (les noms de sons et pseudos sont du texte), aucun style en ligne (CSP),
 // l'API est celle de l'application Windows, authentifiée par la session Discord en « Authorization: Bearer ».
 import { avatar, closeAllOverlays, closeOverlay, h, openOverlay, toast } from './dom.js';
+import { createCategoryUi } from './categories-ui.js';
 import { audioFiles, uploadableGuilds } from './editor-logic.js';
 import { createEditor } from './editor.js';
 import { LANGUAGES, makeTranslator, pickLanguage } from './i18n.js';
+import { createPrefsStore } from './prefs.js';
 import {
-  PALETTE, buildAuthorizeUrl, buildSections, categoryTabs, colorFor, dedupeById, errorText, favoriteSounds, filterSounds, isActivityLocation, loadJson,
-  makeState, parseCallback, playingMap, sanitizeColors, sanitizeIds, sanitizePersonal, sanitizeSession, saveJson, sortByName, toggleInSet, trimRange,
-  voiceSummary,
+  PALETTE, buildAuthorizeUrl, buildSections, categoryTabs, colorFor, dedupeById, emptyPrefs, errorText, favoriteSounds, filterSounds, isActivityLocation,
+  loadJson, makeState, parseCallback, personalKey, playingMap, sanitizeColors, sanitizeIds, sanitizeSession, saveJson, setColor as setPrefsColor, sortByName,
+  toggleFavorite as toggleFavoritePrefs, toggleInSet, trimRange, voiceSummary,
 } from './logic.js';
 
 const KEYS = { session: 'wb.session', favorites: 'wb.favorites', colors: 'wb.colors', lang: 'wb.lang', oauthState: 'wb.oauth_state' };
+const collapsedKey = (userId) => `wb.collapsed.${userId}`;   // sections repliées : un choix d'affichage propre à cet appareil
 const LOGO = '/app/icons/icon-192.png';
 
 // ---------- Stockage (le navigateur peut le refuser : on retombe sur la mémoire de la page) ----------
@@ -36,13 +39,14 @@ const state = {
   config: null,
   session: sanitizeSession(loadJson(storage, KEYS.session, null)),
   sounds: [], guilds: [], shared: {},
-  personal: sanitizePersonal(null),   // catégories personnelles de l'application Windows (copie gardée par le serveur)
+  prefs: emptyPrefs(),                // favoris, couleurs et catégories personnelles, partagés avec l'application Windows (voir prefs.js)
   loadedAt: 0,
   voice: voiceSummary(null),
   playing: new Map(),
   tab: 'all', query: '',
-  favorites: sanitizeIds(loadJson(storage, KEYS.favorites, [])),
-  colors: sanitizeColors(loadJson(storage, KEYS.colors, {})),
+  collapsed: new Set(),               // clés des sections repliées (onglet « Tous »), gardées dans ce navigateur
+  favorites: new Set(),               // dérivés de prefs (voir applyPrefs)
+  colors: {},
   load: 'idle', // idle | loading | error | ready
   installPrompt: null,
 };
@@ -101,6 +105,12 @@ function saveSession(session) {
 function endSession(messageKey) {
   state.session = null;
   storage.removeItem(KEYS.session);
+  if (prefsStore) prefsStore.stop();
+  prefsStore = null;
+  state.collapsed = new Set();
+  state.prefs = emptyPrefs();
+  state.favorites = new Set();
+  state.colors = {};
   stopPolling();
   stopPreview();
   closeAllOverlays();
@@ -175,9 +185,45 @@ async function handleCallback() {
   showApp();
 }
 
+// ---------- Préférences synchronisées (favoris, couleurs, catégories personnelles) ----------
+let prefsStore = null;
+
+function applyPrefs() {
+  state.prefs = prefsStore.prefs;
+  state.favorites = new Set(state.prefs.favorites);
+  state.colors = state.prefs.colors;
+}
+
+function onPrefsChange() {
+  applyPrefs();
+  if (ui.main) renderAll();
+}
+
+/** Crée le magasin de la personne connectée (une fois). Favoris et couleurs d'avant la synchronisation, gardés seuls dans ce navigateur,
+ *  sont repris à la première synchronisation puis oubliés. */
+function ensurePrefs() {
+  if (prefsStore || !state.session) return;
+  const legacy = { favorites: [...sanitizeIds(loadJson(storage, KEYS.favorites, []))], colors: sanitizeColors(loadJson(storage, KEYS.colors, {})) };
+  prefsStore = createPrefsStore({
+    api, storage, userId: state.session.user_id, legacy, onChange: onPrefsChange,
+    onFirstSync: () => { storage.removeItem(KEYS.favorites); storage.removeItem(KEYS.colors); },
+  });
+  applyPrefs();
+  state.collapsed = sanitizeIds(loadJson(storage, collapsedKey(state.session.user_id), []));
+}
+
+const syncPrefs = () => { if (prefsStore) prefsStore.sync(); };
+
+const categoryUi = createCategoryUi({
+  t: (key, ...args) => t(key, ...args),
+  getState: () => state,
+  edit: (change) => { if (prefsStore) prefsStore.edit(change); },
+});
+
 // ---------- Page principale ----------
 function showApp() {
   stopPreview();
+  ensurePrefs();
   const search = h('input', { type: 'search', id: 'search', placeholder: t('search.placeholder'), 'aria-label': t('search.label'), autocomplete: 'off', enterkeyhint: 'search', oninput: onSearch });
   ui.main = h('div', { class: 'app' },
     h('header', { class: 'topbar' },
@@ -202,9 +248,9 @@ function showApp() {
   startPolling();
 }
 
-/** Catalogue, serveurs, catégories partagées et personnelles, état vocal ; { error } si le chargement échoue, null si la session a pris fin. */
+/** Catalogue, serveurs, catégories partagées et état vocal ; { error } si le chargement échoue, null si la session a pris fin. */
 async function fetchCatalog() {
-  const [sounds, guilds, status, personal] = await Promise.all([api('/sounds'), api('/my-guilds'), api(`/status?strict=1${guildQuery('&')}`), api('/me/categories')]);
+  const [sounds, guilds, status] = await Promise.all([api('/sounds'), api('/my-guilds'), api(`/status?strict=1${guildQuery('&')}`)]);
   if (!state.session) return null;   // déconnecté pendant le chargement (session expirée)
   if (!sounds.ok || !guilds.ok) {
     return { error: sounds.offline || guilds.offline ? t('offline') : errorText(sounds.status || guilds.status, sounds.data || guilds.data) };
@@ -213,18 +259,13 @@ async function fetchCatalog() {
   const sharedLists = await Promise.all(guildList.map((guild) => api(`/shared-categories?guild_id=${encodeURIComponent(guild.id)}`)));
   const shared = {};
   guildList.forEach((guild, index) => { if (sharedLists[index].ok) shared[guild.id] = sharedLists[index].data.sound_ids || []; });
-  // Les catégories personnelles sont un plus : un serveur plus ancien (404) ou une erreur passagère ne doit pas empêcher d'afficher les sons.
-  return {
-    sounds: dedupeById(sounds.data.sounds || []), guilds: guildList, shared, voice: status.ok ? voiceSummary(status.data) : null,
-    personal: personal.ok ? sanitizePersonal(personal.data) : null,
-  };
+  return { sounds: dedupeById(sounds.data.sounds || []), guilds: guildList, shared, voice: status.ok ? voiceSummary(status.data) : null };
 }
 
 function applyCatalog(catalog) {
   state.sounds = catalog.sounds;
   state.guilds = catalog.guilds;
   state.shared = catalog.shared;
-  if (catalog.personal) state.personal = catalog.personal;   // en cas d'échec, on garde les dernières connues
   if (catalog.voice) state.voice = catalog.voice;
   state.load = 'ready';
   state.loadedAt = Date.now();
@@ -242,6 +283,7 @@ async function loadData() {
   }
   applyCatalog(catalog);
   renderAll();
+  syncPrefs();   // récupère ce qui a été changé ailleurs (application Windows, autre appareil)
 }
 
 /** Recharge le catalogue après un ajout, une modification ou une suppression (sans écran de chargement). */
@@ -264,7 +306,7 @@ function tabList() {
   return [
     { key: 'favorites', label: t('tabs.favorites'), icon: '★' },
     { key: 'all', label: t('tabs.all') },
-    ...categoryTabs(state.sounds, state.guilds, state.personal).map((tab) => (tab.type === 'guild'
+    ...categoryTabs(state.sounds, state.guilds, state.prefs).map((tab) => (tab.type === 'guild'
       ? { key: tab.key, label: tab.guild.name, iconUrl: tab.guild.icon_url }
       : { key: tab.key, label: tab.name, icon: '📁' })),
   ];
@@ -275,17 +317,37 @@ function renderTabs() {
   if (!tabs.some((tab) => tab.key === state.tab)) state.tab = 'all';
   ui.tabs.replaceChildren(...tabs.map((tab) => h('button', {
     class: 'tab', role: 'tab', 'aria-selected': String(state.tab === tab.key && !state.query), onclick: () => { state.tab = tab.key; state.query = ''; ui.search.value = ''; renderTabs(); renderContent(); },
-  }, tab.iconUrl ? avatar(tab.iconUrl, 22) : null, tab.icon ? h('span', { 'aria-hidden': 'true', text: tab.icon }) : null, h('span', { text: tab.label }))));
+  }, tab.iconUrl ? avatar(tab.iconUrl, 22) : null, tab.icon ? h('span', { 'aria-hidden': 'true', text: tab.icon }) : null, h('span', { text: tab.label }))),
+  h('button', { class: 'tab add-category', id: 'new-category', title: t('tabs.newCategory'), 'aria-label': t('tabs.newCategory'), onclick: newCategory },
+    h('span', { 'aria-hidden': 'true', text: '📁＋' })));
   // Avec beaucoup d'onglets (serveurs + catégories personnelles), celui qu'on vient de choisir peut être hors de vue sur un petit écran.
   ui.tabs.querySelector('[aria-selected="true"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+}
+
+/** Crée une catégorie (nom demandé) et l'affiche. */
+async function newCategory() {
+  const name = await categoryUi.createCategory();
+  if (!name) return;
+  state.tab = personalKey(name);
+  state.query = '';
+  if (ui.search) ui.search.value = '';
+  renderTabs();
+  renderContent();
 }
 
 function currentView() {
   const all = state.sounds;
   if (state.query.trim()) return { flat: sortByName(filterSounds(all, state.query)), empty: t('empty.search', state.query.trim()) };
   if (state.tab === 'favorites') return { flat: favoriteSounds(all, state.favorites), empty: t('empty.favorites') };
-  const sections = buildSections(all, state.guilds, state.shared, state.personal).filter((section) => state.tab === 'all' || section.key === state.tab);
+  const sections = buildSections(all, state.guilds, state.shared, state.prefs).filter((section) => state.tab === 'all' || section.key === state.tab);
   return { sections, empty: t('empty.none') };
+}
+
+/** Replie ou déplie une section de l'onglet « Tous » ; le choix est gardé dans ce navigateur (comme dans l'application, qui garde le sien). */
+function toggleSection(key) {
+  state.collapsed = toggleInSet(state.collapsed, key);
+  saveJson(storage, collapsedKey(state.session.user_id), [...state.collapsed]);
+  renderContent();
 }
 
 function renderContent() {
@@ -304,11 +366,22 @@ function renderContent() {
     nodes.push(h('p', { class: 'empty', text: view.empty }));
   } else {
     for (const section of view.sections) {
-      const title = section.kind === 'personal' ? section.name : section.guild ? section.guild.name : t('section.other');
+      const personal = section.kind === 'personal';
+      const title = personal ? section.name : section.guild ? section.guild.name : t('section.other');
+      const foldable = state.tab === 'all';   // dans l'onglet d'une seule section, la replier ne laisserait qu'une page vide
+      const folded = foldable && state.collapsed.has(section.key);
+      const label = [section.guild ? avatar(section.guild.icon_url, 20) : null, personal ? h('span', { 'aria-hidden': 'true', text: '📁' }) : null,
+        h('span', { class: 'section-name', text: title }), folded ? h('span', { class: 'section-count', text: String(section.sounds.length) }) : null];
       nodes.push(
-        h('h2', { class: 'section-title' }, section.guild ? avatar(section.guild.icon_url, 24) : null,
-          section.kind === 'personal' ? h('span', { 'aria-hidden': 'true', text: '📁' }) : null, h('span', { text: title })),
-        h('div', { class: 'grid' }, section.sounds.map(makeCard)));
+        h('h2', { class: `section-title${folded ? ' folded' : ''}` },
+          foldable
+            ? h('button', {
+              class: 'section-toggle', 'aria-expanded': String(!folded), 'aria-label': t(folded ? 'section.expand' : 'section.collapse', title),
+              onclick: () => toggleSection(section.key),
+            }, h('span', { class: 'chevron', 'aria-hidden': 'true', text: '▾' }), label)
+            : h('span', { class: 'section-toggle static' }, label),
+          personal ? h('button', { class: 'icon-btn section-more', 'aria-label': t('category.more', section.name), onclick: () => categoryUi.openCategorySheet(section.name), text: '⋯' }) : null),
+        ...(folded ? [] : [personal && section.sounds.length === 0 ? h('p', { class: 'empty-category', text: t('category.empty') }) : h('div', { class: 'grid' }, section.sounds.map(makeCard))]));
     }
   }
   ui.content.replaceChildren(...nodes);
@@ -417,12 +490,14 @@ function startPolling() {
   if (document.visibilityState !== 'visible') return;
   timers.status = setInterval(tickStatus, 4000);
   timers.activity = setInterval(tickActivity, 1000);
+  timers.prefs = setInterval(syncPrefs, 30000);   // ce qui a été changé dans l'application Windows apparaît dans la minute
   tickActivity();
 }
 
 function stopPolling() {
   clearInterval(timers.status);
   clearInterval(timers.activity);
+  clearInterval(timers.prefs);
   timers = {};
 }
 
@@ -432,11 +507,12 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     tickStatus();
     startPolling();
+    syncPrefs();
     if (state.load === 'ready' && Date.now() - state.loadedAt > RELOAD_AFTER_MS) refreshCatalog();
   } else stopPolling();
 });
 window.addEventListener('offline', () => toast(t('offline'), 'error'));
-window.addEventListener('online', () => { toast(t('online'), 'success'); if (state.session && state.load === 'error') { state.load = 'idle'; loadData(); } });
+window.addEventListener('online', () => { toast(t('online'), 'success'); syncPrefs(); if (state.session && state.load === 'error') { state.load = 'idle'; loadData(); } });
 
 // ---------- Feuille d'options d'un son ----------
 function openSheet(sound) {
@@ -450,6 +526,7 @@ function openSheet(sound) {
     h('h2', { vars: { '--c': colorFor(sound, state.colors) } }, h('span', { class: 'emoji', 'aria-hidden': 'true', text: sound.emoji || '🔊' }), h('span', { text: sound.name })),
     sound.can_edit ? h('button', { class: 'btn row', id: 'edit-sound', onclick: () => { closeOverlay(); editor.openEdit(sound); }, text: `✏️ ${t('sheet.edit')}` }) : null,
     h('button', { class: 'btn row', onclick: () => { toggleFavorite(sound); closeOverlay(); }, text: `${isFavorite ? '☆' : '★'} ${t(isFavorite ? 'sheet.favorite.remove' : 'sheet.favorite.add')}` }),
+    h('button', { class: 'btn row', id: 'sheet-categories', onclick: () => { closeOverlay(); categoryUi.openCategoryPicker(sound); }, text: `📁 ${t('sheet.categories')}` }),
     h('button', { class: 'btn row', onclick: () => { closeOverlay(); previewSound(sound); }, text: `🔈 ${t('sheet.preview')}` }),
     h('div', { class: 'label', text: t('sheet.color') }),
     h('div', { class: 'swatches' }, swatch(null), PALETTE.map((color) => swatch(color))),
@@ -459,16 +536,12 @@ function openSheet(sound) {
 }
 
 function toggleFavorite(sound) {
-  state.favorites = toggleInSet(state.favorites, sound.id);
-  saveJson(storage, KEYS.favorites, [...state.favorites]);
-  renderContent();
+  if (prefsStore) prefsStore.edit((prefs) => toggleFavoritePrefs(prefs, sound.id));
 }
 
 function setColor(sound, color) {
-  if (color) state.colors[sound.id] = color; else delete state.colors[sound.id];
-  saveJson(storage, KEYS.colors, state.colors);
   closeOverlay();
-  renderContent();
+  if (prefsStore) prefsStore.edit((prefs) => setPrefsColor(prefs, sound.id, color));
 }
 
 // ---------- Ajout de sons : sélecteur de fichiers et glisser-déposer ----------

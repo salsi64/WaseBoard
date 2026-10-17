@@ -385,8 +385,8 @@ bloqués), statistiques d'usage, journal d'actions, lien d'invitation. La limite
 nécessite `ffprobe` (fourni avec ffmpeg) ; s'il manque, elle est simplement ignorée.
 
 **Fichiers de données créés à côté de `server.py` (ou dans `WASEBOARD_DATA_DIR`)** (à inclure dans vos sauvegardes avec
-`sounds_data/` et `shared_categories.json`) : `user_categories.json` (copie des catégories personnelles envoyée par l'application
-Windows, voir ci-dessous), `guild_settings.json` (réglages par serveur),
+`sounds_data/` et `shared_categories.json`) : `user_preferences.json` (favoris, couleurs et catégories personnelles synchronisés entre
+l'application Windows, la page web et l'Activité, voir ci-dessous), `guild_settings.json` (réglages par serveur),
 `audit.jsonl` (journal d'actions), `stats.jsonl` (lectures), `sounds_data/trash/` +
 `sounds_data/trash.json` (corbeille).
 
@@ -486,18 +486,24 @@ espace disque libre, serveurs les plus lourds et plafonds actifs. Pour une sonde
 
 Le serveur sert aussi une **page web** sous `/app/` : la même liste de sons, le même bot, depuis un navigateur ou un téléphone
 (« Ajouter à l'écran d'accueil » l'installe comme une application), sans rien installer. On s'y connecte avec Discord ; on
-y joue un son, on coupe tout, on fait rejoindre le bot à son salon vocal, on cherche, on garde des favoris et des couleurs
-(enregistrés dans le navigateur) et on peut écouter un son sur l'appareil. On peut aussi **gérer les sons** : en ajouter (bouton « + » ou glisser-déposer de
+y joue un son, on coupe tout, on fait rejoindre le bot à son salon vocal, on cherche, on garde des favoris, des couleurs et des catégories
+(les mêmes que dans l'application Windows) et on peut écouter un son sur l'appareil. On peut aussi **gérer les sons** : en ajouter (bouton « + » ou glisser-déposer de
 fichiers, formats mp3, wav, ogg, flac, m4a, wma, jusqu'à 64 Mo), les modifier (nom, emoji, **découpe avec forme d'onde** — le son complet reste conservé —, nouveau
 fichier audio, catégories des serveurs où il apparaît) et les supprimer (ils vont à la corbeille du serveur), avec exactement les droits de l'application
 Windows : le serveur refait chaque vérification. La découpe demande que le navigateur sache décoder le format ; sinon le son s'ajoute en entier.
 
-**Vos catégories personnelles** (celles que vous créez dans l'application Windows) s'affichent aussi dans la page web et l'Activité, comme
-des onglets et des sections, dans le même ordre que dans l'application. L'application en envoie une copie au serveur (`PUT /me/categories`,
-quelques secondes après chaque modification, et au lancement) ; la page la relit (`GET /me/categories`). La copie ne contient que les noms
-des catégories et les identifiants de leurs sons, elle n'est lisible et remplaçable que par la personne concernée (session Discord) et
-elle est effacée dès qu'il n'y a plus rien à garder. **C'est l'application Windows qui reste la source** : la page web les affiche mais ne
-les modifie pas, et avec deux PC c'est le dernier envoyé qui est affiché. Fonction annoncée par `/status` (`personal_categories`).
+**Vos favoris, vos couleurs et vos catégories personnelles** sont les mêmes partout : dans l'application Windows, dans la page web et dans l'Activité.
+On peut les gérer depuis la page comme dans l'application : ★ favoris et couleurs depuis le ⋯ d'un son, **catégories** (créer avec le bouton 📁＋ à la fin
+des onglets, renommer, déplacer, supprimer depuis le ⋯ de leur titre, y mettre ou en retirer un son depuis le ⋯ du son › « Catégories… »), dans le même
+ordre d'affichage que dans l'application. Une modification faite d'un côté apparaît de l'autre en moins d'une minute. Chaque section de l'onglet « Tous » se
+**replie** d'un clic sur son titre (le nombre de sons reste affiché) ; ce choix d'affichage est gardé dans l'appareil, il n'est pas synchronisé.
+
+Le serveur garde une copie **par personne** (`user_preferences.json`, lisible et modifiable par elle seule, noms de catégories et identifiants de sons
+uniquement, effacée dès qu'il n'y a plus rien) et **fusionne** ce que chaque appareil envoie : chacun envoie son état et l'état du serveur qu'il avait reçu
+la fois d'avant (`POST /me/preferences/sync`, `GET /me/preferences`) ; ce qui a changé de chaque côté est gardé (un ajout n'écrase pas un autre ajout, une
+suppression est conservée, renvoyer deux fois la même chose ne change rien), et sans état de départ (première synchronisation) rien n'est jamais retiré. Le
+principe et les règles sont dans `preferences.py`. Les routes `/me/categories` de la 3.5.0 restent pour les anciens clients. Fonction annoncée par `/status`
+(`preferences_sync`).
 
 Elle est en français et en anglais (langue du navigateur).
 
@@ -649,7 +655,7 @@ données, elle, reste sans secret. `deploy/waseboard-backup.service` l'active d�
 ```bash
 sudo systemctl stop waseboard
 cd ~/waseboard-server            # le dossier de données
-mkdir -p ~/avant-restauration && mv sounds_data shared_categories.json user_categories.json guild_settings.json audit.jsonl stats.jsonl ~/avant-restauration/ 2>/dev/null
+mkdir -p ~/avant-restauration && mv sounds_data shared_categories.json user_preferences.json guild_settings.json audit.jsonl stats.jsonl ~/avant-restauration/ 2>/dev/null
 tar xzf ~/waseboard-backups/waseboard-data-AAAAMMJJ-HHMMSS.tgz
 sudo systemctl start waseboard
 ```

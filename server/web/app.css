@@ -15,7 +15,7 @@
   --on-danger: #2a0a0a;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   --radius: 18px;
-  --dock-h: 74px;
+  --dock-h: 64px;
   font-family: 'Segoe UI', system-ui, -apple-system, 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
 }
 
@@ -60,7 +60,7 @@ img { display: block; }
 .login .notice.error { color: var(--danger); }
 
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 22px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 0 18px; font-size: 0.9rem;
   border: 1px solid var(--outline); border-radius: 14px; background: var(--surface-2); font-weight: 600;
   transition: transform 0.08s ease, filter 0.15s ease;
 }
@@ -76,71 +76,87 @@ img { display: block; }
 
 .topbar {
   position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px;
-  padding: calc(10px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
+  padding: calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
   background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
 }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; }
-.brand img { width: 34px; height: 34px; border-radius: 9px; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1rem; }
+.brand img { width: 30px; height: 30px; border-radius: 8px; }
 .search { position: relative; flex: 1; min-width: 0; }
 .search input {
-  width: 100%; height: 44px; padding: 0 14px 0 40px; border-radius: 14px; border: 1px solid var(--outline);
+  width: 100%; height: 38px; padding: 0 12px 0 36px; border-radius: 12px; font-size: 0.9rem; border: 1px solid var(--outline);
   background: var(--surface); outline-offset: 0;
 }
 .search input::placeholder { color: var(--muted); }
-.search .icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-.avatar-btn { width: 44px; height: 44px; padding: 0; border-radius: 50%; border: 2px solid var(--outline); background: var(--surface-2); overflow: hidden; flex: none; }
+.search .icon { position: absolute; left: 11px; font-size: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.avatar-btn { width: 38px; height: 38px; padding: 0; border-radius: 50%; border: 2px solid var(--outline); background: var(--surface-2); overflow: hidden; flex: none; }
 .avatar-btn img { width: 100%; height: 100%; object-fit: cover; }
 .avatar-btn .initial { font-weight: 700; }
 
 .tabs {
-  display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
-  padding: 4px max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left));
+  display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  padding: 2px max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left));
 }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
-  display: inline-flex; align-items: center; gap: 8px; flex: none; min-height: 40px; padding: 0 16px;
+  display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 34px; padding: 0 13px; font-size: 0.85rem;
   border-radius: 999px; border: 1px solid var(--outline); background: var(--surface); font-weight: 600; white-space: nowrap;
 }
-.tab img { width: 22px; height: 22px; border-radius: 50%; }
+.tab img { width: 18px; height: 18px; border-radius: 50%; }
+.tab.add-category { padding: 0 12px; border-style: dashed; color: var(--muted); }
 .tab[aria-selected='true'] { color: var(--on-accent); border-color: transparent; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
 
-.content { padding: 4px max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); max-width: 1200px; margin: 0 auto; }
-.section-title { display: flex; align-items: center; gap: 10px; margin: 18px 4px 10px; font-size: 0.95rem; font-weight: 700; color: var(--muted); text-transform: none; }
-.section-title img { width: 24px; height: 24px; border-radius: 50%; }
-.grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.content { padding: 2px max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); max-width: 1200px; margin: 0 auto; }
+.section-title { display: flex; align-items: center; gap: 6px; margin: 10px 2px 5px; font-size: 0.82rem; font-weight: 700; color: var(--muted); text-transform: none; }
+.section-title img { width: 20px; height: 20px; border-radius: 50%; }
+.section-toggle {
+  flex: 1; min-width: 0; min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent;
+  color: inherit; font: inherit; text-align: left; border-radius: 8px;
+}
+.section-toggle.static { cursor: default; }
+.section-toggle:hover:not(.static) { color: var(--text); }
+.chevron { flex: none; width: 14px; text-align: center; font-size: 0.8rem; transition: transform 0.15s ease; }
+.folded .chevron { transform: rotate(-90deg); }
+.section-count { flex: none; min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); font-size: 0.72rem; font-weight: 700; text-align: center; }
+.section-title .section-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.section-title .section-more { margin-left: auto; flex: none; width: 28px; height: 28px; font-size: 0.85rem; color: var(--muted); }
+.empty-category { margin: 4px 6px 8px; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+.grid { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .empty, .state-msg { margin: 48px auto; max-width: 420px; text-align: center; color: var(--muted); line-height: 1.55; }
 .state-msg .btn { margin-top: 14px; }
 
 /* ---------- Boutons de son : des « pills » comme dans l'application Windows (largeur selon le nom) ---------- */
 /* Compactes : on veut en voir beaucoup d'un coup, surtout dans le panneau étroit de l'Activité Discord. */
-.card { position: relative; --c: #8b5cf6; flex: 0 1 auto; min-width: 112px; max-width: 100%; }
+.card { position: relative; --c: #8b5cf6; flex: 0 1 auto; min-width: 96px; max-width: 100%; }
 .card-main {
-  width: 100%; min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 5px 34px 5px 5px; text-align: left; font-size: 0.875rem;
-  border-radius: 16px; border: 1px solid color-mix(in srgb, var(--c) 45%, var(--outline));
+  width: 100%; min-height: 36px; display: flex; align-items: center; gap: 7px; padding: 4px 30px 4px 4px; text-align: left; font-size: 0.8rem;
+  border-radius: 14px; border: 1px solid color-mix(in srgb, var(--c) 45%, var(--outline));
   background: color-mix(in srgb, var(--c) 14%, var(--surface));
   transition: transform 0.08s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 .card-main:hover { background: color-mix(in srgb, var(--c) 22%, var(--surface)); }
 .card-main:active, .card.bump .card-main { transform: scale(0.96); }
 .emoji {
-  flex: none; width: 30px; height: 30px; display: grid; place-items: center; font-size: 1.05rem; line-height: 1;
+  flex: none; width: 26px; height: 26px; display: grid; place-items: center; font-size: 0.92rem; line-height: 1;
   border-radius: 50%; background: color-mix(in srgb, var(--c) 32%, var(--surface));
 }
 .name { min-width: 0; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fav-badge { flex: none; margin-left: -4px; font-size: 0.72rem; color: #facc15; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+.fav-badge { flex: none; margin-left: -4px; font-size: 0.65rem; color: #facc15; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 .card-more {
-  position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 28px; height: 28px; padding: 0; border: 0;
-  border-radius: 50%; background: transparent; color: var(--muted); font-size: 0.95rem; line-height: 1;
+  position: absolute; top: 50%; right: 3px; transform: translateY(-50%); width: 24px; height: 24px; padding: 0; border: 0;
+  border-radius: 50%; background: transparent; color: var(--muted); font-size: 0.85rem; line-height: 1;
 }
 .card-more:hover { background: color-mix(in srgb, var(--c) 25%, transparent); color: var(--text); }
-.who { position: absolute; right: 30px; top: -8px; display: flex; pointer-events: none; }
-.who img { width: 17px; height: 17px; border-radius: 50%; border: 2px solid var(--bg); margin-left: -5px; background: var(--surface-2); }
+.who { position: absolute; right: 26px; top: -7px; display: flex; pointer-events: none; }
+.who img { width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--bg); margin-left: -5px; background: var(--surface-2); }
 /* Dans Discord : le panneau est étroit, on resserre encore un peu. */
-html.activity .grid { gap: 6px; }
-html.activity .card { min-width: 96px; }
-html.activity .card-main { min-height: 38px; font-size: 0.82rem; border-radius: 14px; padding-right: 30px; }
-html.activity .card-main .emoji { width: 26px; height: 26px; font-size: 0.95rem; }
+html.activity .grid { gap: 5px; }
+html.activity .card { min-width: 84px; }
+html.activity .card-main { min-height: 32px; font-size: 0.76rem; border-radius: 12px; padding: 3px 26px 3px 3px; gap: 6px; }
+html.activity .card-main .emoji { width: 22px; height: 22px; font-size: 0.8rem; }
+html.activity .card-more { width: 22px; height: 22px; font-size: 0.8rem; }
+html.activity .tab { min-height: 30px; padding: 0 11px; font-size: 0.8rem; }
+html.activity .section-title { margin-top: 8px; font-size: 0.78rem; }
 .card.is-playing .card-main {
   border-color: var(--c); background: color-mix(in srgb, var(--c) 30%, var(--surface));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 55%, transparent), 0 0 22px color-mix(in srgb, var(--c) 45%, transparent);
@@ -150,16 +166,16 @@ html.activity .card-main .emoji { width: 26px; height: 26px; font-size: 0.95rem;
 
 /* ---------- Barre du bas ---------- */
 .dock {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; gap: 10px;
-  padding: 10px max(14px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; gap: 8px;
+  padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   background: color-mix(in srgb, var(--surface) 92%, transparent); border-top: 1px solid var(--outline);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
 }
-.voice { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
-.voice .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.voice { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-size: 0.82rem; }
+.voice .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
 .voice.on .dot { background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
 .voice span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dock .btn { min-height: 48px; padding: 0 16px; flex: none; }
+.dock .btn { min-height: 40px; padding: 0 14px; flex: none; }
 
 /* ---------- Feuille d'options et menu ---------- */
 .overlay { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.5); display: flex; align-items: flex-end; justify-content: center; }
@@ -199,7 +215,7 @@ html.activity .card-main .emoji { width: 26px; height: 26px; font-size: 0.95rem;
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
 /* ---------- Éditeur de sons (ajout, modification, découpe) ---------- */
-.add-btn { flex: none; min-height: 44px; padding: 0 16px; }
+.add-btn { flex: none; min-height: 38px; padding: 0 14px; }
 .overlay.editor-overlay { z-index: 45; }
 .overlay.confirm { z-index: 55; align-items: center; }
 .confirm-text { white-space: pre-line; line-height: 1.5; margin: 0 0 16px; }
@@ -228,6 +244,14 @@ html.activity .card-main .emoji { width: 26px; height: 26px; font-size: 0.95rem;
 .editor-actions { position: sticky; bottom: -18px; margin-top: 16px; padding: 12px 0 2px; background: var(--surface); border-top: 1px solid var(--outline); }
 
 .share-list { display: flex; flex-direction: column; }
+.sheet .field.new-category { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 14px; }
+.sheet input[type='text'] {
+  flex: 1; min-width: 0; min-height: 44px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--outline); background: var(--surface-2); color: var(--text); font: inherit;
+}
+.sheet input[type='text']:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.form-error { flex-basis: 100%; margin: 6px 2px 0; min-height: 1.2em; font-size: 0.85rem; color: var(--danger); }
+.form-error:empty { display: none; }
+.emoji-small { flex: none; }
 .share { display: flex; align-items: center; gap: 10px; min-height: 44px; }
 .share input { width: 20px; height: 20px; }
 .share img { width: 22px; height: 22px; border-radius: 50%; }

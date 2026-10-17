@@ -88,6 +88,13 @@ namespace WaseBoard.Models
         /// <summary>Ordre d'affichage personnalisé des catégories (liste de noms).</summary>
         public List<string> CategoryOrder { get; set; } = new();
 
+        /// <summary>Dernier état des préférences (favoris, couleurs, catégories) reçu du serveur, en JSON : point de départ de la fusion avec ce que
+        /// la page web ou un autre PC ont changé (voir SoundLibraryService.Preferences.cs). Absent tant qu'aucune synchronisation n'a eu lieu.</summary>
+        public string? PrefsBaseJson { get; set; }
+
+        /// <summary>Serveur et compte auxquels PrefsBaseJson se rapporte ; si l'un des deux change, cet état de départ est ignoré.</summary>
+        public string? PrefsBaseTarget { get; set; }
+
         /// <summary>Clés des sections repliées sur la page principale.</summary>
         public List<string> CollapsedSections { get; set; } = new();
 

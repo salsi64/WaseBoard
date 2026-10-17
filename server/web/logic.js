@@ -45,24 +45,131 @@ export function dedupeById(sounds) {
   return sounds.filter((sound) => !seen.has(sound.id) && seen.add(sound.id));
 }
 
-/**
- * Copie des catégories personnelles (GET /me/categories), nettoyée : { categories: [{ name, ids }], order: [clés] }.
- * « order » est l'ordre d'affichage de l'application Windows : noms de catégories et identifiants de serveurs mélangés.
- * Une liste (et non un objet) pour que n'importe quel nom, même « __proto__ », reste un simple nom.
- */
-export function sanitizePersonal(value) {
-  const result = { categories: [], order: [] };
+// ---------- Préférences : favoris, couleurs, catégories personnelles et leur ordre ----------
+// Elles sont partagées avec l'application Windows par le serveur (POST /me/preferences/sync, fusionnées côté serveur : voir
+// server/preferences.py). Ici, le modèle et ses modifications, sans réseau ni navigateur.
+//   { favorites: [ids de sons], colors: { idDeSon: '#RRGGBB' }, categories: [{ name, ids }], order: [clés] }
+// « order » est l'ordre d'affichage de l'application : noms de catégories et identifiants de serveurs mélangés. Les catégories sont une
+// liste (et non un objet) pour que n'importe quel nom, même « __proto__ », reste un simple nom.
+
+export const CATEGORY_NAME_MAX = 100;
+const ID_MAX = 200;
+const validId = (value) => typeof value === 'string' && value.length > 0 && value.length <= ID_MAX;
+const unique = (items) => [...new Set(items)];
+
+export function emptyPrefs() {
+  return { favorites: [], colors: {}, categories: [], order: [] };
+}
+
+/** Préférences lues du serveur (ou du stockage du navigateur), nettoyées : jamais d'exception, ce qui est invalide est ignoré. */
+export function sanitizePrefs(value) {
+  const result = emptyPrefs();
   if (!value || typeof value !== 'object') return result;
-  const raw = value.categories;
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    for (const [name, ids] of Object.entries(raw)) {
-      if (name.length > 0 && name.length <= 100 && Array.isArray(ids)) {
-        result.categories.push({ name, ids: ids.filter((id) => typeof id === 'string' && id.length > 0) });
+  if (Array.isArray(value.favorites)) result.favorites = unique(value.favorites.filter(validId));
+  const colors = value.colors;
+  if (colors && typeof colors === 'object' && !Array.isArray(colors)) {
+    for (const [id, color] of Object.entries(colors)) if (validId(id) && isHexColor(color)) result.colors[id] = color.toUpperCase();
+  }
+  const categories = value.categories;
+  if (categories && typeof categories === 'object' && !Array.isArray(categories)) {
+    for (const [rawName, ids] of Object.entries(categories)) {
+      const name = rawName.trim();
+      if (name.length > 0 && [...name].length <= CATEGORY_NAME_MAX && Array.isArray(ids)) {
+        const known = result.categories.find((category) => category.name === name);
+        const list = unique(ids.filter(validId));
+        if (known) known.ids = unique([...known.ids, ...list]); else result.categories.push({ name, ids: list });
       }
     }
   }
-  if (Array.isArray(value.order)) result.order = value.order.filter((key) => typeof key === 'string');
+  if (Array.isArray(value.order)) result.order = unique(value.order.filter(validId));
   return result;
+}
+
+/** Forme envoyée au serveur (les catégories redeviennent un objet). */
+export function prefsToWire(prefs) {
+  return {
+    favorites: prefs.favorites,
+    colors: prefs.colors,
+    categories: Object.fromEntries(prefs.categories.map((category) => [category.name, category.ids])),   // fromEntries : « __proto__ » reste une clé
+    order: prefs.order,
+  };
+}
+
+/** Mêmes préférences ? Favoris et contenu d'une catégorie sont des ensembles ; l'ordre d'affichage est une suite. */
+export function prefsEqual(a, b) {
+  const sameSet = (x, y) => x.length === y.length && x.every((item) => y.includes(item));
+  if (!sameSet(a.favorites, b.favorites) || a.order.length !== b.order.length || a.order.some((key, index) => key !== b.order[index])) return false;
+  const colorsA = Object.entries(a.colors);
+  if (colorsA.length !== Object.keys(b.colors).length || colorsA.some(([id, color]) => b.colors[id] !== color)) return false;
+  if (a.categories.length !== b.categories.length) return false;
+  return a.categories.every((category) => {
+    const other = b.categories.find((item) => item.name === category.name);
+    return other !== undefined && sameSet(category.ids, other.ids);
+  });
+}
+
+/** Nom de catégorie valide ? { name } (rogné) ou { error: 'empty' | 'long' | 'exists' } ; `current` : le nom actuel quand on renomme. */
+export function checkCategoryName(prefs, raw, current = null) {
+  const name = String(raw ?? '').trim();
+  if (!name) return { error: 'empty' };
+  if ([...name].length > CATEGORY_NAME_MAX) return { error: 'long' };
+  if (name !== current && prefs.categories.some((category) => category.name === name)) return { error: 'exists' };
+  return { name };
+}
+
+export function toggleFavorite(prefs, id) {
+  return { ...prefs, favorites: prefs.favorites.includes(id) ? prefs.favorites.filter((item) => item !== id) : [...prefs.favorites, id] };
+}
+
+/** Couleur choisie pour un son ('#RRGGBB'), ou null pour revenir à la couleur automatique. */
+export function setColor(prefs, id, color) {
+  const colors = { ...prefs.colors };
+  if (isHexColor(color)) colors[id] = color.toUpperCase(); else delete colors[id];
+  return { ...prefs, colors };
+}
+
+export function addCategory(prefs, name) {
+  if (prefs.categories.some((category) => category.name === name)) return prefs;
+  return { ...prefs, categories: [...prefs.categories, { name, ids: [] }], order: prefs.order.includes(name) ? prefs.order : [...prefs.order, name] };
+}
+
+export function removeCategory(prefs, name) {
+  return { ...prefs, categories: prefs.categories.filter((category) => category.name !== name), order: prefs.order.filter((key) => key !== name) };
+}
+
+/** Renomme en gardant le contenu et la place (dans la liste et dans l'ordre d'affichage). */
+export function renameCategory(prefs, oldName, newName) {
+  if (oldName === newName || prefs.categories.some((category) => category.name === newName)) return prefs;
+  return {
+    ...prefs,
+    categories: prefs.categories.map((category) => (category.name === oldName ? { ...category, name: newName } : category)),
+    order: prefs.order.map((key) => (key === oldName ? newName : key)),
+  };
+}
+
+/** Met un son dans une catégorie (member = true) ou l'en retire. Rien à changer : renvoie les mêmes préférences (le même objet). */
+export function setMembership(prefs, name, soundId, member) {
+  const category = prefs.categories.find((item) => item.name === name);
+  if (!category || category.ids.includes(soundId) === member) return prefs;
+  const ids = member ? [...category.ids, soundId] : category.ids.filter((id) => id !== soundId);
+  return { ...prefs, categories: prefs.categories.map((item) => (item === category ? { ...item, ids } : item)) };
+}
+
+/** Déplace une catégorie d'un cran (delta = -1 : vers le haut, +1 : vers le bas) parmi les catégories ET les serveurs, comme dans l'application. */
+export function moveCategory(prefs, guilds, name, delta) {
+  const keys = orderedEntries(guilds, prefs).map((entry) => (entry.type === 'guild' ? entry.guild.id : entry.name));
+  const from = keys.indexOf(name);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= keys.length) return prefs;
+  [keys[from], keys[to]] = [keys[to], keys[from]];
+  return { ...prefs, order: keys };
+}
+
+/** Place de la catégorie dans l'ordre d'affichage : { first, last } (pour désactiver « Monter » / « Descendre »). */
+export function categoryPosition(prefs, guilds, name) {
+  const keys = orderedEntries(guilds, prefs).map((entry) => (entry.type === 'guild' ? entry.guild.id : entry.name));
+  const index = keys.indexOf(name);
+  return { first: index <= 0, last: index < 0 || index === keys.length - 1 };
 }
 
 /** Clé d'onglet / de section d'une catégorie personnelle (préfixée : jamais confondue avec un identifiant de serveur). */
@@ -97,15 +204,15 @@ function personalMembers(sounds, personal, name) {
 }
 
 /**
- * Onglets de la page : un par serveur Discord, un par catégorie personnelle qui contient au moins un son visible (une catégorie
- * vide n'a rien à montrer), dans l'ordre de l'application Windows.
+ * Onglets de la page : un par serveur Discord et un par catégorie personnelle (même vide : on peut la remplir depuis la page), dans
+ * l'ordre de l'application Windows.
  * @returns [{ key, type: 'guild', guild } | { key, type: 'personal', name }]
  */
 export function categoryTabs(sounds, guilds, personal) {
   const tabs = [];
   for (const entry of orderedEntries(guilds, personal)) {
     if (entry.type === 'guild') tabs.push({ key: entry.guild.id, ...entry });
-    else if (personalMembers(sounds, personal, entry.name).length > 0) tabs.push({ key: personalKey(entry.name), ...entry });
+    else tabs.push({ key: personalKey(entry.name), ...entry });
   }
   return tabs;
 }
@@ -117,15 +224,14 @@ export function categoryTabs(sounds, guilds, personal) {
  * @param sounds   catalogue visible (GET /sounds)
  * @param guilds   serveurs de la personne (GET /my-guilds) : [{id, name, icon_url}]
  * @param shared   { idDuServeur: [idsDeSons] } (GET /shared-categories)
- * @param personal catégories personnelles nettoyées (sanitizePersonal), facultatif
+ * @param personal préférences nettoyées (sanitizePrefs), facultatif
  */
 export function buildSections(sounds, guilds, shared, personal) {
   const placed = new Set();
   const sections = [];
   for (const entry of orderedEntries(guilds, personal)) {
     if (entry.type === 'personal') {
-      const members = personalMembers(sounds, personal, entry.name);
-      if (members.length > 0) sections.push({ key: personalKey(entry.name), kind: 'personal', guild: null, name: entry.name, sounds: sortByName(members) });
+      sections.push({ key: personalKey(entry.name), kind: 'personal', guild: null, name: entry.name, sounds: sortByName(personalMembers(sounds, personal, entry.name)) });
       continue;
     }
     const guild = entry.guild;

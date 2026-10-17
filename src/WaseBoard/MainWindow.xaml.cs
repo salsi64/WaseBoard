@@ -214,6 +214,7 @@ namespace WaseBoard
             }
 
             _library.SessionInvalidated += OnSessionInvalidated;
+            _library.PreferencesApplied += OnPreferencesApplied;
 
             _hotkeys = new GlobalHotkeyManager(this);
             ApplyTheme();
@@ -303,6 +304,19 @@ namespace WaseBoard
             var result = await UpdateCheckService.CheckForUpdateAsync(currentVersion);
             if (result.Available)
                 ToastService.Show(Loc.T("update.available", result.LatestVersion ?? ""), ToastKind.Info);
+        }
+
+        /// <summary>Le serveur a apporté des changements de favoris, de couleurs ou de catégories faits ailleurs (page web, Activité, autre PC) :
+        /// ils sont déjà dans les réglages ; on remet à jour les sons affichés et on reconstruit les sections.</summary>
+        private void OnPreferencesApplied()
+        {
+            var favorites = new HashSet<string>(_library.Settings.FavoriteSoundIds);
+            foreach (var item in Sounds)
+            {
+                item.IsFavorite = favorites.Contains(item.Id);
+                item.ColorHex = _library.Settings.SoundColors.TryGetValue(item.Id, out var color) ? color : null;
+            }
+            RefreshSections();
         }
 
         private bool _reloginPromptShowing;

@@ -125,6 +125,7 @@ namespace WaseBoard.Services
             LoadFromDisk();
             _settingsLoaded = true;
             MigrateAppearance();
+            StartPreferencesSync();
         }
 
         /// <summary>Première ouverture depuis l'arrivée des palettes (PaletteId absent) : adopte la palette
@@ -263,7 +264,7 @@ namespace WaseBoard.Services
             var json = JsonSerializer.Serialize(Settings, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_settingsFilePath, json);
 
-            QueueCategoryMirror();
+            QueuePreferencesSync();
         }
 
         public void ToggleFavorite(SoundItem item)
@@ -592,8 +593,8 @@ namespace WaseBoard.Services
                     return item;
                 }).ToList();
 
-                // Premier chargement après le lancement ou la connexion : la copie des catégories sur le serveur est mise à jour si besoin.
-                QueueCategoryMirror();
+                // Après le lancement ou la connexion : premier échange des préférences (favoris, couleurs, catégories) avec le serveur.
+                QueuePreferencesSync(force: true);
 
                 return ApplyCustomOrder(items);
             }
