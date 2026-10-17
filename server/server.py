@@ -70,6 +70,7 @@ SOUNDS_DIR = DATA_DIR / "sounds_data"
 CATALOG_PATH = SOUNDS_DIR / "catalog.json"
 SHARED_CATEGORIES_PATH = DATA_DIR / "shared_categories.json"
 OAUTH_SESSIONS_PATH = DATA_DIR / "oauth_sessions.json"
+USER_CATEGORIES_PATH = DATA_DIR / "user_categories.json"
 STATS_PATH = DATA_DIR / "stats.jsonl"
 ALERTS_STATE_PATH = DATA_DIR / "alerts_state.json"
 GUILD_SETTINGS_PATH = DATA_DIR / "guild_settings.json"
@@ -170,7 +171,7 @@ SERVER_VERSION = "3.4.0"
 
 #: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
 #: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).
-SERVER_FEATURES = (["replace_file", "stop_sound", "sequence", "play_effects"] + (["loop"] if LOOP_MAX_MINUTES > 0 else [])
+SERVER_FEATURES = (["replace_file", "stop_sound", "sequence", "play_effects", "personal_categories"] + (["loop"] if LOOP_MAX_MINUTES > 0 else [])
                    + (["web_app"] if WEB_APP_ENABLED and webapp.origin_of(PUBLIC_URL) and (WEB_DIR / "index.html").exists() else []))
 
 # Filet de sécurité seulement : l'activité est normalement effacée précisément à la fin
@@ -265,6 +266,62 @@ def load_shared_categories() -> dict:
 
 def save_shared_categories(data: dict) -> None:
     _atomic_write_json(SHARED_CATEGORIES_PATH, data)
+
+
+# ---------- Catégories personnelles ----------
+# L'application Windows range les sons dans des catégories à soi, enregistrées sur le PC. Elle en envoie ici une COPIE pour que la
+# version web et l'Activité Discord puissent les afficher. La copie est propre à chaque personne (identifiant Discord de la session),
+# lisible et remplaçable par elle seule ; elle ne contient que des noms de catégories et des identifiants de sons (la page n'affiche
+# que ceux que la personne peut voir). Rien n'est gardé quand il n'y a plus ni catégorie ni ordre.
+USER_CATEGORIES_MAX = 200            # catégories par personne
+USER_CATEGORY_NAME_MAX = 100         # caractères dans un nom
+USER_CATEGORY_SOUNDS_MAX = 5000      # sons par catégorie
+USER_CATEGORIES_ORDER_MAX = 1000     # entrées dans l'ordre d'affichage (catégories + identifiants de serveurs Discord)
+USER_CATEGORY_ID_MAX = 200           # caractères dans un identifiant (de son ou de serveur)
+
+
+def load_user_categories() -> dict:
+    """{ identifiant Discord: { categories: {nom: [ids de sons]}, order: [clés], updated_at } } ; vide si le fichier manque ou est illisible."""
+    if not USER_CATEGORIES_PATH.exists():
+        return {}
+    try:
+        with open(USER_CATEGORIES_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        log.exception("Catégories personnelles illisibles : repart de zéro")
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_user_categories(data: dict) -> None:
+    _atomic_write_json(USER_CATEGORIES_PATH, data, private=True)
+
+
+def sanitize_personal_categories(data) -> tuple[Optional[dict], Optional[str]]:
+    """Valide le corps d'un PUT /me/categories ({categories: {nom: [ids]}, order: [clés]}) : (copie nettoyée, None) ou (None, motif du
+    refus : "format" ou "limit"). Les limites protègent le disque et la mémoire du serveur ; les doublons sont retirés (l'ordre est gardé)."""
+    if not isinstance(data, dict):
+        return None, "format"
+    raw, order = data.get("categories", {}), data.get("order", [])
+    if not isinstance(raw, dict) or not isinstance(order, list):
+        return None, "format"
+    if len(raw) > USER_CATEGORIES_MAX or len(order) > USER_CATEGORIES_ORDER_MAX:
+        return None, "limit"
+
+    def valid_id(value) -> bool:
+        return isinstance(value, str) and 0 < len(value) <= USER_CATEGORY_ID_MAX
+
+    categories: dict[str, list[str]] = {}
+    for name, ids in raw.items():
+        name = name.strip() if isinstance(name, str) else ""
+        if not name or len(name) > USER_CATEGORY_NAME_MAX or not isinstance(ids, list) or not all(valid_id(i) for i in ids):
+            return None, "format"
+        if len(ids) > USER_CATEGORY_SOUNDS_MAX:
+            return None, "limit"
+        categories[name] = list(dict.fromkeys(categories.get(name, []) + ids))   # deux noms identiques après nettoyage : fusionnés
+    if not all(valid_id(key) for key in order):
+        return None, "format"
+    return {"categories": categories, "order": list(dict.fromkeys(order))}, None
 
 
 def load_oauth_sessions() -> dict:
@@ -1790,6 +1847,8 @@ class WaseBoardServer(commands.Bot):
         app.router.add_get("/my-guilds", self._handle_my_guilds)
         app.router.add_get("/shared-categories", self._handle_get_shared_categories)
         app.router.add_post("/shared-categories/sounds", self._handle_shared_category_sound)
+        app.router.add_get("/me/categories", self._handle_get_my_categories)
+        app.router.add_put("/me/categories", self._handle_put_my_categories)
         app.router.add_get("/admin/guilds/{guild_id}/settings", self._handle_admin_get_settings)
         app.router.add_put("/admin/guilds/{guild_id}/settings", self._handle_admin_put_settings)
         app.router.add_get("/admin/guilds/{guild_id}/sounds", self._handle_admin_sounds)
@@ -2610,6 +2669,52 @@ class WaseBoardServer(commands.Bot):
 
         save_shared_categories(shared)
         return web.json_response({"sound_ids": sound_ids})
+
+    # ---------- Catégories personnelles (copie de celles de l'application Windows) ----------
+
+    async def _handle_get_my_categories(self, request: web.Request) -> web.Response:
+        """GET /me/categories : les catégories personnelles de la personne connectée (et l'ordre d'affichage), telles que son application
+        Windows les a envoyées. Vide tant qu'elle n'en a rien envoyé."""
+        if not self._check_auth(request):
+            return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
+
+        stored = load_user_categories().get(str(session["user_id"]), {})
+        return web.json_response({
+            "categories": stored.get("categories", {}),
+            "order": stored.get("order", []),
+            "updated_at": stored.get("updated_at"),
+        }, headers={"Cache-Control": "no-store"})
+
+    async def _handle_put_my_categories(self, request: web.Request) -> web.Response:
+        """PUT /me/categories : remplace la copie des catégories personnelles de la personne connectée. Body: {categories: {nom: [ids de
+        sons]}, order: [clés]}. L'application Windows reste la source : chaque envoi remplace le précédent en entier."""
+        if not self._check_auth(request):
+            return web.json_response({"error": "unauthorized"}, status=401)
+        session, err = await self._require_session(request)
+        if err is not None:
+            return err
+
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "corps JSON invalide"}, status=400)
+        clean, error = sanitize_personal_categories(data)
+        if error == "limit":
+            return web.json_response({"error": "trop de catégories ou de sons dans une catégorie"}, status=400)
+        if error is not None:
+            return web.json_response({"error": "catégories invalides"}, status=400)
+
+        everyone = load_user_categories()
+        key = str(session["user_id"])
+        if clean["categories"] or clean["order"]:
+            everyone[key] = {**clean, "updated_at": time.time()}
+        else:
+            everyone.pop(key, None)   # plus rien à garder : on n'en conserve rien
+        save_user_categories(everyone)
+        return web.json_response({"ok": True, "count": len(clean["categories"])})
 
     # ---------- Administration d'une guilde ----------
 

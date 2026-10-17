@@ -46,24 +46,97 @@ export function dedupeById(sounds) {
 }
 
 /**
- * Sections de la page : une par serveur Discord (ses sons + ceux partagés dans sa catégorie), dans l'ordre des serveurs,
- * puis « autres » pour un son qui n'appartient à aucun de ces serveurs. Un son partagé apparaît dans chaque serveur où il l'est.
+ * Copie des catégories personnelles (GET /me/categories), nettoyée : { categories: [{ name, ids }], order: [clés] }.
+ * « order » est l'ordre d'affichage de l'application Windows : noms de catégories et identifiants de serveurs mélangés.
+ * Une liste (et non un objet) pour que n'importe quel nom, même « __proto__ », reste un simple nom.
+ */
+export function sanitizePersonal(value) {
+  const result = { categories: [], order: [] };
+  if (!value || typeof value !== 'object') return result;
+  const raw = value.categories;
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [name, ids] of Object.entries(raw)) {
+      if (name.length > 0 && name.length <= 100 && Array.isArray(ids)) {
+        result.categories.push({ name, ids: ids.filter((id) => typeof id === 'string' && id.length > 0) });
+      }
+    }
+  }
+  if (Array.isArray(value.order)) result.order = value.order.filter((key) => typeof key === 'string');
+  return result;
+}
+
+/** Clé d'onglet / de section d'une catégorie personnelle (préfixée : jamais confondue avec un identifiant de serveur). */
+export const personalKey = (name) => `cat:${name}`;
+
+/**
+ * Serveurs et catégories personnelles dans l'ordre de l'application Windows ; ce que l'ordre ne cite pas vient ensuite
+ * (serveurs d'abord, puis catégories), comme avant que les catégories personnelles existent ici.
+ * @returns [{ type: 'guild', guild } | { type: 'personal', name }]
+ */
+export function orderedEntries(guilds, personal) {
+  const categoryNames = ((personal && personal.categories) || []).map((category) => category.name);
+  const names = new Set(categoryNames);
+  const guildById = new Map(guilds.map((guild) => [guild.id, guild]));
+  const entries = [];
+  const seen = new Set();
+  const add = (entry, id) => { if (!seen.has(id)) { seen.add(id); entries.push(entry); } };
+  for (const key of (personal && personal.order) || []) {
+    if (names.has(key)) add({ type: 'personal', name: key }, `p:${key}`);
+    else if (guildById.has(key)) add({ type: 'guild', guild: guildById.get(key) }, `g:${key}`);
+  }
+  for (const guild of guilds) add({ type: 'guild', guild }, `g:${guild.id}`);
+  for (const name of categoryNames) add({ type: 'personal', name }, `p:${name}`);
+  return entries;
+}
+
+/** Sons du catalogue qui sont dans la catégorie personnelle de ce nom (un son supprimé ou devenu invisible n'y figure plus). */
+function personalMembers(sounds, personal, name) {
+  const category = ((personal && personal.categories) || []).find((item) => item.name === name);
+  const ids = new Set(category ? category.ids : []);
+  return sounds.filter((sound) => ids.has(sound.id));
+}
+
+/**
+ * Onglets de la page : un par serveur Discord, un par catégorie personnelle qui contient au moins un son visible (une catégorie
+ * vide n'a rien à montrer), dans l'ordre de l'application Windows.
+ * @returns [{ key, type: 'guild', guild } | { key, type: 'personal', name }]
+ */
+export function categoryTabs(sounds, guilds, personal) {
+  const tabs = [];
+  for (const entry of orderedEntries(guilds, personal)) {
+    if (entry.type === 'guild') tabs.push({ key: entry.guild.id, ...entry });
+    else if (personalMembers(sounds, personal, entry.name).length > 0) tabs.push({ key: personalKey(entry.name), ...entry });
+  }
+  return tabs;
+}
+
+/**
+ * Sections de la page : une par serveur Discord (ses sons + ceux partagés dans sa catégorie) et une par catégorie personnelle,
+ * dans l'ordre de l'application Windows, puis « autres » pour un son qui n'appartient à aucun de ces serveurs. Un son partagé
+ * apparaît dans chaque serveur où il l'est, et dans chaque catégorie personnelle qui le contient (comme dans l'application).
  * @param sounds   catalogue visible (GET /sounds)
  * @param guilds   serveurs de la personne (GET /my-guilds) : [{id, name, icon_url}]
  * @param shared   { idDuServeur: [idsDeSons] } (GET /shared-categories)
+ * @param personal catégories personnelles nettoyées (sanitizePersonal), facultatif
  */
-export function buildSections(sounds, guilds, shared) {
+export function buildSections(sounds, guilds, shared, personal) {
   const placed = new Set();
   const sections = [];
-  for (const guild of guilds) {
+  for (const entry of orderedEntries(guilds, personal)) {
+    if (entry.type === 'personal') {
+      const members = personalMembers(sounds, personal, entry.name);
+      if (members.length > 0) sections.push({ key: personalKey(entry.name), kind: 'personal', guild: null, name: entry.name, sounds: sortByName(members) });
+      continue;
+    }
+    const guild = entry.guild;
     const sharedIds = new Set((shared && shared[guild.id]) || []);
     const members = sounds.filter((sound) => sound.guild_id === guild.id || sharedIds.has(sound.id));
     if (members.length === 0) continue;
     members.forEach((sound) => placed.add(sound.id));
-    sections.push({ key: guild.id, guild, sounds: sortByName(members) });
+    sections.push({ key: guild.id, kind: 'guild', guild, sounds: sortByName(members) });
   }
   const others = sounds.filter((sound) => !placed.has(sound.id));
-  if (others.length > 0) sections.push({ key: 'other', guild: null, sounds: sortByName(others) });
+  if (others.length > 0) sections.push({ key: 'other', kind: 'other', guild: null, sounds: sortByName(others) });
   return sections;
 }
 

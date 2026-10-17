@@ -2,9 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PALETTE, autoColor, buildAuthorizeUrl, buildSections, colorFor, dedupeById, errorText, favoriteSounds, filterSounds, isHexColor,
-  loadJson, makeState, normalizeText, parseCallback, playingMap, sanitizeColors, sanitizeIds, sanitizeSession, saveJson, sortByName,
-  toggleInSet, trimRange, voiceSummary,
+  PALETTE, autoColor, buildAuthorizeUrl, buildSections, categoryTabs, colorFor, dedupeById, errorText, favoriteSounds, filterSounds, isHexColor,
+  loadJson, makeState, normalizeText, orderedEntries, parseCallback, personalKey, playingMap, sanitizeColors, sanitizeIds, sanitizePersonal,
+  sanitizeSession, saveJson, sortByName, toggleInSet, trimRange, voiceSummary,
 } from '../../web/logic.js';
 
 const memoryStorage = (initial = {}) => {
@@ -66,6 +66,55 @@ test('sections : un serveur = ses sons + ceux partagés chez lui ; un son partag
   assert.equal(sections[2].guild, null);
   assert.deepEqual(buildSections([], guilds, {}), []);
   assert.deepEqual(buildSections(sounds, [], null).map((s) => s.key), ['other'], 'sans serveur connu : tout dans « autres »');
+});
+
+test('catégories personnelles reçues du serveur : nettoyées, jamais d\'exception, « __proto__ » reste un simple nom', () => {
+  assert.deepEqual(sanitizePersonal(null), { categories: [], order: [] });
+  assert.deepEqual(sanitizePersonal('texte'), { categories: [], order: [] });
+  assert.deepEqual(sanitizePersonal({ categories: [], order: 'x' }), { categories: [], order: [] });
+  const clean = sanitizePersonal({ categories: { Mèmes: ['a', 3, '', 'b'], Vide: [], Faux: 'abc', ['x'.repeat(101)]: ['a'] }, order: ['Mèmes', 7, 'G1'] });
+  assert.deepEqual(clean, { categories: [{ name: 'Mèmes', ids: ['a', 'b'] }, { name: 'Vide', ids: [] }], order: ['Mèmes', 'G1'] });
+  const proto = sanitizePersonal(JSON.parse('{"categories":{"__proto__":["a"]}}'));
+  assert.deepEqual(proto.categories, [{ name: '__proto__', ids: ['a'] }]);
+  assert.equal(Object.getPrototypeOf(proto.categories[0].ids), Array.prototype, 'aucun objet n\'est détourné');
+});
+
+const personalFixture = () => ({
+  guilds: [{ id: 'G1', name: 'Alpha' }, { id: 'G2', name: 'Beta' }],
+  sounds: [sound('a', 'Alpha 1', { guild_id: 'G1' }), sound('b', 'Beta 1', { guild_id: 'G2' }), sound('c', 'Alpha 0', { guild_id: 'G1' }), sound('d', 'Orphelin', { guild_id: 'G9' })],
+  personal: sanitizePersonal({ categories: { Mèmes: ['b', 'a', 'd', 'supprimé'], Vide: ['inconnu'], Jeux: ['c'] }, order: ['G2', 'Mèmes', 'G1', 'Jeux', 'Vide'] }),
+});
+
+test('ordre : celui de l\'application Windows (serveurs et catégories mélangés), le reste ensuite', () => {
+  const { guilds, personal } = personalFixture();
+  const label = (entries) => entries.map((e) => (e.type === 'guild' ? e.guild.id : personalKey(e.name)));
+  assert.deepEqual(label(orderedEntries(guilds, personal)), ['G2', 'cat:Mèmes', 'G1', 'cat:Jeux', 'cat:Vide']);
+  assert.deepEqual(label(orderedEntries(guilds, sanitizePersonal({ categories: { Z: ['a'], A: ['b'] } }))), ['G1', 'G2', 'cat:Z', 'cat:A'], 'sans ordre : serveurs puis catégories');
+  assert.deepEqual(label(orderedEntries(guilds, sanitizePersonal({ categories: { A: [] }, order: ['A', 'A', 'G9', 'G1', 'G1'] }))), ['cat:A', 'G1', 'G2'], 'doublons et inconnus ignorés');
+  assert.deepEqual(label(orderedEntries(guilds, null)), ['G1', 'G2'], 'sans catégories : comme avant');
+});
+
+test('onglets : les serveurs, et les catégories personnelles qui ont au moins un son visible', () => {
+  const { guilds, sounds, personal } = personalFixture();
+  const tabs = categoryTabs(sounds, guilds, personal);
+  assert.deepEqual(tabs.map((t) => t.key), ['G2', 'cat:Mèmes', 'G1', 'cat:Jeux'], 'Vide ne contient aucun son visible : pas d\'onglet');
+  assert.equal(tabs[1].type, 'personal');
+  assert.equal(tabs[1].name, 'Mèmes');
+  assert.deepEqual(categoryTabs(sounds, guilds, null).map((t) => t.key), ['G1', 'G2'], 'sans catégories : comme avant');
+  assert.deepEqual(categoryTabs([], guilds, personal).map((t) => t.key), ['G2', 'G1'], 'catalogue vide : seuls les serveurs');
+});
+
+test('sections : les catégories personnelles s\'intercalent selon l\'ordre, sans retirer les sons des serveurs', () => {
+  const { guilds, sounds, personal } = personalFixture();
+  const sections = buildSections(sounds, guilds, {}, personal);
+  assert.deepEqual(sections.map((s) => s.key), ['G2', 'cat:Mèmes', 'G1', 'cat:Jeux', 'other']);
+  assert.deepEqual(sections.map((s) => s.kind), ['guild', 'personal', 'guild', 'personal', 'other']);
+  assert.deepEqual(sections[1].sounds.map((s) => s.id), ['a', 'b', 'd'], 'triés par nom ; le son supprimé a disparu');
+  assert.equal(sections[1].name, 'Mèmes');
+  assert.equal(sections[1].guild, null);
+  assert.deepEqual(sections[2].sounds.map((s) => s.id), ['c', 'a'], 'le serveur garde tous ses sons');
+  assert.deepEqual(sections[4].sounds.map((s) => s.id), ['d'], 'un son de catégorie perso mais d\'aucun serveur reste dans « autres »');
+  assert.deepEqual(buildSections(sounds, guilds, {}, null).map((s) => s.key), ['G1', 'G2', 'other'], 'sans catégories : inchangé');
 });
 
 test('favoris : seulement les sons existants, triés, sans doublon', () => {
