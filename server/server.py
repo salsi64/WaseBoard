@@ -54,13 +54,16 @@ log = logging.getLogger("waseboard-server")
 
 
 class QuietPollingFilter(logging.Filter):
-    """Retire du journal d'accès les sondages réguliers de l'appli quand ils réussissent (/activity toutes les 300 ms,
-    /status toutes les 3 s : ~46 000 lignes par jour pour un seul utilisateur, qui noyaient tout le reste). Les
-    échecs (401, 5xx…) et toutes les autres requêtes restent journalisés."""
+    """Retire du journal d'accès les sondages réguliers quand ils réussissent : /activity (toutes les 300 ms dans l'application, toutes les
+    secondes dans la page web et l'Activité, avec ou sans « ?guild_id=… »), /status (toutes les 3 à 4 s) et la synchronisation des préférences
+    (toutes les 30 à 60 s par page ou application ouverte) : des dizaines de milliers de lignes par jour et par personne, qui noyaient tout le
+    reste. Les échecs (401, 5xx…) et toutes les autres requêtes restent journalisés."""
+
+    _POLLS = ('"GET /activity ', '"GET /activity?', '"GET /status ', '"GET /status?', '"POST /me/preferences/sync ')
 
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.getMessage()
-        return not (" 200 " in message and ('"GET /activity ' in message or '"GET /status' in message))
+        return not (" 200 " in message and any(poll in message for poll in self._POLLS))
 
 
 logging.getLogger("aiohttp.access").addFilter(QuietPollingFilter())
