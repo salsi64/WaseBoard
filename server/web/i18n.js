@@ -108,6 +108,9 @@ export const MESSAGES = {
     "editor.error.emojiInvalid": "Ce n'est pas un emoji : choisissez-en un dans la liste.",
     "editor.error.trim": "La portion sélectionnée est trop courte (0,1 s au minimum).",
     "editor.error.noGuild": "Vous ne pouvez ajouter de son sur aucun de vos serveurs : l'ajout y est réservé aux administrateurs, ou votre accès a été retiré.",
+    "activity.connecting": "Connexion à Discord…",
+    "activity.error": "Connexion impossible depuis Discord : {0}",
+    "activity.noGuild": "Lancez WaseBoard depuis un salon vocal d'un serveur : l'Activité ne fonctionne pas dans les messages privés.",
   },
   en: {
     'app.name': 'WaseBoard',
@@ -213,6 +216,9 @@ export const MESSAGES = {
     "editor.error.emojiInvalid": "That is not an emoji: pick one from the list.",
     "editor.error.trim": "The selected portion is too short (0.1 s minimum).",
     "editor.error.noGuild": "You can't add sounds on any of your servers: adding is reserved to administrators there, or your access was removed.",
+    "activity.connecting": "Connecting to Discord…",
+    "activity.error": "Could not connect from Discord: {0}",
+    "activity.noGuild": "Launch WaseBoard from a voice channel of a server: the Activity doesn't work in direct messages.",
   },
 };
 

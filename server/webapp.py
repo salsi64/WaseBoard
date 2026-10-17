@@ -4,6 +4,10 @@ téléphone (« ajouter à l'écran d'accueil »), sans rien installer.
 Ce module ne fait que SERVIR la page (fichiers du dossier web/) et dire au navigateur comment se connecter à Discord ;
 l'API qu'elle appelle est celle de l'application Windows (server.py), authentifiée par la session Discord de la personne.
 
+Activité Discord : la même page, chargée dans Discord (iframe servie par le proxy de Discord sous
+`https://<identifiant client>.discordsays.com`) — voir activity.js côté page. Elle se reconnaît à `frame_id` dans l'adresse ; seule cette
+réponse HTML perd l'interdiction d'être affichée dans un cadre (frame-ancestors), tout le reste de la politique de sécurité reste.
+
 Principes de sécurité :
  - la page est publique mais ne contient aucun secret (le « secret partagé » de l'instance n'y figure pas : une page
    publique ne peut pas en garder un). Ce qui authentifie ses appels, c'est la session Discord obtenue par OAuth2, présentée
@@ -48,6 +52,10 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' 
        "connect-src 'self'; manifest-src 'self'; worker-src 'self'; media-src 'self' blob:; object-src 'none'; "
        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
+#: Même politique pour la page affichée dans Discord, sans « frame-ancestors » : le cadre est celui de Discord (client web, bureau, mobile).
+ACTIVITY_CSP = CSP.replace("; frame-ancestors 'none'", "")
+ACTIVITY_HOST_SUFFIX = ".discordsays.com"
+
 SECURITY_HEADERS = {
     "Content-Security-Policy": CSP,
     "X-Content-Type-Options": "nosniff",
@@ -77,11 +85,14 @@ def origin_of(url: str) -> Optional[str]:
 
 class WebApp:
     def __init__(self, web_dir: Path, public_url: str, extra_redirect_uris: Iterable[str] = (),
-                 client_id: Callable[[], str] = lambda: "", version: str = "", features: Optional[list] = None) -> None:
+                 client_id: Callable[[], str] = lambda: "", version: str = "", features: Optional[list] = None,
+                 activity: bool = True) -> None:
         self.web_dir = web_dir
         self.public_url = (public_url or "").rstrip("/")
         self.extra_redirect_uris = [u for u in extra_redirect_uris if origin_of(u)]
         self._client_id, self.version, self.features = client_id, version, features if features is not None else []
+        self.activity = activity
+        self._refused_origins: set = set()
         self.assets: dict[str, Asset] = {}
         self.build_id = ""
 
@@ -132,10 +143,26 @@ class WebApp:
         """Adresses de retour acceptées pour l'échange du code Discord (à déclarer aussi au portail Discord)."""
         return {self.callback_uri(), *self.extra_redirect_uris}
 
+    def activity_origin(self) -> Optional[str]:
+        """Origine de la page quand elle est affichée dans Discord : https://<identifiant client>.discordsays.com."""
+        client_id = self._client_id()
+        return f"https://{client_id}{ACTIVITY_HOST_SUFFIX}" if self.activity and client_id else None
+
+    def is_activity_origin(self, origin: Optional[str]) -> bool:
+        wanted = self.activity_origin()
+        return bool(origin) and wanted is not None and origin.lower().rstrip("/") == wanted
+
     def allowed_origins(self) -> set[str]:
-        origins = {origin_of(self.public_url)}
+        origins = {origin_of(self.public_url), self.activity_origin()}
         origins.update(origin_of(u) for u in self.extra_redirect_uris)
         return {o for o in origins if o}
+
+    def note_refused_origin(self, origin: Optional[str]) -> None:
+        """Journalise une fois chaque origine refusée : sans ça, une origine inattendue (proxy qui réécrit l'en-tête, nom de
+        domaine oublié dans web_redirect_uris) ne se voit que par des erreurs 401 muettes."""
+        if origin and origin not in self._refused_origins and len(self._refused_origins) < 20:
+            self._refused_origins.add(origin)
+            log.warning("Application web : appel refusé, origine « %s » non autorisée (voir web_redirect_uris dans le README).", origin[:120])
 
     def origin_allowed(self, origin: Optional[str]) -> bool:
         """Un appel venu d'un navigateur porte `Origin` quand il n'est pas une simple lecture de la même origine : absent =
@@ -148,14 +175,15 @@ class WebApp:
     # ---------- Routes ----------
 
     def add_routes(self, router: web.UrlDispatcher) -> None:
+        router.add_get("/", self._root)                         # Activité Discord : la racine du domaine est chargée avec ?frame_id=…
         router.add_get("/app", self._redirect_to_app)
         router.add_get("/app/", self._index)
         router.add_get("/app/callback", self._index)            # retour de Discord : la page lit `code` et `state`
         router.add_get("/app/api/config", self._config)
         router.add_get("/app/{name:.+}", self._asset)
 
-    def _respond(self, request: web.Request, asset: Asset) -> web.Response:
-        headers = {**SECURITY_HEADERS, "ETag": asset.etag, "Cache-Control": "no-cache"}
+    def _respond(self, request: web.Request, asset: Asset, headers_override: Optional[dict] = None) -> web.Response:
+        headers = {**SECURITY_HEADERS, **(headers_override or {}), "ETag": asset.etag, "Cache-Control": "no-cache"}
         if request.headers.get("If-None-Match") == asset.etag:
             return web.Response(status=304, headers=headers)
         media_type, _, charset = asset.content_type.partition("; charset=")
@@ -169,9 +197,23 @@ class WebApp:
             return self._not_found()
         raise web.HTTPFound("/app/", headers=SECURITY_HEADERS)
 
+    @staticmethod
+    def _in_discord(request: web.Request) -> bool:
+        """Chargée comme Activité : Discord ajoute frame_id (et instance_id…) à l'adresse de l'iframe."""
+        return "frame_id" in request.query
+
     async def _index(self, request: web.Request) -> web.Response:
         asset = self.assets.get("index.html")
-        return self._respond(request, asset) if asset else self._not_found()
+        if not asset:
+            return self._not_found()
+        override = {"Content-Security-Policy": ACTIVITY_CSP} if self.activity and self._in_discord(request) else None
+        return self._respond(request, asset, override)
+
+    async def _root(self, request: web.Request) -> web.Response:
+        """GET / : rien à voir, sauf pour l'Activité Discord (la racine du domaine est ce que le proxy de Discord charge)."""
+        if self.enabled and self.activity and self._in_discord(request):
+            return await self._index(request)
+        return self._not_found()
 
     async def _asset(self, request: web.Request) -> web.Response:
         asset = self.assets.get(request.match_info["name"])
@@ -190,6 +232,7 @@ class WebApp:
             "client_id": client_id,
             "redirect_uri": self.callback_uri(),
             "scope": SCOPE,
+            "activity": self.activity,
             "version": self.version,
             "build": self.build_id,
             "features": self.features,

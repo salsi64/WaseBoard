@@ -124,6 +124,31 @@ async def main(port):
     S.HTTP_HOST, S.HTTP_PORT = "127.0.0.1", port
     bot.is_ready = lambda: True
     await bot._start_http_server()
+
+    # Activité Discord simulée : sans Discord, le kit est remplacé par une imitation (même interface : ready, guildId, channelId,
+    # commands.authorize / authenticate) et l'échange du code par un faux. Ouvrir http://localhost:PORT/app/?frame_id=1&instance_id=2
+    MOCK_SDK = b"""export class DiscordSDK {
+  constructor(clientId) { this.clientId = clientId; this.guildId = '9001'; this.channelId = '1'; this.calls = []; window.__sdkCalls = this.calls;
+    this.commands = {
+      authorize: async (args) => { this.calls.push(['authorize', args]); return { code: 'code-factice' }; },
+      authenticate: async (args) => { this.calls.push(['authenticate', args]); return { access_token: args.access_token }; },
+    }; }
+  async ready() { await new Promise((resolve) => setTimeout(resolve, 400)); }
+}
+export class DiscordSDKMock {}
+export const Events = {}; export const Platform = {};
+"""
+    if bot.web_app is not None:
+        from webapp import Asset
+        old = bot.web_app.assets["vendor/discord-embedded-app-sdk.js"]
+        bot.web_app.assets["vendor/discord-embedded-app-sdk.js"] = Asset(MOCK_SDK, old.content_type, '"mock-sdk"')
+
+    async def fake_token_request(payload):
+        print("échange du code : redirect_uri présent =", "redirect_uri" in payload, flush=True)
+        return {"access_token": "faux-jeton-discord", "refresh_token": "rt", "expires_in": 3600}
+    async def fake_identity(session):
+        session["user_id"], session["username"], session["avatar_url"] = "20", "Alice", "https://cdn.discordapp.com/embed/avatars/0.png"
+    bot._discord_token_request, bot._refresh_identity_from_discord = fake_token_request, fake_identity
     print(f"Aperçu prêt : http://localhost:{port}/app/   (page web activée : {bot.web_app is not None and bot.web_app.enabled})", flush=True)
 
     async def drain():                       # fait « jouer » les sons : sans lecteur vocal réel, on lit nous-mêmes le mixeur

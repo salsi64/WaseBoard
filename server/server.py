@@ -137,6 +137,8 @@ ALERTS_ERROR_BURST: int = CONFIG.get("alerts_error_burst", 20)  # erreurs en 5 m
 WEB_APP_ENABLED: bool = CONFIG.get("web_app_enabled", True)
 WEB_REDIRECT_URIS: list = CONFIG.get("web_redirect_uris") or []
 WEB_DIR = Path(__file__).parent / "web"
+# Activité Discord (la même page, dans un salon vocal de Discord) : voir README. Sans effet si la page web est désactivée.
+WEB_ACTIVITY_ENABLED: bool = CONFIG.get("web_activity_enabled", True)
 ALERTS_RECONNECT_MIN_S = 60  # une coupure de Discord plus courte n'est pas signalée
 ERROR_BURST = alerts.ErrorBurstDetector(ALERTS_ERROR_BURST)
 logging.getLogger().addHandler(ERROR_BURST)
@@ -1705,7 +1707,8 @@ class WaseBoardServer(commands.Bot):
         app.router.add_post("/oauth/logout", self._handle_oauth_logout)
 
         if WEB_APP_ENABLED:
-            web_app = webapp.WebApp(WEB_DIR, PUBLIC_URL, WEB_REDIRECT_URIS, self.oauth_client_id, SERVER_VERSION, SERVER_FEATURES)
+            web_app = webapp.WebApp(WEB_DIR, PUBLIC_URL, WEB_REDIRECT_URIS, self.oauth_client_id, SERVER_VERSION, SERVER_FEATURES,
+                                    activity=WEB_ACTIVITY_ENABLED)
             if web_app.load():
                 self.web_app = web_app
                 web_app.add_routes(app.router)
@@ -1855,7 +1858,11 @@ class WaseBoardServer(commands.Bot):
         éventuelle de l'appel soit celle du site."""
         if self._check_secret(request):
             return True
-        if self.web_app is None or not self.web_app.origin_allowed(request.headers.get("Origin")):
+        if self.web_app is None:
+            return False
+        origin = request.headers.get("Origin")
+        if not self.web_app.origin_allowed(origin):
+            self.web_app.note_refused_origin(origin)
             return False
         auth = request.headers.get("Authorization", "")
         return auth.startswith("Bearer ") and auth[len("Bearer "):].strip() in self.oauth_sessions
@@ -2286,9 +2293,15 @@ class WaseBoardServer(commands.Bot):
         retour en boucle locale) et la page web /app (origine du site, retour sur /app/callback) — la page n'a pas encore de
         session, c'est justement ce qu'elle vient chercher."""
         secret_ok = self._check_secret(request)
-        web_ok = (self.web_app is not None and request.headers.get("Origin") is not None
-                  and self.web_app.origin_allowed(request.headers.get("Origin")))
-        if not (secret_ok or web_ok):
+        origin = request.headers.get("Origin")
+        web_ok = self.web_app is not None and origin is not None and self.web_app.origin_allowed(origin)
+        # Activité Discord : le code est obtenu DANS Discord (SDK) et échangé sans adresse de retour. Le proxy de Discord peut
+        # réécrire ou retirer l'en-tête Origin : ce mode est donc reconnu à l'absence d'adresse de retour, pas à l'origine
+        # (celle-ci n'est de toute façon qu'une barrière légère : ce qui compte, c'est un code Discord valide pour CETTE application).
+        activity_ok = self.web_app is not None and self.web_app.enabled and self.web_app.activity
+        if not (secret_ok or web_ok or activity_ok):
+            if self.web_app is not None:
+                self.web_app.note_refused_origin(origin)
             return web.json_response({"error": "unauthorized"}, status=401)
         if not self.oauth_client_id() or not OAUTH2_CLIENT_SECRET:
             return web.json_response({"error": "OAuth2 non configuré côté serveur"}, status=500)
@@ -2298,26 +2311,37 @@ class WaseBoardServer(commands.Bot):
         except Exception:
             return web.json_response({"error": "corps JSON invalide"}, status=400)
 
+        if not isinstance(data, dict):
+            return web.json_response({"error": "corps JSON invalide"}, status=400)
         code = data.get("code")
-        redirect_uri = data.get("redirect_uri")
-        if not code or not redirect_uri:
+        redirect_uri = data.get("redirect_uri") or None
+        activity_exchange = redirect_uri is None and activity_ok     # code obtenu dans Discord (Activité)
+        if redirect_uri is not None and not (secret_ok or web_ok):
+            # Avec une adresse de retour (application Windows ou page web), l'appelant doit toujours être reconnu.
+            if self.web_app is not None:
+                self.web_app.note_refused_origin(origin)
+            return web.json_response({"error": "unauthorized"}, status=401)
+        if not code or (redirect_uri is None and not activity_exchange):
             return web.json_response({"error": "'code' et 'redirect_uri' requis"}, status=400)
         # Défense en profondeur : n'accepte que les adresses de retour prévues — la boucle locale de l'application Windows,
         # ou celle de la page web de CE serveur — pour ne pas servir de proxy générique d'échange de code vers un
         # redirect_uri arbitraire. Sans le secret partagé, seule la page web est acceptée.
-        loopback = isinstance(redirect_uri, str) and redirect_uri.startswith(("http://127.0.0.1:", "http://localhost:"))
-        web_callback = self.web_app is not None and redirect_uri in self.web_app.redirect_uris()
-        if not (web_callback or (secret_ok and loopback)):
-            return web.json_response({"error": "redirect_uri non autorisé"}, status=400)
+        if redirect_uri is not None:
+            loopback = isinstance(redirect_uri, str) and redirect_uri.startswith(("http://127.0.0.1:", "http://localhost:"))
+            web_callback = self.web_app is not None and redirect_uri in self.web_app.redirect_uris()
+            if not (web_callback or (secret_ok and loopback)):
+                return web.json_response({"error": "redirect_uri non autorisé"}, status=400)
 
+        token_request = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": self.oauth_client_id(),
+            "client_secret": OAUTH2_CLIENT_SECRET,
+        }
+        if redirect_uri is not None:
+            token_request["redirect_uri"] = redirect_uri
         try:
-            token_data = await self._discord_token_request({
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-                "client_id": self.oauth_client_id(),
-                "client_secret": OAUTH2_CLIENT_SECRET,
-            })
+            token_data = await self._discord_token_request(token_request)
         except Exception as ex:
             log.exception("Échec de l'échange de code OAuth2 Discord")
             return web.json_response({"error": f"Échange avec Discord échoué : {ex}"}, status=502)
@@ -2340,12 +2364,17 @@ class WaseBoardServer(commands.Bot):
         save_oauth_sessions(self.oauth_sessions)
         log.info("Nouvelle session OAuth2 pour %s (%s)", session["user_id"], session["username"])
 
-        return web.json_response({
+        response = {
             "session_token": session_token,
             "user_id": session["user_id"],
             "username": session["username"],
             "avatar_url": session["avatar_url"],
-        })
+        }
+        if activity_exchange:
+            # Le SDK de Discord demande ce jeton (portée « identify » seulement, celui de la personne elle-même) pour
+            # « authenticate ». Il n'est renvoyé qu'à ce mode d'échange ; le serveur garde le sien de son côté.
+            response["discord_access_token"] = token_data["access_token"]
+        return web.json_response(response)
 
     async def _handle_status(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):

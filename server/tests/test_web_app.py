@@ -27,8 +27,8 @@ def check(name, cond, detail=""):
 PUBLIC = "https://waseboard.test"
 
 
-def make_app(public=PUBLIC, extra=(), web_dir=None, client_id="555"):
-    wa = W.WebApp(web_dir or S.WEB_DIR, public, extra, lambda: client_id, "9.9.9", ["web_app"])
+def make_app(public=PUBLIC, extra=(), web_dir=None, client_id="555", activity=True):
+    wa = W.WebApp(web_dir or S.WEB_DIR, public, extra, lambda: client_id, "9.9.9", ["web_app"], activity=activity)
     wa.load()
     return wa
 
@@ -113,7 +113,7 @@ async def main():
         cfg = await r.json()
         check("/app/api/config : identifiant client, adresse de retour, portée", cfg["client_id"] == "555" and cfg["redirect_uri"] == f"{PUBLIC}/app/callback"
               and cfg["scope"] == "identify" and cfg["version"] == "9.9.9" and cfg["build"] == wa.build_id, cfg)
-        check("…sans aucun secret, jamais mise en cache", set(cfg) == {"client_id", "redirect_uri", "scope", "version", "build", "features"}
+        check("…sans aucun secret, jamais mise en cache", set(cfg) == {"client_id", "redirect_uri", "scope", "activity", "version", "build", "features"}
               and r.headers["Cache-Control"] == "no-store")
     finally:
         await client.close()
@@ -239,7 +239,7 @@ async def main():
     st, p = await call(bot._handle_oauth_exchange, secret_headers, {"code": "c", "redirect_uri": 12345})
     check("adresse de retour qui n'est pas du texte : 400 (pas de plantage)", st == 400)
     st, p = await call(bot._handle_oauth_exchange, secret_headers, {"code": "c"})
-    check("adresse de retour manquante : 400", st == 400)
+    check("adresse de retour manquante : échange « Activité » (le code part sans redirect_uri ; Discord refuserait un code web)", st == 200)
     st, p = await call(bot._handle_oauth_exchange, web_headers, None)
     check("corps absent : 400", st == 400)
     bot.web_app = None
@@ -250,6 +250,79 @@ async def main():
     st, p = await call(bot._handle_oauth_exchange, web_headers, {"code": "c", "redirect_uri": callback})
     check("OAuth2 non configuré : 500 explicite", st == 500)
     S.OAUTH2_CLIENT_SECRET = "clientsecret"
+
+    print("\n--- Activité Discord : page dans une iframe, origine, échange du code ---")
+    ACT = "https://555.discordsays.com"
+    wa = make_app()
+    check("origine de l'Activité : https://<identifiant client>.discordsays.com", wa.activity_origin() == ACT and wa.is_activity_origin(ACT) and wa.is_activity_origin(ACT + "/"))
+    check("…acceptée comme origine de la page (appels de l'API avec la session)", wa.origin_allowed(ACT))
+    check("…mais pas celle d'une autre application, d'un faux domaine ou en http",
+          not any(wa.origin_allowed(o) for o in ("https://999.discordsays.com", "https://555.discordsays.com.evil.example", "http://555.discordsays.com", "https://discordsays.com", "https://555.discordsays.com:8443")))
+    check("sans identifiant client ou Activité désactivée : aucune origine d'Activité", make_app(client_id="").activity_origin() is None and make_app(activity=False).activity_origin() is None
+          and not make_app(activity=False).origin_allowed(ACT))
+
+    client = await serve(wa)
+    try:
+        r = await client.get("/app/")
+        csp_normal = r.headers["Content-Security-Policy"]
+        r = await client.get("/app/?frame_id=123&instance_id=abc&platform=desktop")
+        csp_frame = r.headers["Content-Security-Policy"]
+        check("page chargée par Discord (frame_id) : peut s'afficher dans un cadre, tout le reste de la politique inchangé",
+              r.status == 200 and "frame-ancestors" not in csp_frame and csp_frame == csp_normal.replace("; frame-ancestors 'none'", "")
+              and "script-src 'self'" in csp_frame and "'unsafe-inline'" not in csp_frame, csp_frame)
+        check("…alors que la page ordinaire reste interdite de cadre", "frame-ancestors 'none'" in csp_normal)
+        r = await client.get("/?frame_id=123&instance_id=abc")
+        check("la racine du domaine, chargée par le proxy de Discord, sert la page", r.status == 200 and "<title>WaseBoard</title>" in await r.text() and "frame-ancestors" not in r.headers["Content-Security-Policy"])
+        r = await client.get("/")
+        check("la racine sans frame_id : rien (la page d'accueil du site n'est pas celle du serveur)", r.status == 404)
+        r = await client.get("/app/app.js?frame_id=1")
+        check("un script avec frame_id garde la politique stricte", "frame-ancestors 'none'" in r.headers["Content-Security-Policy"])
+        r = await client.get("/app/vendor/discord-embedded-app-sdk.js")
+        check("le kit de Discord est servi comme les autres scripts (même origine)", r.status == 200 and r.content_type == "text/javascript" and len(await r.read()) > 50000)
+    finally:
+        await client.close()
+    client = await serve(make_app(activity=False))
+    try:
+        r = await client.get("/?frame_id=1")
+        r2 = await client.get("/app/?frame_id=1")
+        check("Activité désactivée : racine introuvable, et la page reste interdite de cadre même avec frame_id",
+              r.status == 404 and "frame-ancestors 'none'" in r2.headers["Content-Security-Policy"])
+    finally:
+        await client.close()
+
+    bot.web_app = make_app()
+    exchanged.clear()
+    st, p = await call(bot._handle_oauth_exchange, {"Origin": ACT}, {"code": "act1"})
+    check("échange du code de l'Activité SANS adresse de retour : session créée, jeton Discord renvoyé pour « authenticate »",
+          st == 200 and p["discord_access_token"] == "at" and p["session_token"] in bot.oauth_sessions and p["username"] == "bob", (st, p))
+    check("…Discord reçoit la demande sans redirect_uri, avec le secret client (qui ne sort pas)",
+          "redirect_uri" not in exchanged[-1] and exchanged[-1]["code"] == "act1" and exchanged[-1]["client_secret"] == "clientsecret")
+    st, p = await call(bot._handle_oauth_exchange, {}, {"code": "act2"})
+    check("sans en-tête Origin (le proxy de Discord peut le retirer) : accepté aussi", st == 200 and "discord_access_token" in p, (st, p))
+    st, p = await call(bot._handle_oauth_exchange, {"Origin": ACT}, {})
+    check("sans code : 400", st == 400, (st, p))
+    st, p = await call(bot._handle_oauth_exchange, {"Origin": ACT}, {"code": "x", "redirect_uri": "https://evil.example/cb"})
+    check("avec une adresse de retour arbitraire : toujours refusée (400)", st == 400, (st, p))
+    st, p = await call(bot._handle_oauth_exchange, {}, {"code": "x", "redirect_uri": f"{PUBLIC}/app/callback"})
+    check("une adresse de retour sans origine ni secret : 401 (le mode Activité ne rouvre pas les autres)", st == 401, (st, p))
+    st, p = await call(bot._handle_oauth_exchange, {"Origin": PUBLIC}, {"code": "x", "redirect_uri": f"{PUBLIC}/app/callback"})
+    check("connexion web ordinaire : jamais de jeton Discord dans la réponse", st == 200 and "discord_access_token" not in p, (st, p))
+    st, p = await call(bot._handle_oauth_exchange, {"X-WaseBoard-Token": S.SHARED_SECRET}, {"code": "x", "redirect_uri": "http://127.0.0.1:48899/"})
+    check("application Windows : idem, jamais de jeton Discord", st == 200 and "discord_access_token" not in p, (st, p))
+    session_token = next(iter(reversed(list(bot.oauth_sessions))))
+    check("la session de l'Activité s'utilise ensuite depuis l'origine de l'Activité",
+          bot._check_auth(Req({"Authorization": f"Bearer {session_token}", "Origin": ACT})))
+    bot.web_app = make_app(activity=False)
+    st, p = await call(bot._handle_oauth_exchange, {"Origin": ACT}, {"code": "x"})
+    check("Activité désactivée : l'échange sans adresse de retour est refusé", st in (400, 401), (st, p))
+    bot.web_app = make_app()
+    refused_before = set(bot.web_app._refused_origins)
+    bot._check_auth(Req({"Authorization": "Bearer inconnu", "Origin": "https://proxy-inattendu.example"}))
+    check("une origine inattendue est journalisée une fois (diagnostic d'un proxy qui réécrit l'en-tête)",
+          "https://proxy-inattendu.example" in bot.web_app._refused_origins and "https://proxy-inattendu.example" not in refused_before)
+    for i in range(40):
+        bot.web_app.note_refused_origin(f"https://spam{i}.example")
+    check("…sans jamais remplir la mémoire ni le journal", len(bot.web_app._refused_origins) <= 20)
 
     print("\n--- Déconnexion depuis la page ---")
     session_token = "to-delete-12345678901234567890123456"
@@ -271,6 +344,14 @@ async def main():
     check("par défaut : page activée dans la configuration (S.WEB_APP_ENABLED)", S.WEB_APP_ENABLED is True and S.WEB_REDIRECT_URIS == [] and S.WEB_DIR == Path(S.__file__).parent / "web")
     cfg = wb_config.load_config(environ={"WASEBOARD_WEB_APP_ENABLED": "false", "WASEBOARD_WEB_REDIRECT_URIS": '["https://a.example/app/callback"]'}, config_path=P)
     check("variables d'environnement prises en compte", cfg["web_app_enabled"] is False and cfg["web_redirect_uris"] == ["https://a.example/app/callback"], cfg)
+    cfg = wb_config.load_config(environ={"WASEBOARD_WEB_ACTIVITY_ENABLED": "false"}, config_path=P)
+    check("Activité Discord : activée par défaut (S.WEB_ACTIVITY_ENABLED), désactivable par WASEBOARD_WEB_ACTIVITY_ENABLED",
+          S.WEB_ACTIVITY_ENABLED is True and cfg["web_activity_enabled"] is False, cfg)
+    try:
+        wb_config.validate_limits({"web_activity_enabled": "oui"})
+        check("web_activity_enabled doit être un booléen", False)
+    except wb_config.ConfigError:
+        check("web_activity_enabled doit être un booléen", True)
 
     def refused(values):
         try:

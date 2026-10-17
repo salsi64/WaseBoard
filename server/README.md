@@ -509,6 +509,44 @@ disponible (service worker) ; rien de personnel n'est mis en cache.
 Derrière nginx ou Caddy, rien à ajouter : `/app/` passe comme le reste. Le service worker et l'installation exigent **HTTPS**
 (ou `http://localhost`). Pour essayer sans bot ni compte : `python tests/preview_web.py` (fausses données, voir l'en-tête du fichier).
 
+### Activité Discord (WaseBoard dans un salon vocal)
+
+La même page peut s'ouvrir **dans Discord** : dans un salon vocal, le lanceur d'activités (la fusée) propose WaseBoard, et la liste des sons s'affiche
+dans un panneau de l'application Discord (ordinateur, navigateur ou téléphone), sans lien ni installation. La connexion est automatique (Discord
+connaît déjà la personne) et l'Activité sait dans quel serveur elle a été lancée : les sons partent dans le vocal de ce serveur. Le bot doit
+rejoindre le salon (bouton « 🔊 Rejoindre mon vocal », ou `/join`). Aucun son ne passe par la page elle-même : c'est le bot qui joue.
+
+Discord charge la page par son propre proxy (`https://<identifiant client>.discordsays.com`), qui relaie vers **votre** serveur : celui-ci doit donc être
+joignable **depuis Internet en HTTPS** (une adresse du réseau local ne convient pas). Réglages, dans le
+[portail Discord](https://discord.com/developers/applications) › votre application :
+
+1. **Activities › Settings** : activer « Enable Activities ». Discord crée alors la commande d'entrée « Launch ».
+2. **Activities › URL Mappings** : `/` → le nom de domaine public de votre serveur, sans `https://` (ex. `waseboard.exemple.org`). Facultatif mais recommandé :
+   `/discord-cdn` → `cdn.discordapp.com` (les avatars et icônes de serveurs passent par là si Discord n'autorise pas l'accès direct à son CDN ; sans cela, la page
+   retire simplement les images qui ne se chargent pas).
+3. **OAuth2 › Redirects** : ajouter l'adresse factice `https://127.0.0.1` (exigée par Discord ; elle ne sert pas, le kit gère la redirection).
+4. Dans Discord : *Paramètres › Avancés › Mode développeur*, puis, dans un salon vocal, le lanceur d'activités (ou le champ de recherche si WaseBoard n'y figure pas encore).
+
+Tant que l'application n'est pas distribuée, **seuls son propriétaire et les membres de son équipe de développeurs** peuvent lancer l'Activité (pour d'autres
+testeurs : créer une équipe dans le portail et la définir comme propriétaire de l'application). La « découverte » publique par Discord exige une application
+vérifiée, ce qui n'est pas nécessaire pour l'usage entre amis.
+
+| Réglage | Effet |
+|---|---|
+| `web_activity_enabled` | **true** par défaut (avec la page web) : accepte l'origine `https://<identifiant client>.discordsays.com`, la page chargée avec `frame_id` (racine du domaine comprise) et l'échange du code sans adresse de retour. `false` désactive l'Activité sans toucher à la page web. |
+
+Si le site sert une **page d'accueil statique à la racine** (comme `deploy/landing-page/nginx-waseboard-salsi-bid.conf`), Discord, qui charge `/?frame_id=…`, la recevrait au lieu
+de WaseBoard : ajoutez dans le bloc `location = /` de nginx
+
+```nginx
+    if ($arg_frame_id) { rewrite ^ /app/ last; }   # Activité Discord : la racine du domaine est chargée avec ?frame_id=…
+```
+
+Sécurité : le kit officiel de Discord (`web/vendor/`, MIT, empreinte vérifiée par les tests) n'est chargé que dans Discord. L'échange du code d'une Activité n'a pas
+d'adresse de retour ; le serveur le reconnaît à cela, car le proxy de Discord peut réécrire ou retirer l'en-tête `Origin` — seul compte un code Discord valide pour
+votre application. Il renvoie alors le jeton Discord de la personne elle-même (portée « identify ») pour l'appel « authenticate » du kit, jamais dans les autres
+connexions. Une origine inattendue est journalisée une fois (« appel refusé, origine … non autorisée ») : ajoutez-la à `web_redirect_uris` si elle est légitime.
+
 ### Alertes d'exploitation
 
 Le bot prévient la personne qui héberge (message privé Discord : le propriétaire de l'application, ou `alerts_user_id`) quand

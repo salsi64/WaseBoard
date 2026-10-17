@@ -1,3 +1,5 @@
+import { cdnFallbackUrl } from './logic.js';
+
 // Outils DOM communs à la page : construction d'éléments, messages, fenêtres superposées. Aucune insertion de HTML : tout ce
 // qui vient de données (noms de sons, pseudos) passe par du texte.
 
@@ -19,7 +21,19 @@ export function h(tag, props = {}, ...children) {
 }
 
 export function avatar(url, size) {
-  return url ? h('img', { src: url, alt: '', width: size, height: size, referrerpolicy: 'no-referrer', loading: 'lazy' }) : null;
+  if (!url) return null;
+  const image = h('img', { src: url, alt: '', width: size, height: size, referrerpolicy: 'no-referrer', loading: 'lazy' });
+  // Dans une Activité, le CDN de Discord n'est joignable que par la correspondance « /discord-cdn » (si elle est déclarée) : on l'essaie une
+  // fois, puis on retire l'image plutôt que d'afficher une icône cassée.
+  const mapped = document.documentElement.classList.contains('activity') ? cdnFallbackUrl(url) : null;
+  if (mapped) {
+    image.addEventListener('error', () => {
+      if (image.dataset.mapped) { image.remove(); return; }
+      image.dataset.mapped = '1';
+      image.src = mapped;
+    });
+  }
+  return image;
 }
 
 export function toast(message, kind = 'info') {

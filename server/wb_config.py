@@ -85,6 +85,7 @@ ENV_OVERRIDES: dict[str, tuple[str, Callable]] = {
     "loop_max_minutes": ("WASEBOARD_LOOP_MAX_MINUTES", float),
     "web_app_enabled": ("WASEBOARD_WEB_APP_ENABLED", _boolean),
     "web_redirect_uris": ("WASEBOARD_WEB_REDIRECT_URIS", _json_list),
+    "web_activity_enabled": ("WASEBOARD_WEB_ACTIVITY_ENABLED", _boolean),
     "alerts_enabled": ("WASEBOARD_ALERTS_ENABLED", _boolean),
     "alerts_user_id": ("WASEBOARD_ALERTS_USER_ID", str),
     "alerts_disk_percent": ("WASEBOARD_ALERTS_DISK_PERCENT", int),
@@ -122,6 +123,8 @@ def validate_limits(config: dict) -> None:
             raise ConfigError(f"pcm_cache_mb doit être une quantité de mémoire en Mo entre 0 (désactivé) et 8192, pas {value!r}.")
     if "web_app_enabled" in config and not isinstance(config["web_app_enabled"], bool):
         raise ConfigError(f"web_app_enabled doit être true ou false, pas {config['web_app_enabled']!r}.")
+    if "web_activity_enabled" in config and not isinstance(config["web_activity_enabled"], bool):
+        raise ConfigError(f"web_activity_enabled doit être true ou false, pas {config['web_activity_enabled']!r}.")
     if "web_redirect_uris" in config:
         uris = config["web_redirect_uris"]
         if uris is not None and (not isinstance(uris, list) or not all(isinstance(u, str) and u.startswith(("http://", "https://"))

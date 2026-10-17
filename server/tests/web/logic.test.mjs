@@ -149,3 +149,17 @@ test('réponses du serveur', () => {
   assert.equal(voiceSummary({ connected: false }).connected, false);
   assert.equal(voiceSummary(null).connected, false);
 });
+
+test('Activité Discord : reconnaissance du contexte et repli du CDN', async () => {
+  const { isActivityLocation, cdnFallbackUrl } = await import('../../web/logic.js');
+  assert.equal(isActivityLocation('?frame_id=123&instance_id=abc&platform=desktop'), true);
+  assert.equal(isActivityLocation('?instance_id=abc'), false);
+  assert.equal(isActivityLocation(''), false);
+  assert.equal(isActivityLocation('?code=x&state=y'), false, 'retour de connexion web : pas une Activité');
+  assert.equal(cdnFallbackUrl('https://cdn.discordapp.com/avatars/1/abc.png?size=64'), '/discord-cdn/avatars/1/abc.png?size=64');
+  assert.equal(cdnFallbackUrl('https://cdn.discordapp.com/icons/9/i.webp'), '/discord-cdn/icons/9/i.webp');
+  assert.equal(cdnFallbackUrl('https://evil.example/avatars/1.png'), null, 'seulement le CDN de Discord');
+  assert.equal(cdnFallbackUrl('https://cdn.discordapp.com.evil.example/x.png'), null);
+  assert.equal(cdnFallbackUrl(null), null);
+  assert.equal(cdnFallbackUrl('/app/icons/icon-192.png'), null);
+});

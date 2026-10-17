@@ -6,7 +6,7 @@ import { audioFiles, uploadableGuilds } from './editor-logic.js';
 import { createEditor } from './editor.js';
 import { LANGUAGES, makeTranslator, pickLanguage } from './i18n.js';
 import {
-  PALETTE, buildAuthorizeUrl, buildSections, colorFor, dedupeById, errorText, favoriteSounds, filterSounds, loadJson, makeState,
+  PALETTE, buildAuthorizeUrl, buildSections, colorFor, dedupeById, errorText, favoriteSounds, filterSounds, isActivityLocation, loadJson, makeState,
   parseCallback, playingMap, sanitizeColors, sanitizeIds, sanitizeSession, saveJson, sortByName, toggleInSet, trimRange, voiceSummary,
 } from './logic.js';
 
@@ -50,6 +50,17 @@ let preview = null;       // { audio, url } : écoute locale en cours
 
 const root = document.getElementById('root');
 
+// Activité Discord : la page est chargée dans une iframe de Discord (voir activity.js). Le serveur et le salon viennent alors de Discord.
+const inActivity = isActivityLocation(window.location.search);
+if (inActivity) document.documentElement.classList.add('activity');
+state.activity = null;   // { connection, guildId, channelId }
+
+/** Serveur visé par les actions : celui de l'Activité, sinon celui du salon vocal où vous êtes (déduit par le serveur). */
+function targetGuildId() {
+  return (state.activity && state.activity.guildId) || state.voice.guildId || null;
+}
+const guildQuery = (prefix) => (targetGuildId() ? `${prefix}guild_id=${encodeURIComponent(targetGuildId())}` : '');
+
 // ---------- Réseau ----------
 async function api(path, { method = 'GET', body, form } = {}) {
   const headers = {};
@@ -90,6 +101,7 @@ function endSession(messageKey) {
   stopPolling();
   stopPreview();
   closeAllOverlays();
+  if (state.activity) { activityRelogin(); return; }
   showLogin(messageKey ? { text: t(messageKey) } : null);
 }
 
@@ -189,7 +201,7 @@ function showApp() {
 
 /** Catalogue, serveurs, catégories partagées et état vocal ; { error } si le chargement échoue, null si la session a pris fin. */
 async function fetchCatalog() {
-  const [sounds, guilds, status] = await Promise.all([api('/sounds'), api('/my-guilds'), api('/status?strict=1')]);
+  const [sounds, guilds, status] = await Promise.all([api('/sounds'), api('/my-guilds'), api(`/status?strict=1${guildQuery('&')}`)]);
   if (!state.session) return null;   // déconnecté pendant le chargement (session expirée)
   if (!sounds.ok || !guilds.ok) {
     return { error: sounds.offline || guilds.offline ? t('offline') : errorText(sounds.status || guilds.status, sounds.data || guilds.data) };
@@ -331,7 +343,7 @@ async function play(sound, card) {
   card.classList.add('bump');
   setTimeout(() => card.classList.remove('bump'), 150);
   if (navigator.vibrate) navigator.vibrate(12);
-  const result = await api('/play', { method: 'POST', body: { id: sound.id } });
+  const result = await api('/play', { method: 'POST', body: { id: sound.id, ...(state.activity ? { guild_id: targetGuildId() } : {}) } });
   if (result.offline) return toast(t('offline'), 'error');
   if (!result.ok) {
     toast(errorText(result.status, result.data), 'error');
@@ -343,7 +355,7 @@ async function play(sound, card) {
 }
 
 async function stopAll() {
-  const result = await api('/stop', { method: 'POST', body: {} });
+  const result = await api('/stop', { method: 'POST', body: state.activity ? { guild_id: targetGuildId() } : {} });
   if (result.offline) return toast(t('offline'), 'error');
   if (!result.ok) return toast(errorText(result.status, result.data), 'error');
   state.playing = new Map();
@@ -370,7 +382,7 @@ async function tickStatus() {
   if (busy.status || !state.session) return;
   busy.status = true;
   try {
-    const result = await api('/status?strict=1');
+    const result = await api(`/status?strict=1${guildQuery('&')}`);
     if (result.ok) { state.voice = voiceSummary(result.data); renderVoice(); }
   } finally { busy.status = false; }
 }
@@ -379,8 +391,7 @@ async function tickActivity() {
   if (busy.activity || !state.session || state.load !== 'ready') return;
   busy.activity = true;
   try {
-    const query = state.voice.guildId ? `?guild_id=${encodeURIComponent(state.voice.guildId)}` : '';
-    const result = await api(`/activity${query}`);
+    const result = await api(`/activity${guildQuery('?')}`);
     if (result.ok) { state.playing = playingMap(result.data); refreshPlaying(); }
   } finally { busy.activity = false; }
 }
@@ -531,8 +542,8 @@ function openMenu() {
   const items = [
     h('div', { class: 'who-am-i' }, avatar(session.avatar_url, 36), h('span', { text: session.username || session.user_id })),
     h('button', { class: 'item', onclick: () => { closeOverlay(); toggleLanguage(); }, text: t('menu.language') }),
-    state.installPrompt ? h('button', { class: 'item', onclick: installApp, text: t('menu.install') }) : null,
-    h('button', { class: 'item', onclick: () => { closeOverlay(); logout(); }, text: t('menu.logout') }),
+    state.installPrompt && !state.activity ? h('button', { class: 'item', onclick: installApp, text: t('menu.install') }) : null,
+    state.activity ? null : h('button', { class: 'item', onclick: () => { closeOverlay(); logout(); }, text: t('menu.logout') }),
     h('div', { class: 'about', text: t('menu.about', (state.config && state.config.version) || '') }),
   ];
   const layer = h('div', { class: 'menu-layer', onclick: (event) => { if (event.target === layer) closeOverlay(); } }, h('div', { class: 'menu', role: 'menu' }, items));
@@ -560,9 +571,56 @@ document.addEventListener('keydown', (event) => {
   else if (event.key === '/' && ui.search && document.activeElement === document.body) { event.preventDefault(); ui.search.focus(); }
 });
 
+// ---------- Activité Discord ----------
+function showActivityMessage(text, retry = false) {
+  root.replaceChildren(h('main', { class: 'login' }, h('div', { class: 'login-card' },
+    h('img', { class: 'login-logo', src: LOGO, alt: '', width: 96, height: 96 }),
+    h('p', { class: retry ? 'notice error' : '', text }),
+    retry ? h('button', { class: 'btn primary', onclick: bootActivity, text: t('retry') }) : null)));
+  ui.main = null;
+}
+
+/** Autorise la personne auprès de Discord (sans fenêtre si c'est déjà fait), puis échange le code contre une session du serveur. */
+async function activityLogin() {
+  const { authorizeActivity, authenticateActivity } = await import('./activity.js');
+  const config = await fetchConfig();
+  const code = await authorizeActivity(state.activity.connection, config);
+  const result = await api('/oauth/exchange', { method: 'POST', body: { code } });
+  if (!result.ok) throw new Error(result.offline ? t('offline') : errorText(result.status, result.data));
+  const session = sanitizeSession(result.data);
+  if (!session) throw new Error('réponse invalide');
+  saveSession(session);
+  if (result.data.discord_access_token) authenticateActivity(state.activity.connection, result.data.discord_access_token);
+}
+
+async function activityRelogin() {
+  try {
+    await activityLogin();
+    showApp();
+  } catch (error) {
+    showActivityMessage(t('activity.error', error.message || String(error)), true);
+  }
+}
+
+async function bootActivity() {
+  showActivityMessage(t('activity.connecting'));
+  try {
+    const config = await fetchConfig();
+    const { connectActivity } = await import('./activity.js');
+    const connection = await connectActivity(config);
+    state.activity = { connection, guildId: connection.guildId, channelId: connection.channelId };
+    if (!state.activity.guildId) return showActivityMessage(t('activity.noGuild'));
+    if (!state.session) await activityLogin();
+    showApp();
+  } catch (error) {
+    showActivityMessage(t('activity.error', error.message || String(error)), true);
+  }
+}
+
 // ---------- Démarrage ----------
 async function boot() {
   document.documentElement.lang = lang;
+  if (inActivity) return bootActivity();   // dans Discord : pas de service worker ni de page d'installation
   if ('serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' }).catch(() => { /* pas de service worker : la page marche quand même */ });
   }

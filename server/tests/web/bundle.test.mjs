@@ -12,7 +12,9 @@ const read = (name) => readFileSync(join(WEB, name), 'utf8');
 const walk = (dir) => readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? walk(join(dir, f)) : [join(dir, f)]));
 const files = walk(WEB).map((f) => relative(WEB, f).split('\\').join('/'));
 // Les scripts de la page (le service worker, particulier, est vérifié à part).
-const SCRIPTS = files.filter((f) => f.endsWith('.js') && f !== 'sw.js');
+const SCRIPTS = files.filter((f) => f.endsWith('.js') && f !== 'sw.js' && !f.startsWith('vendor/'));
+// Chargé seulement dans une Activité Discord (jamais par le navigateur ordinaire) : pas dans la coquille précachée.
+const ACTIVITY_ONLY = ['activity.js'];
 
 test('traductions : mêmes clés et mêmes {n} dans toutes les langues', () => {
   const base = Object.keys(MESSAGES.fr).sort();
@@ -54,7 +56,7 @@ test('service worker : chaque fichier de la coquille existe, et le jeton de vers
   const shell = [...sw.matchAll(/'(\/app\/[^']*)'/g)].map((m) => m[1]).filter((p) => !p.endsWith('/app/api/') && p !== '/app/');
   assert.ok(shell.length >= 6);
   for (const path of shell) assert.ok(existsSync(join(WEB, path.replace('/app/', ''))), `${path} est précaché mais absent`);
-  for (const needed of [...SCRIPTS, 'app.css', 'manifest.webmanifest']) assert.ok(shell.includes(`/app/${needed}`), `${needed} devrait être précaché`);
+  for (const needed of [...SCRIPTS.filter((name) => !ACTIVITY_ONLY.includes(name)), 'app.css', 'manifest.webmanifest']) assert.ok(shell.includes(`/app/${needed}`), `${needed} devrait être précaché`);
   assert.match(sw, /startsWith\('\/app\/api\/'\)/, 'la configuration ne doit pas être mise en cache');
   assert.ok(!/caches\.[a-z]+\([^)]*(sounds|oauth|activity|status|play|stop)/.test(sw), 'aucune route d\'API dans le cache');
 });
@@ -118,4 +120,26 @@ test('icônes : fichiers PNG valides aux bonnes tailles', () => {
   assert.deepEqual(sizeOf('icon-512.png'), [512, 512]);
   assert.deepEqual(sizeOf('icon-maskable-512.png'), [512, 512]);
   assert.deepEqual(sizeOf('apple-touch-icon.png'), [180, 180]);
+});
+
+test('Activité Discord : kit officiel embarqué, intact, chargé seulement à la demande', async () => {
+  const sdk = readFileSync(join(WEB, 'vendor', 'discord-embedded-app-sdk.js'));
+  const readme = read('vendor/README.txt');
+  const recorded = /SHA-256 : ([0-9a-f]{64})/.exec(readme);
+  assert.ok(recorded, 'empreinte notée dans vendor/README.txt');
+  const { createHash } = await import('node:crypto');
+  assert.equal(createHash('sha256').update(sdk).digest('hex'), recorded[1], 'le kit embarqué a été modifié sans mettre à jour l\'empreinte');
+  const text = sdk.toString('utf8');
+  assert.match(text, /export\{[^}]*as DiscordSDK/, 'exporte DiscordSDK');
+  assert.ok(!/\beval\(|new Function\(|innerHTML|document\.write/.test(text), 'API dangereuse dans le kit');
+  assert.ok(sdk.length > 50_000 && sdk.length < 400_000, `taille inattendue : ${sdk.length}`);
+  assert.ok(existsSync(join(WEB, 'vendor', 'LICENSE-discord-embedded-app-sdk.txt')), 'licence MIT jointe');
+  assert.match(read('vendor/LICENSE-discord-embedded-app-sdk.txt'), /MIT License/);
+  // Le kit ne doit être importé que par activity.js, et à la demande (import dynamique) : jamais par la page ordinaire.
+  for (const name of SCRIPTS) {
+    const code = read(name);
+    if (name === 'activity.js') assert.match(code, /await import\('\.\/vendor\/discord-embedded-app-sdk\.js'\)/);
+    else assert.ok(!code.includes('vendor/discord-embedded-app-sdk'), `${name} ne doit pas charger le kit`);
+  }
+  assert.ok(!read('sw.js').includes('vendor'), 'le service worker ne met pas le kit en cache');
 });

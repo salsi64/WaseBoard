@@ -20,6 +20,7 @@
   "loop_max_minutes": 30,
   "web_app_enabled": true,
   "web_redirect_uris": [],
+  "web_activity_enabled": true,
   "alerts_enabled": true,
   "alerts_user_id": "",
   "alerts_disk_percent": 90,

@@ -131,6 +131,9 @@ couleurs y sont enregistrés dans le navigateur (ils ne sont pas ceux de l'appli
 glissant des fichiers audio ; sur téléphone, le sélecteur de fichiers permet d'envoyer un enregistrement vocal), puis les **modifier** (menu ⋯ › Modifier…) :
 nom, emoji, découpe avec forme d'onde, nouveau fichier, serveurs où il apparaît, suppression — avec les mêmes droits que dans l'application Windows.
 
+**Dans Discord (Activité)** : si l'hébergeur l'a activée, WaseBoard apparaît dans le lanceur d'activités d'un salon vocal (la fusée) : la liste des sons s'ouvre dans Discord,
+connexion automatique, et les sons partent dans le vocal du serveur où l'Activité a été lancée. Pensez à faire rejoindre le bot (🔊 Rejoindre mon vocal).
+
 Sans ouvrir l'application (sur téléphone, par exemple) : `/play son:…` joue un son dans votre salon vocal (tapez quelques lettres, Discord vous propose les sons disponibles), `/stop` les coupe. `/top` montre les sons et les membres les plus actifs du serveur, `/bilan` le bilan de l'année avec vos propres chiffres ; les deux ne s'affichent que pour vous, sauf avec `partager:True`.
 
 ## Besoin d'aide ?

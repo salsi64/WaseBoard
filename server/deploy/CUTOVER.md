@@ -68,7 +68,7 @@ vraies données de prod avant d'écrire cette étape (jamais exécuté sur la pr
 ## Le jour J, dans l'ordre
 
 1. [ ] **Arrêter le service** : `sudo systemctl stop waseboard`.
-2. [ ] **Déployer le nouveau code** (`server.py`, `audio.py`, `effects.py`, `diagnostics.py`, `wb_config.py`, `alerts.py`, `reports.py`, `webapp.py` **et le dossier `web/`**) dans
+2. [ ] **Déployer le nouveau code** (`server.py`, `audio.py`, `effects.py`, `diagnostics.py`, `wb_config.py`, `alerts.py`, `reports.py`, `webapp.py` **et le dossier `web/`**, kit Discord `web/vendor/` compris) dans
        `~/waseboard-server/` — mêmes fichiers que ceux déployés et validés sur l'instance de test.
 2bis. [ ] **Migrer le catalogue existant** (107 sons, aucun n'a de `guild_id` : sans cette étape, ils
        deviennent invisibles pour tout le monde — voir l'explication complète plus bas). Le bot de prod
@@ -111,6 +111,12 @@ vraies données de prod avant d'écrire cette étape (jamais exécuté sur la pr
        après l'étape 6, pas avant (voir « Pourquoi client et serveur basculent ensemble »). C'est cette
        release, pas le merge, qui déclenche le toast « nouvelle version » chez les utilisateurs déjà
        installés (`UpdateCheckService`, comparaison au tag `vX.Y.Z`).
+6ter. [ ] **Page web et Activité Discord** (J8/J9, voir `server/README.md` › « Activité Discord ») :
+       - portail Discord › OAuth2 › Redirects : ajouter `https://waseboard.salsi.bid/app/callback` (page web) et, pour l'Activité, `https://127.0.0.1` (adresse factice) ;
+       - portail › Activities : activer les Activités, URL Mapping `/` → `waseboard.salsi.bid` (+ `/discord-cdn` → `cdn.discordapp.com`) ;
+       - nginx de prod : la racine du domaine sert la page d'accueil statique, or Discord charge `/?frame_id=…` → dans `location = /`, ajouter
+         `if ($arg_frame_id) { rewrite ^ /app/ last; }`, puis `sudo nginx -t && sudo systemctl reload nginx` ;
+       - vérifier `https://waseboard.salsi.bid/app/` puis lancer l'Activité depuis un salon vocal (propriétaire ou équipe de l'application seulement tant qu'elle n'est pas distribuée).
 7. [ ] **`/diagnostic`** dans chaque serveur Discord déjà utilisateur : droits du bot sur chaque salon
        vocal, intent, redirection OAuth2 — tout au vert.
 8. [ ] **Fermer l'ancien accès direct** (port 5005, commentaire `# WaseBoard direct (retrocompat, a

@@ -184,3 +184,17 @@ export function voiceSummary(status) {
     guildId: status.guild_id || null,
   };
 }
+
+// ---------- Activité Discord ----------
+
+/** La page est-elle chargée comme Activité dans Discord ? Discord ajoute « frame_id » (et « instance_id »…) à l'adresse de l'iframe. */
+export function isActivityLocation(search) {
+  return new URLSearchParams(search).has('frame_id');
+}
+
+/** Dans une Activité, seul le domaine de l'application est joignable : le CDN de Discord passe par une correspondance d'adresse
+ *  « /discord-cdn » → cdn.discordapp.com (à déclarer dans le portail, voir README). Renvoie l'adresse de remplacement, ou null. */
+export function cdnFallbackUrl(url) {
+  const match = /^https:\/\/cdn\.discordapp\.com\/(.+)$/.exec(String(url || ''));
+  return match ? `/discord-cdn/${match[1]}` : null;
+}
