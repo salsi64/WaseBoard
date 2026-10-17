@@ -11,12 +11,14 @@ Les captures d'écran sont dans `img/` (servies par `location ^~ /img/`). Pour �
 donner un nouveau nom de fichier à une capture remplacée (ex. `hero-flat.png` → `hero-flat-2.png`).
 
 ```bash
-scp index.html VOTRE_USER@VOTRE_SERVEUR:/tmp/index.html.new
+scp index.html VOTRE_USER@VOTRE_SERVEUR:/tmp/index.html.new   # idem index.en.html et les nouvelles images de img/
 ssh VOTRE_USER@VOTRE_SERVEUR 'sudo install -m 664 -o www-data -g www-data /tmp/index.html.new /var/www/waseboard-landing/index.html && rm /tmp/index.html.new'
 ```
 
-La version anglaise est `index.en.html` (servie sur `/en`, règle `location = /en` du même fichier de configuration) : elle se déduit de `index.html`
-(textes traduits, mêmes styles et images) — modifier l'une, refaire l'autre. Captures : `tools/Screenshots` (voir son README).
+**`index.html` (français) et `index.en.html` (anglais) sont générés** par `python build.py` à partir d'un seul modèle : les textes y sont écrits
+`[[français||anglais]]`, le reste (styles, structure, images) est commun. Modifier `build.py`, relancer, publier les deux fichiers. L'anglais est servi sur `/en`
+(règle `location = /en` de `nginx-waseboard-salsi-bid.conf`). Captures : `tools/Screenshots` (voir son README) ; les images de la version web sont
+prises sur l'aperçu à fausses données (`server/tests/preview_web.py`).
 
 Pages annexes servies de la même façon (`privacy.html`, `terms.html`, `micro-en-jeu.html`) : chacune a
 sa règle `location = /….html` dans le site nginx. Pour en ajouter une, copier le fichier dans

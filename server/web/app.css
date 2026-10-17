@@ -107,34 +107,40 @@ img { display: block; }
 .content { padding: 4px max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); max-width: 1200px; margin: 0 auto; }
 .section-title { display: flex; align-items: center; gap: 10px; margin: 18px 4px 10px; font-size: 0.95rem; font-weight: 700; color: var(--muted); text-transform: none; }
 .section-title img { width: 24px; height: 24px; border-radius: 50%; }
-.grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.grid { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .empty, .state-msg { margin: 48px auto; max-width: 420px; text-align: center; color: var(--muted); line-height: 1.55; }
 .state-msg .btn { margin-top: 14px; }
 
 /* ---------- Boutons de son : des « pills » comme dans l'application Windows (largeur selon le nom) ---------- */
-.card { position: relative; --c: #8b5cf6; flex: 0 1 auto; min-width: 140px; max-width: 100%; }
+/* Compactes : on veut en voir beaucoup d'un coup, surtout dans le panneau étroit de l'Activité Discord. */
+.card { position: relative; --c: #8b5cf6; flex: 0 1 auto; min-width: 112px; max-width: 100%; }
 .card-main {
-  width: 100%; min-height: 58px; display: flex; align-items: center; gap: 10px; padding: 8px 40px 8px 8px; text-align: left;
-  border-radius: 22px; border: 1px solid color-mix(in srgb, var(--c) 45%, var(--outline));
+  width: 100%; min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 5px 34px 5px 5px; text-align: left; font-size: 0.875rem;
+  border-radius: 16px; border: 1px solid color-mix(in srgb, var(--c) 45%, var(--outline));
   background: color-mix(in srgb, var(--c) 14%, var(--surface));
   transition: transform 0.08s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 .card-main:hover { background: color-mix(in srgb, var(--c) 22%, var(--surface)); }
 .card-main:active, .card.bump .card-main { transform: scale(0.96); }
 .emoji {
-  flex: none; width: 40px; height: 40px; display: grid; place-items: center; font-size: 1.35rem; line-height: 1;
+  flex: none; width: 30px; height: 30px; display: grid; place-items: center; font-size: 1.05rem; line-height: 1;
   border-radius: 50%; background: color-mix(in srgb, var(--c) 32%, var(--surface));
 }
 .name { min-width: 0; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fav-badge { flex: none; margin-left: -4px; font-size: 0.8rem; color: #facc15; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+.fav-badge { flex: none; margin-left: -4px; font-size: 0.72rem; color: #facc15; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
 .card-more {
-  position: absolute; top: 50%; right: 6px; transform: translateY(-50%); width: 30px; height: 30px; padding: 0; border: 0;
-  border-radius: 50%; background: transparent; color: var(--muted); font-size: 1.05rem; line-height: 1;
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 28px; height: 28px; padding: 0; border: 0;
+  border-radius: 50%; background: transparent; color: var(--muted); font-size: 0.95rem; line-height: 1;
 }
 .card-more:hover { background: color-mix(in srgb, var(--c) 25%, transparent); color: var(--text); }
-.who { position: absolute; right: 34px; top: -9px; display: flex; pointer-events: none; }
-.who img { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--bg); margin-left: -6px; background: var(--surface-2); }
+.who { position: absolute; right: 30px; top: -8px; display: flex; pointer-events: none; }
+.who img { width: 17px; height: 17px; border-radius: 50%; border: 2px solid var(--bg); margin-left: -5px; background: var(--surface-2); }
+/* Dans Discord : le panneau est étroit, on resserre encore un peu. */
+html.activity .grid { gap: 6px; }
+html.activity .card { min-width: 96px; }
+html.activity .card-main { min-height: 38px; font-size: 0.82rem; border-radius: 14px; padding-right: 30px; }
+html.activity .card-main .emoji { width: 26px; height: 26px; font-size: 0.95rem; }
 .card.is-playing .card-main {
   border-color: var(--c); background: color-mix(in srgb, var(--c) 30%, var(--surface));
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 55%, transparent), 0 0 22px color-mix(in srgb, var(--c) 45%, transparent);
@@ -211,7 +217,7 @@ img { display: block; }
 }
 .emoji-row { display: flex; align-items: center; gap: 10px; }
 .emoji-row .emoji-input { flex: 1; min-width: 0; font-size: 1.2rem; }
-.emoji-row .emoji { flex: none; border: 1px solid var(--outline); background: var(--surface-2); }
+.emoji-row .emoji { flex: none; width: 40px; height: 40px; font-size: 1.35rem; border: 1px solid var(--outline); background: var(--surface-2); }
 .emoji-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 6px; margin-top: 10px; }
 .emoji-choice { min-height: 42px; padding: 0; border: 0; border-radius: 10px; background: var(--surface-2); font-size: 1.35rem; }
 .emoji-choice:hover { background: color-mix(in srgb, var(--accent) 22%, var(--surface-2)); }

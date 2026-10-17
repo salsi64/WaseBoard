@@ -19,9 +19,9 @@ La bascule multi-tenant décrite plus bas est faite depuis longtemps (la prod se
       Retour arrière : restaurer les `*.bak-20261017-145319` (et `web.bak-…`), `sudo systemctl restart waseboard`.
 - [x] Exploitation : `waseboard-backup.service` avec `-c`, redémarrage hebdomadaire (dimanche 5 h, ancien `daily-reboot.timer` désactivé), nginx (rejet des scanners, limite de débit,
       `/en`, racine `?frame_id=` → application web) sur `waseboard-salsi-bid` et l'ancien nom, accueil 3.4 fr/en déployée, surveillance indépendante (prod + test), sauvegarde hors machine (tâche planifiée du PC).
-- [ ] **Portail Discord (appli de prod, à faire à la main)** : OAuth2 › Redirects : `https://waseboard.salsi.bid/app/callback` et `https://127.0.0.1` · Activities › Settings : activer, URL Mappings `/` → `waseboard.salsi.bid` (+ `/discord-cdn` → `cdn.discordapp.com`).
-      Le serveur crée la commande de lancement `launch` au prochain démarrage si Discord ne l'a pas créée (message « 50226 » dans le journal tant que les Activités ne sont pas activées : normal).
-- [ ] Merge de `feature/roadmap-3.4` dans `master`, tag `v3.4.0` → la release GitHub (avec l'installeur) est créée par `.github/workflows/release.yml`.
+- [x] **Portail Discord (appli de prod)** : Redirects (`https://waseboard.salsi.bid/app/callback`, `https://127.0.0.1`), Activités activées, URL Mappings `/` → `waseboard.salsi.bid`. Discord a créé lui-même la commande `launch` (le serveur la retrouve au démarrage). L'Activité fonctionne en prod pour l'équipe de l'appli.
+- [x] PR #18 mergée dans `master` (7dcef67), tag `v3.4.0` : la release GitHub avec `WaseBoard-Setup-3.4.0.exe` est publiée par `.github/workflows/release.yml`.
+- [x] Même jour : pills de la version web et de l'Activité plus compactes (`web/app.css`), nouvelle page d'accueil générée par `deploy/landing-page/build.py` (bouton « Utiliser sur le web »).
 
 ## Pourquoi client et serveur basculent ensemble (pas l'un avant l'autre)
 
