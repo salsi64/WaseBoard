@@ -12,6 +12,7 @@ using System.Windows.Shapes;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using WaseBoard.Services;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Windows
 {
@@ -148,12 +149,12 @@ namespace WaseBoard.Windows
 
             if (mode == TrimWindowMode.Add)
             {
-                Title = "Ajouter un son";
-                HeadingText.Text = "Ajouter un son";
+                Title = Loc.T("main.add_sound");
+                HeadingText.Text = Loc.T("main.add_sound");
             }
             else
             {
-                ConfirmButton.Content = "Enregistrer";
+                ConfirmButton.Content = Loc.T("common.save");
                 HintText.Visibility = Visibility.Collapsed;
 
                 if (extras is not null)
@@ -166,10 +167,10 @@ namespace WaseBoard.Windows
                     if (!extras.CanEditShared)
                     {
                         // Son d'un autre : seuls les réglages locaux sont modifiables, le reste est partagé par tout le serveur.
-                        Title = "Personnaliser le son";
-                        HeadingText.Text = "Personnaliser le son";
+                        Title = Loc.T("trim.title_customize");
+                        HeadingText.Text = Loc.T("trim.title_customize");
                         NameBox.IsReadOnly = true;
-                        NameBox.ToolTip = "Seuls l'auteur du son et les admins du serveur peuvent le renommer";
+                        NameBox.ToolTip = Loc.T("trim.rename_restricted");
                         ThumbButton.IsEnabled = false;
                         ThumbButton.ToolTip = null;
                         EditBadge.Visibility = Visibility.Collapsed;
@@ -186,7 +187,7 @@ namespace WaseBoard.Windows
                     if (!extras.CanReplaceFile)
                     {
                         ReplaceFileButton.IsEnabled = false;
-                        ReplaceFileButton.ToolTip = "Ce serveur doit d'abord être mis à jour pour permettre de remplacer le fichier d'un son";
+                        ReplaceFileButton.ToolTip = Loc.T("trim.replace_unsupported");
                     }
                     _originalFileName = extras.FileName;
                     FileNameText.Text = extras.FileName;
@@ -233,8 +234,8 @@ namespace WaseBoard.Windows
             }
             catch (Exception ex)
             {
-                AlertDialog.Show(this, "Impossible d'analyser ce fichier audio :\n" + ex.Message,
-                    "Erreur", AlertKind.Error);
+                AlertDialog.Show(this, Loc.T("trim.analyze_failed", ex.Message),
+                    Loc.T("common.error"), AlertKind.Error);
                 DialogResult = false;
                 Close();
                 return;
@@ -268,8 +269,8 @@ namespace WaseBoard.Windows
 
         private void UpdateFileInfoText() =>
             FileInfoText.Text = _replacementPath is null
-                ? $"Durée totale : {Seconds(_duration)}"
-                : $"Nouveau fichier · {Seconds(_duration)}";
+                ? Loc.T("trim.total_duration", Seconds(_duration))
+                : Loc.T("trim.new_file", Seconds(_duration));
 
         // ---------- Remplacement du fichier audio ----------
 
@@ -278,8 +279,8 @@ namespace WaseBoard.Windows
             var patterns = string.Join(";", SoundLibraryService.SupportedExtensions.Select(x => "*" + x));
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
-                Title = "Choisir le nouveau fichier audio",
-                Filter = $"Fichiers audio ({patterns})|{patterns}|Tous les fichiers|*.*"
+                Title = Loc.T("trim.pick_new_file"),
+                Filter = Loc.T("trim.pick_filter", patterns)
             };
             if (dialog.ShowDialog(this) != true) return;
 
@@ -293,7 +294,7 @@ namespace WaseBoard.Windows
             var extension = System.IO.Path.GetExtension(path).ToLowerInvariant();
             if (!SoundLibraryService.SupportedExtensions.Contains(extension))
             {
-                AlertDialog.Show(this, $"Ce format n'est pas pris en charge ({extension}). Formats acceptés : {string.Join(", ", SoundLibraryService.SupportedExtensions)}.",
+                AlertDialog.Show(this, Loc.T("trim.unsupported_format", extension, string.Join(", ", SoundLibraryService.SupportedExtensions)),
                     "WaseBoard", AlertKind.Warning);
                 return false;
             }
@@ -307,7 +308,7 @@ namespace WaseBoard.Windows
             }
             catch (Exception ex)
             {
-                AlertDialog.Show(this, "Impossible d'analyser ce fichier audio :\n" + ex.Message, "Erreur", AlertKind.Error);
+                AlertDialog.Show(this, Loc.T("trim.analyze_failed", ex.Message), Loc.T("common.error"), AlertKind.Error);
                 return false;
             }
             finally
@@ -419,7 +420,7 @@ namespace WaseBoard.Windows
             {
                 var hasEmoji = !string.IsNullOrWhiteSpace(EmojiBox.Text);
                 ConfirmButton.IsEnabled = hasEmoji;
-                ConfirmButton.ToolTip = hasEmoji ? null : "Choisissez un emoji pour ce son";
+                ConfirmButton.ToolTip = hasEmoji ? null : Loc.T("trim.need_emoji");
                 return;
             }
 
@@ -435,7 +436,7 @@ namespace WaseBoard.Windows
                 || _sharedChoices.Any(s => _initShared.TryGetValue(s.GuildId, out var was) && was != s.IsMember)
                 || trimChanged;
             ConfirmButton.IsEnabled = dirty;
-            ConfirmButton.ToolTip = dirty ? null : "Aucune modification";
+            ConfirmButton.ToolTip = dirty ? null : Loc.T("trim.no_changes");
         }
 
         // ---------- Favori ----------
@@ -469,7 +470,7 @@ namespace WaseBoard.Windows
                     Background = new SolidColorBrush(color),
                     BorderBrush = selected ? (Brush)FindResource("TextBrush") : Brushes.Transparent,
                     Content = selected ? new TextBlock { Text = "✓", FontWeight = FontWeights.ExtraBold, FontSize = 13, Foreground = new SolidColorBrush(Color.FromRgb(0x0B, 0x12, 0x20)) } : null,
-                    ToolTip = selected ? "Cliquer pour revenir à la couleur automatique" : "Couleur du son"
+                    ToolTip = selected ? Loc.T("trim.color_reset") : Loc.T("trim.color_tooltip")
                 };
                 swatch.Click += (_, _) =>
                 {
@@ -513,22 +514,22 @@ namespace WaseBoard.Windows
 
             if (_sharedChoices.Count > 0)
             {
-                CategoryList.Children.Add(CreateGroupHeader("Serveurs"));
+                CategoryList.Children.Add(CreateGroupHeader(Loc.T("main.servers")));
                 foreach (var shared in _sharedChoices)
                 {
                     var s = shared;
                     CategoryList.Children.Add(CreateCategoryRow(s.GuildName, s.IsMember, s.Locked,
-                        s.Locked ? "Serveur d'origine du son : il en fait toujours partie" : null,
+                        s.Locked ? Loc.T("trim.origin_server") : null,
                         () => { s.IsMember = !s.IsMember; BuildCategoryList(); }));
                 }
             }
 
-            CategoryList.Children.Add(CreateGroupHeader("Mes catégories"));
+            CategoryList.Children.Add(CreateGroupHeader(Loc.T("trim.my_categories")));
             if (_localCategories.Count == 0)
             {
                 CategoryList.Children.Add(new TextBlock
                 {
-                    Text = "Aucune catégorie pour l'instant.", FontSize = 12, Opacity = 0.55, Margin = new Thickness(10, 4, 10, 6),
+                    Text = Loc.T("trim.no_categories"), FontSize = 12, Opacity = 0.55, Margin = new Thickness(10, 4, 10, 6),
                     Foreground = (Brush)FindResource("TextBrush")
                 });
             }
@@ -580,7 +581,7 @@ namespace WaseBoard.Windows
         {
             var names = _sharedChoices.Where(s => s.IsMember).Select(s => s.GuildName)
                 .Concat(_localCategories.Where(_selectedLocal.Contains)).ToList();
-            CategoryTriggerText.Text = names.Count == 0 ? "Aucune" : names.Count == 1 ? names[0] : $"{names[0]} +{names.Count - 1}";
+            CategoryTriggerText.Text = names.Count == 0 ? Loc.T("trim.none") : names.Count == 1 ? names[0] : $"{names[0]} +{names.Count - 1}";
         }
 
         private void NewCategoryButton_Click(object sender, RoutedEventArgs e)
@@ -716,7 +717,7 @@ namespace WaseBoard.Windows
         {
             _previewMuted = !_previewMuted;
             MuteButton.Content = _previewMuted ? "🔇" : "🔊";
-            MuteButton.ToolTip = _previewMuted ? "Réactiver le son de l'aperçu" : "Couper le son de l'aperçu";
+            MuteButton.ToolTip = _previewMuted ? Loc.T("trim.unmute_preview") : Loc.T("trim.mute_preview");
         }
 
         private void PreviewButton_Click(object sender, RoutedEventArgs e)
@@ -741,8 +742,8 @@ namespace WaseBoard.Windows
             catch (Exception ex)
             {
                 ReleasePreview();
-                AlertDialog.Show(this, "Impossible de lire l'aperçu :\n" + ex.Message,
-                    "Erreur", AlertKind.Warning);
+                AlertDialog.Show(this, Loc.T("trim.preview_failed", ex.Message),
+                    Loc.T("common.error"), AlertKind.Warning);
             }
         }
 
@@ -766,7 +767,7 @@ namespace WaseBoard.Windows
         private void DeleteButton_Click(object sender, RoutedEventArgs e)
         {
             var confirmed = ConfirmDialog.Show(this,
-                $"Supprimer « {NameBox.Text.Trim()} » du catalogue partagé ?\nUn administrateur du serveur pourra le restaurer depuis la corbeille.");
+                Loc.T("trim.delete_confirm", NameBox.Text.Trim()));
             if (!confirmed) return;
 
             StopPreview();
@@ -781,13 +782,13 @@ namespace WaseBoard.Windows
         {
             if ((_trimEnd - _trimStart).TotalMilliseconds < 100)
             {
-                AlertDialog.Show(this, "La portion sélectionnée est trop courte.", "WaseBoard", AlertKind.Warning);
+                AlertDialog.Show(this, Loc.T("trim.too_short"), "WaseBoard", AlertKind.Warning);
                 return;
             }
 
             // Le remplacement est le seul changement qu'on ne peut pas défaire : confirmation ici, pour pouvoir rester dans la fenêtre.
             if (_replacementPath is not null && !ConfirmDialog.Show(this,
-                    $"Remplacer le fichier audio de « {NameBox.Text.Trim()} » ?\nLe nouveau fichier sera utilisé par tous les membres du serveur ; l'ancien n'est pas conservé."))
+                    Loc.T("trim.replace_confirm", NameBox.Text.Trim())))
                 return;
 
             StopPreview();
@@ -799,7 +800,7 @@ namespace WaseBoard.Windows
             ResultTrimStartMs = isFullRange ? null : (int)Math.Round(_trimStart.TotalMilliseconds);
             ResultTrimEndMs = isFullRange ? null : (int)Math.Round(_trimEnd.TotalMilliseconds);
 
-            ResultName = string.IsNullOrWhiteSpace(NameBox.Text) ? "Son" : NameBox.Text.Trim();
+            ResultName = string.IsNullOrWhiteSpace(NameBox.Text) ? Loc.T("main.sound") : NameBox.Text.Trim();
             ResultEmoji = EmojiBox.Text.Trim();
             ResultVolume = (float)(VolumeSlider.Value / 100.0);
             ResultFavorite = _isFavorite;

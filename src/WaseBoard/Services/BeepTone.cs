@@ -25,7 +25,7 @@ namespace WaseBoard.Services
         /// et de sortie de 8 ms pour éviter tout « clac » (un son tronqué net claque dans les haut-parleurs).</summary>
         public static byte[] BuildWav(int[] frequencies, int noteMs = 90, double volume = 0.35)
         {
-            if (frequencies.Length == 0) throw new ArgumentException("Au moins une fréquence est attendue.", nameof(frequencies));
+            if (frequencies.Length == 0) throw new ArgumentException("At least one frequency is expected.", nameof(frequencies));
             if (noteMs < 20) throw new ArgumentOutOfRangeException(nameof(noteMs));
 
             var samplesPerNote = SampleRate * noteMs / 1000;

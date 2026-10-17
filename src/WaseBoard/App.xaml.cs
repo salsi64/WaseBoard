@@ -60,8 +60,8 @@ namespace WaseBoard
             DispatcherUnhandledException += (s, ex) =>
             {
                 AlertDialog.Show(MainWindow,
-                    "Une erreur est survenue :\n" + ex.Exception.Message,
-                    "WaseBoard - Erreur", AlertKind.Error);
+                    Loc.T("app.error.message", ex.Exception.Message),
+                    Loc.T("app.error.title"), AlertKind.Error);
                 ex.Handled = true;
             };
         }

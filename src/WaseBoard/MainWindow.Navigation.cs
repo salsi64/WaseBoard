@@ -22,6 +22,7 @@ using WaseBoard.Models;
 using WaseBoard.Services;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard
 {
@@ -134,7 +135,7 @@ namespace WaseBoard
             // Ni le texte ni l'infobulle n'affichent l'adresse du serveur (confidentialité) : juste
             // l'état connecté/non, et le détail d'erreur en cas de souci.
             var connected = items.Count > 0 || string.IsNullOrEmpty(_library.LastErrorDetail);
-            ServerStatusText.Text = connected ? $"Connecté — {items.Count} son(s)" : "Serveur injoignable";
+            ServerStatusText.Text = connected ? Loc.T("main.server.connected", items.Count) : Loc.T("main.server.unreachable");
             ServerStatusText.ToolTip = connected ? null : _library.LastErrorDetail;
             SetStatusDot(connected ? Color.FromRgb(0x4C, 0xAF, 0x50) : Color.FromRgb(0xE8, 0x11, 0x23), pulsing: false);
 
@@ -285,7 +286,7 @@ namespace WaseBoard
             {
                 new SectionViewModel
                 {
-                    Name = "★ Favoris",
+                    Name = Loc.T("main.nav.favorites"),
                     CategoryKey = FavoritesKey,
                     Sounds = new ObservableCollection<SoundItem>(Filtered(Sounds.Where(s => s.IsFavorite))),
                     IsManageable = false,

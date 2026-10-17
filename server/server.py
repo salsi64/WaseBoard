@@ -40,6 +40,7 @@ import alerts
 import audio
 import diagnostics
 import effects
+import messages
 import reports
 import webapp
 # Le code audio vit dans audio.py ; ces noms restent importables depuis server (les tests lisent S.SILENCE, S.FRAME_BYTES…).
@@ -743,6 +744,26 @@ def rate_limit_bucket(request: web.Request) -> Optional[str]:
 
 
 @web.middleware
+async def language_middleware(request: web.Request, handler):
+    """Rédige les messages d'erreur dans la langue du client (en-tête Accept-Language, voir messages.py). Le code du serveur écrit ses
+    messages en français : un appelant sans l'en-tête, ou qui demande le français, les reçoit tels quels."""
+    response = await handler(request)
+    language = messages.pick_language(request.headers.get("Accept-Language"))
+    if (language != messages.DEFAULT_LANGUAGE and isinstance(response, web.Response) and response.status >= 400
+            and response.content_type == "application/json" and response.body):
+        try:
+            data = json.loads(response.body)
+        except ValueError:
+            return response
+        if isinstance(data, dict) and isinstance(data.get("error"), str):
+            translated = messages.translate(data["error"], language)
+            if translated != data["error"]:
+                data["error"] = translated
+                response.body = json.dumps(data).encode("utf-8")
+    return response
+
+
+@web.middleware
 async def rate_limit_middleware(request: web.Request, handler):
     bucket = rate_limit_bucket(request)
     if bucket is not None:
@@ -796,30 +817,53 @@ _CONNECT_PAGE_STYLE = (
 )
 
 
-def render_connect_page(link: Optional[str], nonce: str = "") -> str:
-    """Page d'invitation (français). link=None : code inconnu ou expiré."""
+# Textes de la page d'invitation, par langue (la langue vient de l'en-tête Accept-Language du navigateur, voir messages.py).
+_CONNECT_TEXTS = {
+    "fr": {
+        "gone_title": "Ce lien n'est plus valide",
+        "gone_text": "Il a expiré (ou n'a jamais existé). Retournez sur Discord et cliquez de nouveau sur « Recevoir mon lien WaseBoard » pour en obtenir un nouveau.",
+        "title": "Ouvrir WaseBoard",
+        "text": "WaseBoard va s'ouvrir et se connecter tout seul à ce serveur. Si votre navigateur demande l'autorisation d'ouvrir l'application, acceptez.",
+        "button": "Ouvrir WaseBoard",
+        "download_lead": "WaseBoard n'est pas encore installé ?",
+        "download_link": "Téléchargez-le ici",
+        "download_tail": "puis revenez cliquer sur le bouton.",
+        "copy_hint": "Rien ne se passe ? Copiez ce lien, puis collez-le dans la fenêtre Exécuter de Windows (touches Windows + R).",
+    },
+    "en": {
+        "gone_title": "This link is no longer valid",
+        "gone_text": "It has expired (or never existed). Go back to Discord and click “Get my WaseBoard link” again to get a new one.",
+        "title": "Open WaseBoard",
+        "text": "WaseBoard will open and connect to this server by itself. If your browser asks for permission to open the app, accept.",
+        "button": "Open WaseBoard",
+        "download_lead": "WaseBoard isn't installed yet?",
+        "download_link": "Download it here",
+        "download_tail": "then come back and click the button.",
+        "copy_hint": "Nothing happens? Copy this link, then paste it into the Windows Run window (Windows + R keys).",
+    },
+}
+
+
+def render_connect_page(link: Optional[str], nonce: str = "", language: str = "fr") -> str:
+    """Page d'invitation, dans la langue demandée (français par défaut). link=None : code inconnu ou expiré."""
+    text = _CONNECT_TEXTS.get(language, _CONNECT_TEXTS["fr"])
     if link is None:
-        body = (
-            "<h1>Ce lien n'est plus valide</h1>"
-            "<p>Il a expiré (ou n'a jamais existé). Retournez sur Discord et cliquez de nouveau sur "
-            "« Recevoir mon lien WaseBoard » pour en obtenir un nouveau.</p>"
-        )
+        body = f"<h1>{text['gone_title']}</h1><p>{text['gone_text']}</p>"
         script = ""
     else:
         body = (
-            "<h1>Ouvrir WaseBoard</h1>"
-            "<p>WaseBoard va s'ouvrir et se connecter tout seul à ce serveur. Si votre navigateur demande "
-            "l'autorisation d'ouvrir l'application, acceptez.</p>"
-            f'<a class="btn" href="{html.escape(link)}">Ouvrir WaseBoard</a>'
-            f'<p>WaseBoard n\'est pas encore installé ? <a class="dl" href="{html.escape(DOWNLOAD_URL)}">Téléchargez-le ici</a>, '
-            "puis revenez cliquer sur le bouton.</p>"
-            "<p><small>Rien ne se passe ? Copiez ce lien, puis collez-le dans la fenêtre Exécuter de Windows "
-            "(touches Windows + R).</small></p>"
+            f"<h1>{text['title']}</h1>"
+            f"<p>{text['text']}</p>"
+            f'<a class="btn" href="{html.escape(link)}">{text["button"]}</a>'
+            f'<p>{text["download_lead"]} <a class="dl" href="{html.escape(DOWNLOAD_URL)}">{text["download_link"]}</a>, '
+            f"{text['download_tail']}</p>"
+            f"<p><small>{text['copy_hint']}</small></p>"
             f'<textarea readonly onclick="this.select()">{html.escape(link)}</textarea>'
         )
         script = f'<script nonce="{nonce}">setTimeout(function(){{location.href={json.dumps(link)}}},400)</script>'
+    lang_code = language if language in _CONNECT_TEXTS else "fr"
     return (
-        '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>WaseBoard</title>'
+        f'<!doctype html><html lang="{lang_code}"><head><meta charset="utf-8"><title>WaseBoard</title>'
         '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">'
         f"<style>{_CONNECT_PAGE_STYLE}</style></head><body><main>{body}</main>{script}</body></html>"
     )
@@ -1703,7 +1747,7 @@ class WaseBoardServer(commands.Bot):
 
     async def _start_http_server(self) -> None:
         app = web.Application(client_max_size=64 * 1024 * 1024,  # 64 Mo max par upload
-                              middlewares=[rate_limit_middleware] if RATE_LIMITER.limit > 0 else [])
+                              middlewares=[language_middleware] + ([rate_limit_middleware] if RATE_LIMITER.limit > 0 else []))
         app.router.add_get("/sounds", self._handle_list_sounds)
         app.router.add_get("/sounds/{id}/file", self._handle_get_file)
         app.router.add_post("/sounds", self._handle_upload_sound)
@@ -1900,14 +1944,15 @@ class WaseBoardServer(commands.Bot):
         à un membre qui a cliqué sur le bouton ; sans code valide, elle ne révèle rien."""
         headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex"}
         code = request.match_info["code"]
+        language = messages.pick_language(request.headers.get("Accept-Language"))
         if not (PUBLIC_URL and SHARED_SECRET and invite_code_is_valid(code)):
-            return web.Response(text=render_connect_page(None), content_type="text/html", status=404, headers=headers)
+            return web.Response(text=render_connect_page(None, language=language), content_type="text/html", status=404, headers=headers)
 
         nonce = secrets.token_urlsafe(12)
         headers["Content-Security-Policy"] = (
             f"default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-{nonce}'; base-uri 'none'; form-action 'none'"
         )
-        return web.Response(text=render_connect_page(build_connect_link(), nonce), content_type="text/html", headers=headers)
+        return web.Response(text=render_connect_page(build_connect_link(), nonce, language), content_type="text/html", headers=headers)
 
     # ---------- Catalogue de sons ----------
 

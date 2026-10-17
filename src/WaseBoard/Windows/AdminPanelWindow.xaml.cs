@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using WaseBoard.Models;
 using WaseBoard.Services;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Windows
 {
@@ -106,7 +107,7 @@ namespace WaseBoard.Windows
             var version = ++_loadVersion;
             if (_currentPage == "Invite") { SetStatus(""); return; }
 
-            SetStatus("Chargement…");
+            SetStatus(Loc.T("common.loading"));
             string? error = _currentPage switch
             {
                 "Sounds" => await LoadSoundsAsync(guildId, version),
@@ -122,7 +123,7 @@ namespace WaseBoard.Windows
         }
 
         // Chaque Load* renvoie null en cas de succès, sinon le message d'erreur à afficher.
-        private string ErrorOrDefault() => string.IsNullOrEmpty(_library.LastErrorDetail) ? "Échec du chargement." : _library.LastErrorDetail!;
+        private string ErrorOrDefault() => string.IsNullOrEmpty(_library.LastErrorDetail) ? Loc.T("admin.load_failed") : _library.LastErrorDetail!;
 
         // ---------- Sons ----------
 
@@ -144,7 +145,7 @@ namespace WaseBoard.Windows
         private SoundRow ToRow(SoundLibraryService.AdminSound s)
         {
             var unknownAuthor = s.UploadedBy is null;
-            var author = unknownAuthor ? "(ancien son)" : s.UploadedByName ?? $"Membre {s.UploadedBy}";
+            var author = unknownAuthor ? Loc.T("admin.old_sound") : s.UploadedByName ?? Loc.T("admin.member", s.UploadedBy ?? "");
             var isMe = s.UploadedBy is not null && s.UploadedBy == _library.Settings.DiscordUserId;
             return new SoundRow
             {
@@ -152,13 +153,13 @@ namespace WaseBoard.Windows
                 Emoji = s.Emoji ?? "",
                 Name = s.Name,
                 Author = author,
-                AuthorTooltip = unknownAuthor ? "Ajouté avant l'arrivée des rôles : auteur inconnu, seuls les admins peuvent le gérer." : author,
+                AuthorTooltip = unknownAuthor ? Loc.T("admin.unknown_author_tooltip") : author,
                 AuthorId = s.UploadedBy,
                 Date = FormatUnix(s.UploadedAt) ?? "—",
                 SizeText = FormatSize(s.Size),
                 PlaysText = s.Plays.ToString(),
                 CanBlock = !unknownAuthor && !isMe,
-                BlockTooltip = unknownAuthor ? "Auteur inconnu" : isMe ? "C'est vous" : $"Empêcher {author} d'ajouter des sons ici"
+                BlockTooltip = unknownAuthor ? Loc.T("admin.unknown_author") : isMe ? Loc.T("admin.its_you") : Loc.T("admin.block_tooltip", author)
             };
         }
 
@@ -171,8 +172,8 @@ namespace WaseBoard.Windows
             _soundRows = sounds.OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase).Select(ToRow).ToList();
             var withoutAuthor = sounds.Count(s => s.UploadedBy is null);
             SoundsSummaryText.Text = sounds.Count == 0
-                ? "Aucun son sur ce serveur."
-                : $"{sounds.Count} son(s)" + (withoutAuthor > 0 ? $" · {withoutAuthor} sans auteur connu (gérables par les admins seulement)" : "");
+                ? Loc.T("admin.no_sounds")
+                : Loc.T("admin.sounds_count", sounds.Count) + (withoutAuthor > 0 ? Loc.T("admin.sounds_no_author", withoutAuthor) : "");
             ApplySoundFilter();
             return null;
         }
@@ -200,18 +201,18 @@ namespace WaseBoard.Windows
             var item = FindKnownSound(row.Id);
             if (item is null)
             {
-                AlertDialog.Show(this, "Ce son n'est pas encore dans votre catalogue local : actualisez WaseBoard puis réessayez.", "Administration", AlertKind.Warning);
+                AlertDialog.Show(this, Loc.T("admin.sound_not_local"), Loc.T("admin.title"), AlertKind.Warning);
                 return;
             }
 
-            var newName = PromptDialog.Show(this, "Nouveau nom :", row.Name);
+            var newName = PromptDialog.Show(this, Loc.T("admin.new_name"), row.Name);
             if (string.IsNullOrWhiteSpace(newName) || newName.Trim() == row.Name) return;
 
             var ok = await _library.RenameSoundAsync(item, newName.Trim());
             if (_isClosed) return;
             if (!ok)
             {
-                AlertDialog.Show(this, _library.LastErrorDetail ?? "Renommage échoué.", "Administration", AlertKind.Warning);
+                AlertDialog.Show(this, _library.LastErrorDetail ?? Loc.T("admin.rename_failed"), Loc.T("admin.title"), AlertKind.Warning);
                 return;
             }
             CatalogChanged = true;
@@ -224,17 +225,17 @@ namespace WaseBoard.Windows
             var item = FindKnownSound(row.Id);
             if (item is null)
             {
-                AlertDialog.Show(this, "Ce son n'est pas encore dans votre catalogue local : actualisez WaseBoard puis réessayez.", "Administration", AlertKind.Warning);
+                AlertDialog.Show(this, Loc.T("admin.sound_not_local"), Loc.T("admin.title"), AlertKind.Warning);
                 return;
             }
 
-            if (!ConfirmDialog.Show(this, $"Supprimer « {row.Name} » du serveur ?\nIl ira dans la corbeille, d'où vous pourrez le restaurer.")) return;
+            if (!ConfirmDialog.Show(this, Loc.T("admin.delete_confirm", row.Name))) return;
 
             var ok = await _library.DeleteSoundAsync(item);
             if (_isClosed) return;
             if (!ok)
             {
-                AlertDialog.Show(this, _library.LastErrorDetail ?? "Suppression échouée.", "Administration", AlertKind.Warning);
+                AlertDialog.Show(this, _library.LastErrorDetail ?? Loc.T("sounds.delete_failed"), Loc.T("admin.title"), AlertKind.Warning);
                 return;
             }
             _knownSounds.Remove(item);
@@ -245,16 +246,16 @@ namespace WaseBoard.Windows
         private async void BlockAuthor_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Button { Tag: SoundRow row } || row.AuthorId is null || CurrentGuildId is not { } guildId) return;
-            if (!ConfirmDialog.Show(this, $"Empêcher {row.Author} d'ajouter des sons sur ce serveur ?\nIl pourra toujours jouer les sons. Vous pouvez le débloquer dans l'onglet Réglages.")) return;
+            if (!ConfirmDialog.Show(this, Loc.T("admin.block_confirm", row.Author))) return;
 
             var info = await _library.SetUploaderBlockedAsync(guildId, row.AuthorId, true);
             if (_isClosed) return;
             if (info is null)
             {
-                AlertDialog.Show(this, _library.LastErrorDetail ?? "Blocage impossible.", "Administration", AlertKind.Warning);
+                AlertDialog.Show(this, _library.LastErrorDetail ?? Loc.T("admin.block_failed"), Loc.T("admin.title"), AlertKind.Warning);
                 return;
             }
-            SetStatus($"{row.Author} ne peut plus ajouter de sons sur ce serveur.");
+            SetStatus(Loc.T("admin.blocked", row.Author));
         }
 
         // ---------- Corbeille ----------
@@ -280,15 +281,15 @@ namespace WaseBoard.Windows
                 Id = t.Id,
                 Emoji = t.Emoji ?? "",
                 Name = t.Name,
-                DeletedByText = "par " + (t.DeletedByName ?? (t.DeletedBy is null ? "?" : $"membre {t.DeletedBy}")),
+                DeletedByText = Loc.T("admin.deleted_by", t.DeletedByName ?? (t.DeletedBy is null ? "?" : Loc.T("admin.member", t.DeletedBy))),
                 DeletedAtText = FormatUnix((long)t.DeletedAt) ?? "—",
-                DaysLeftText = t.DaysLeft is { } d ? $"Effacé définitivement dans {d} jour(s)" : "Conservé sans limite de durée"
+                DaysLeftText = t.DaysLeft is { } d ? Loc.T("admin.days_left", d) : Loc.T("admin.kept_forever")
             }).ToList();
 
             var retention = trash.RetentionDays > 0
-                ? $"Un son supprimé reste restaurable {trash.RetentionDays} jours, puis il est effacé définitivement."
-                : "Un son supprimé reste restaurable sans limite de durée.";
-            TrashSummaryText.Text = trash.Items.Count == 0 ? "La corbeille est vide. " + retention : retention;
+                ? Loc.T("admin.retention", trash.RetentionDays)
+                : Loc.T("admin.retention_forever");
+            TrashSummaryText.Text = trash.Items.Count == 0 ? Loc.T("admin.trash_empty") + retention : retention;
             return null;
         }
 
@@ -300,12 +301,12 @@ namespace WaseBoard.Windows
             if (_isClosed) return;
             if (!ok)
             {
-                AlertDialog.Show(this, _library.LastErrorDetail ?? "Restauration impossible.", "Administration", AlertKind.Warning);
+                AlertDialog.Show(this, _library.LastErrorDetail ?? Loc.T("admin.restore_failed"), Loc.T("admin.title"), AlertKind.Warning);
                 return;
             }
             CatalogChanged = true;
             await LoadCurrentPageAsync();
-            if (!_isClosed) SetStatus($"« {row.Name} » restauré.");
+            if (!_isClosed) SetStatus(Loc.T("admin.restored", row.Name));
         }
 
         // ---------- Réglages ----------
@@ -323,7 +324,7 @@ namespace WaseBoard.Windows
         private void ShowSettings(SoundLibraryService.AdminSettingsInfo info)
         {
             _settingsInfo = info;
-            var roles = new List<SoundLibraryService.AdminRole> { new() { Id = "", Name = "(aucun)" } };
+            var roles = new List<SoundLibraryService.AdminRole> { new() { Id = "", Name = Loc.T("admin.role_none") } };
             roles.AddRange(info.Roles);
             AdminRoleCombo.ItemsSource = roles;
             AdminRoleCombo.SelectedItem = roles.FirstOrDefault(r => r.Id == (info.Settings.AdminRoleId ?? "")) ?? roles[0];
@@ -342,11 +343,11 @@ namespace WaseBoard.Windows
 
         private static readonly Dictionary<string, string> CeilingLabels = new()
         {
-            ["max_sounds"] = "nombre de sons",
-            ["max_file_mb"] = "taille d'un fichier (Mo)",
-            ["max_duration_s"] = "durée d'un son (s)",
-            ["max_total_mb"] = "espace disque (Mo)",
-            ["play_rate_per_min"] = "anti-spam (sons/min)"
+            ["max_sounds"] = Loc.T("admin.ceiling.sounds"),
+            ["max_file_mb"] = Loc.T("admin.ceiling.file"),
+            ["max_duration_s"] = Loc.T("admin.ceiling.duration"),
+            ["max_total_mb"] = Loc.T("admin.ceiling.total"),
+            ["play_rate_per_min"] = Loc.T("admin.ceiling.antispam")
         };
 
         /// <summary>Espace consommé et plafonds imposés par l'hébergeur. Un serveur antérieur aux quotas d'espace ne renvoie
@@ -358,7 +359,7 @@ namespace WaseBoard.Windows
 
             QuotaUsageText.Visibility = hasQuotas ? Visibility.Visible : Visibility.Collapsed;
             if (info.Usage is { } usage)
-                QuotaUsageText.Text = $"Actuellement : {usage.Sounds} son(s) pour {usage.TotalMb:0.#} Mo sur le disque du serveur.";
+                QuotaUsageText.Text = Loc.T("admin.quota_usage", usage.Sounds, usage.TotalMb);
 
             var ceilings = info.Ceilings?
                 .Where(c => c.Value > 0 && CeilingLabels.ContainsKey(c.Key))
@@ -367,8 +368,7 @@ namespace WaseBoard.Windows
             var hasCeilings = ceilings is { Count: > 0 };
             CeilingsText.Visibility = hasCeilings ? Visibility.Visible : Visibility.Collapsed;
             if (hasCeilings)
-                CeilingsText.Text = $"Limites imposées par l'hébergeur de ce serveur : {string.Join(" ; ", ceilings!)}. " +
-                                    "Pour ces réglages, « 0 = aucune limite » n'est pas permis.";
+                CeilingsText.Text = Loc.T("admin.ceilings", string.Join(" ; ", ceilings!));
         }
 
         private static bool TryParseCount(string text, out int value) =>
@@ -382,7 +382,7 @@ namespace WaseBoard.Windows
                 || !TryParseCount(MaxDurationBox.Text, out var maxDuration) || !TryParseCount(PlayRateBox.Text, out var playRate)
                 || !TryParseCount(MaxTotalMbBox.Text, out var maxTotalMb))
             {
-                AlertDialog.Show(this, "Les limites doivent être des nombres entiers positifs (0 = aucune limite).", "Administration", AlertKind.Warning);
+                AlertDialog.Show(this, Loc.T("admin.limits_invalid"), Loc.T("admin.title"), AlertKind.Warning);
                 return;
             }
 
@@ -402,11 +402,11 @@ namespace WaseBoard.Windows
             if (_isClosed) return;
             if (info is null)
             {
-                AlertDialog.Show(this, _library.LastErrorDetail ?? "Enregistrement impossible.", "Administration", AlertKind.Warning);
+                AlertDialog.Show(this, _library.LastErrorDetail ?? Loc.T("admin.save_failed"), Loc.T("admin.title"), AlertKind.Warning);
                 return;
             }
             ShowSettings(info);
-            SetStatus("Réglages enregistrés.");
+            SetStatus(Loc.T("admin.saved"));
         }
 
         private async void Unblock_Click(object sender, RoutedEventArgs e)
@@ -417,11 +417,11 @@ namespace WaseBoard.Windows
             if (_isClosed) return;
             if (info is null)
             {
-                AlertDialog.Show(this, _library.LastErrorDetail ?? "Déblocage impossible.", "Administration", AlertKind.Warning);
+                AlertDialog.Show(this, _library.LastErrorDetail ?? Loc.T("admin.unblock_failed"), Loc.T("admin.title"), AlertKind.Warning);
                 return;
             }
             ShowSettings(info);
-            SetStatus($"{user.DisplayName} peut de nouveau ajouter des sons.");
+            SetStatus(Loc.T("admin.unblocked", user.DisplayName));
         }
 
         // ---------- Statistiques ----------
@@ -454,14 +454,14 @@ namespace WaseBoard.Windows
             if (IsStale(version)) return null;
             if (stats is null) return ErrorOrDefault();
 
-            StatsTotalText.Text = $"{stats.TotalPlays} lecture(s) sur les {stats.Days} derniers jours, dans le vocal de ce serveur.";
+            StatsTotalText.Text = Loc.T("admin.stats_total", stats.TotalPlays, stats.Days);
 
             const double MaxBarHeight = 104;
             var maxDay = Math.Max(1, stats.PerDay.Select(p => p.Count).DefaultIfEmpty(0).Max());
             DayBars.ItemsSource = stats.PerDay.Select(p => new DayBar
             {
                 BarHeight = p.Count == 0 ? 2 : 4 + (MaxBarHeight - 4) * p.Count / maxDay,
-                Tooltip = $"{FormatIsoDay(p.Date)} : {p.Count} lecture(s)"
+                Tooltip = Loc.T("admin.stats_day_tooltip", FormatIsoDay(p.Date), p.Count)
             }).ToList();
             DayAxisStartText.Text = stats.PerDay.Count > 0 ? FormatIsoDay(stats.PerDay[0].Date) : "";
             DayAxisEndText.Text = stats.PerDay.Count > 0 ? FormatIsoDay(stats.PerDay[^1].Date) : "";
@@ -477,7 +477,7 @@ namespace WaseBoard.Windows
             var maxUser = Math.Max(1, stats.TopUsers.Select(u => u.Count).DefaultIfEmpty(0).Max());
             TopUsersList.ItemsSource = stats.TopUsers.Select(u => new RankRow
             {
-                Name = u.Username ?? $"Membre {u.UserId}", AvatarUrl = u.AvatarUrl, Count = u.Count,
+                Name = u.Username ?? Loc.T("admin.member", u.UserId), AvatarUrl = u.AvatarUrl, Count = u.Count,
                 BarWidth = Math.Max(4, MaxRankBar * u.Count / maxUser)
             }).ToList();
             return null;
@@ -503,8 +503,8 @@ namespace WaseBoard.Windows
                 Description = DescribeAudit(en)
             }).ToList();
             AuditSummaryText.Text = entries.Count == 0
-                ? "Aucune action enregistrée pour le moment."
-                : $"Les {entries.Count} dernières actions, la plus récente en premier.";
+                ? Loc.T("admin.audit_none")
+                : Loc.T("admin.audit_header", entries.Count);
             return null;
         }
 
@@ -521,48 +521,48 @@ namespace WaseBoard.Windows
 
         private static string DescribeAudit(SoundLibraryService.AdminAuditEntry en)
         {
-            var actor = en.ActorName ?? "Quelqu'un";
-            var sound = en.SoundName is null ? "un son" : $"« {en.SoundName} »";
+            var actor = en.ActorName ?? Loc.T("admin.audit.someone");
+            var sound = en.SoundName is null ? Loc.T("admin.audit.a_sound") : Loc.T("admin.audit.sound_name", en.SoundName);
             return en.Action switch
             {
-                "upload" => $"{actor} a ajouté {sound}.",
-                "rename" => $"{actor} a renommé « {Detail(en, "from")} » en « {Detail(en, "to")} ».",
-                "emoji" => $"{actor} a changé l'emoji de {sound} ({Detail(en, "emoji")}).",
-                "trim" => $"{actor} a modifié la découpe de {sound}.",
-                "replace" => $"{actor} a remplacé le fichier audio de {sound}.",
-                "delete" => $"{actor} a supprimé {sound} (envoyé à la corbeille).",
-                "restore" => $"{actor} a restauré {sound}.",
-                "share_add" => $"{actor} a ajouté {sound} à la catégorie partagée.",
-                "share_remove" => $"{actor} a retiré {sound} de la catégorie partagée.",
-                "block" => $"{actor} a bloqué {Detail(en, "username") ?? "le membre " + Detail(en, "user_id")} (ajout de sons).",
-                "unblock" => $"{actor} a débloqué {Detail(en, "username") ?? "le membre " + Detail(en, "user_id")}.",
-                "purge" => $"{sound} a été effacé définitivement (fin de la durée en corbeille).",
-                "settings" => $"{actor} a modifié les réglages : {DescribeSettingsChange(en)}.",
-                _ => $"{actor} : {en.Action}."
+                "upload" => Loc.T("admin.audit.upload", actor, sound),
+                "rename" => Loc.T("admin.audit.rename", actor, Detail(en, "from") ?? "", Detail(en, "to") ?? ""),
+                "emoji" => Loc.T("admin.audit.emoji", actor, sound, Detail(en, "emoji") ?? ""),
+                "trim" => Loc.T("admin.audit.trim", actor, sound),
+                "replace" => Loc.T("admin.audit.replace", actor, sound),
+                "delete" => Loc.T("admin.audit.delete", actor, sound),
+                "restore" => Loc.T("admin.audit.restore", actor, sound),
+                "share_add" => Loc.T("admin.audit.share_add", actor, sound),
+                "share_remove" => Loc.T("admin.audit.share_remove", actor, sound),
+                "block" => Loc.T("admin.audit.block", actor, Detail(en, "username") ?? Loc.T("admin.audit.the_member", Detail(en, "user_id") ?? "")),
+                "unblock" => Loc.T("admin.audit.unblock", actor, Detail(en, "username") ?? Loc.T("admin.audit.the_member", Detail(en, "user_id") ?? "")),
+                "purge" => Loc.T("admin.audit.purge", sound),
+                "settings" => Loc.T("admin.audit.settings", actor, DescribeSettingsChange(en)),
+                _ => Loc.T("admin.audit.other", actor, en.Action)
             };
         }
 
         private static readonly Dictionary<string, string> SettingLabels = new()
         {
-            ["admin_role_id"] = "rôle administrateur",
-            ["upload_admins_only"] = "ajout réservé aux admins",
-            ["max_sounds"] = "nombre max de sons",
-            ["max_file_mb"] = "taille max (Mo)",
-            ["max_duration_s"] = "durée max (s)",
-            ["max_total_mb"] = "espace disque max (Mo)",
-            ["play_rate_per_min"] = "anti-spam (sons/min)"
+            ["admin_role_id"] = Loc.T("admin.setting.admin_role"),
+            ["upload_admins_only"] = Loc.T("admin.setting.upload_admins_only"),
+            ["max_sounds"] = Loc.T("admin.setting.max_sounds"),
+            ["max_file_mb"] = Loc.T("admin.setting.max_file"),
+            ["max_duration_s"] = Loc.T("admin.setting.max_duration"),
+            ["max_total_mb"] = Loc.T("admin.setting.max_total"),
+            ["play_rate_per_min"] = Loc.T("admin.ceiling.antispam")
         };
 
         private static string DescribeSettingsChange(SoundLibraryService.AdminAuditEntry en)
         {
-            if (en.Details is null || en.Details.Count == 0) return "(aucun détail)";
+            if (en.Details is null || en.Details.Count == 0) return Loc.T("admin.audit.no_detail");
 
             static string Show(JsonElement v) => v.ValueKind switch
             {
-                JsonValueKind.Null => "aucun",
-                JsonValueKind.True => "oui",
-                JsonValueKind.False => "non",
-                JsonValueKind.String => v.GetString() ?? "aucun",
+                JsonValueKind.Null => Loc.T("common.none_lower"),
+                JsonValueKind.True => Loc.T("common.yes_lower"),
+                JsonValueKind.False => Loc.T("common.no_lower"),
+                JsonValueKind.String => v.GetString() ?? Loc.T("common.none_lower"),
                 _ => v.ToString()
             };
 
@@ -583,14 +583,14 @@ namespace WaseBoard.Windows
             var token = _library.Settings.ServerToken;
             if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
             {
-                AlertDialog.Show(this, "Renseignez d'abord l'adresse du serveur et le jeton d'accès dans les Paramètres.", "Administration", AlertKind.Warning);
+                AlertDialog.Show(this, Loc.T("admin.fill_first"), Loc.T("admin.title"), AlertKind.Warning);
                 return;
             }
 
             Clipboard.SetText($"waseboard://connect?url={Uri.EscapeDataString(url)}&token={Uri.EscapeDataString(token)}");
 
             var original = CopyInviteButton.Content;
-            CopyInviteButton.Content = "✅ Copié !";
+            CopyInviteButton.Content = Loc.T("settings.diagnostic.copied");
             var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
             timer.Tick += (_, _) => { CopyInviteButton.Content = original; timer.Stop(); };
             timer.Start();
@@ -602,17 +602,17 @@ namespace WaseBoard.Windows
         {
             if (seconds is null) return null;
             var local = DateTimeOffset.FromUnixTimeSeconds(seconds.Value).ToLocalTime();
-            return local.ToString(withTime ? "dd/MM HH:mm" : "dd/MM/yyyy");
+            return local.ToString(withTime ? Loc.T("format.date_time") : Loc.T("format.date"));
         }
 
         private static string FormatIsoDay(string isoDate) =>
-            DateTime.TryParse(isoDate, out var d) ? d.ToString("dd/MM") : isoDate;
+            DateTime.TryParse(isoDate, out var d) ? d.ToString(Loc.T("format.day_month")) : isoDate;
 
         private static string FormatSize(long? bytes) => bytes switch
         {
             null => "—",
-            < 1024 * 1024 => $"{Math.Max(1, bytes.Value / 1024)} Ko",
-            _ => $"{bytes.Value / (1024.0 * 1024.0):0.0} Mo"
+            < 1024 * 1024 => Loc.T("format.size_kb", Math.Max(1, bytes.Value / 1024)),
+            _ => Loc.T("format.size_mb", bytes.Value / (1024.0 * 1024.0))
         };
     }
 }

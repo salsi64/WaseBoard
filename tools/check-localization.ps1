@@ -35,6 +35,30 @@ foreach ($name in $languages.Keys | Sort-Object) {
     }
 }
 
+# Aucun texte français en dur dans le code : une chaîne ou un attribut XAML avec une lettre accentuée française
+# (ou un texte « humain » en français) doit passer par Loc / {loc:Loc}. Exceptions : commentaires, et les lignes
+# marquées « loc-ok » (nom de langue affiché dans sa propre langue, par exemple).
+$sourceRoot = Join-Path $root 'src/WaseBoard'
+$accent = '[éèêëàâäùûüôöîïçœÉÈÀÇ«»]'
+$sources = Get-ChildItem $sourceRoot -Recurse -Include *.cs, *.xaml |
+    Where-Object { $_.FullName -notmatch '[\\/](obj|bin|Localization)[\\/]' }
+foreach ($file in $sources) {
+    $lineNumber = 0
+    foreach ($line in Get-Content $file.FullName -Encoding UTF8) {
+        $lineNumber++
+        $trimmed = $line.Trim()
+        if ($trimmed.StartsWith('//') -or $trimmed.StartsWith('*') -or $trimmed.StartsWith('<!--') -or $line -match 'loc-ok') { continue }
+        if ($file.Extension -eq '.cs') { $code = $line -replace '(^|\s)//.*$', '' } else { $code = $line }
+        $literals = [regex]::Matches($code, '"([^"]*)"') | ForEach-Object { $_.Groups[1].Value }
+        foreach ($literal in $literals) {
+            if ($literal -match $accent -and $literal -notmatch '^\{loc:Loc ') {
+                $relative = $file.FullName.Substring($root.Length + 1)
+                $errors += "texte français en dur dans ${relative}:${lineNumber} : $literal"
+            }
+        }
+    }
+}
+
 if ($errors.Count -gt 0) {
     $errors | ForEach-Object { Write-Error $_ -ErrorAction Continue }
     exit 1

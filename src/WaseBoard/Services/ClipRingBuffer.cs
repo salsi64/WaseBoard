@@ -38,7 +38,7 @@ namespace WaseBoard.Services
         public ClipRingBuffer(int sampleRate, int channels, double capacitySeconds, Func<double>? clockMs = null)
         {
             if (sampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(sampleRate));
-            if (channels is < 1 or > 2) throw new ArgumentOutOfRangeException(nameof(channels), "Mono ou stéréo.");
+            if (channels is < 1 or > 2) throw new ArgumentOutOfRangeException(nameof(channels), "Mono or stereo.");
             if (capacitySeconds <= 0) throw new ArgumentOutOfRangeException(nameof(capacitySeconds));
 
             SampleRate = sampleRate;

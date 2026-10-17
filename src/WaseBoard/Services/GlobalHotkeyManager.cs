@@ -29,7 +29,7 @@ namespace WaseBoard.Services
         {
             var helper = new WindowInteropHelper(window);
             if (helper.Handle == IntPtr.Zero)
-                throw new InvalidOperationException("La fenêtre doit être initialisée (Loaded) avant d'enregistrer des raccourcis.");
+                throw new InvalidOperationException("The window must be initialized (Loaded) before registering shortcuts.");
 
             _source = HwndSource.FromHwnd(helper.Handle)!;
             _source.AddHook(HwndHook);

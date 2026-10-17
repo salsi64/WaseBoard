@@ -22,6 +22,7 @@ using WaseBoard.Models;
 using WaseBoard.Services;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard
 {
@@ -223,7 +224,7 @@ namespace WaseBoard
         {
             TitleText.Visibility = !ThemeState.IsModern && level == 0 ? Visibility.Visible : Visibility.Collapsed;
             AddCategoryLabel.Visibility = level < 2 ? Visibility.Visible : Visibility.Collapsed;
-            AddSoundLabel.Text = level < 2 ? "Ajouter un son" : "Son";
+            AddSoundLabel.Text = level < 2 ? Loc.T("main.add_sound") : Loc.T("main.sound");
             var labels = level < 3 ? Visibility.Visible : Visibility.Collapsed;
             JoinVoiceLabel.Visibility = labels;
             StopAllLabel.Visibility = labels;

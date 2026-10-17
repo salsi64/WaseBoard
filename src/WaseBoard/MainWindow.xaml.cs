@@ -277,7 +277,7 @@ namespace WaseBoard
                 var streak = mic.EffectMissing ? _micMissingStreak.GetValueOrDefault(mic.EndpointGuid) + 1 : 0;
                 _micMissingStreak[mic.EndpointGuid] = streak;
                 if (streak == 2 && _micMissingWarned.Add(mic.EndpointGuid))
-                    ToastService.Show($"🎮 Micro en jeu : l'effet ne s'active pas sur « {mic.Name} », vos sons n'y passent pas (micro peut-être incompatible).", ToastKind.Warning);
+                    ToastService.Show(Loc.T("mic.warn.effect_inactive", mic.Name), ToastKind.Warning);
             }
         }
 
@@ -288,11 +288,11 @@ namespace WaseBoard
             if (!_library.Settings.MicFeatureEnabled) return;
             var state = MicFxSetup.ReadState();
             if (state.AnyNeedsRepair)
-                ToastService.Show("🎮 Micro en jeu : à réparer (Paramètres › Micro en jeu).", ToastKind.Warning);
+                ToastService.Show(Loc.T("mic.warn.repair"), ToastKind.Warning);
             else if (state.NeedsUpdate)
-                ToastService.Show("🎮 Micro en jeu : mise à jour de l'effet disponible (Paramètres › Micro en jeu).", ToastKind.Warning);
+                ToastService.Show(Loc.T("mic.warn.update"), ToastKind.Warning);
             else if (!state.AnyEquipped)
-                ToastService.Show("🎮 Micro en jeu : pas encore installé (Paramètres › Micro en jeu).", ToastKind.Warning);
+                ToastService.Show(Loc.T("mic.warn.not_installed"), ToastKind.Warning);
         }
 
         /// <summary>Vérification passive, non bloquante : affiche un toast si une nouvelle version
@@ -319,7 +319,7 @@ namespace WaseBoard
             {
                 try
                 {
-                    ToastService.Show("Votre connexion Discord a expiré — reconnectez-vous dans Paramètres.", ToastKind.Warning);
+                    ToastService.Show(Loc.T("discord.session_expired"), ToastKind.Warning);
                     var window = new SettingsWindow(_library.Settings, _library, initialPage: "Discord") { Owner = this };
                     window.ShowDialog();
                 }

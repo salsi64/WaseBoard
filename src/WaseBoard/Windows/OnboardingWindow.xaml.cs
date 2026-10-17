@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using WaseBoard.Models;
 using WaseBoard.Services;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Windows
 {
@@ -46,14 +47,13 @@ namespace WaseBoard.Windows
 
         private static (int Step, string Title, string? Banner) DescribeReason(OnboardingReason reason) => reason switch
         {
-            OnboardingReason.DeepLinkReconnect => (DiscordStepIndex, "Reconnexion WaseBoard",
-                "Vous venez de cliquer un lien de connexion WaseBoard — terminez en vous reconnectant avec Discord ci-dessous."),
-            OnboardingReason.ServerReconfigNeeded => (ServerStepIndex, "Reconnexion WaseBoard",
-                "Votre serveur WaseBoard a changé d'adresse ou de jeton d'accès — mettez à jour vos réglages ci-dessous, ou "
-                + "passez par Paramètres > Mises à jour si vous utilisez le serveur par défaut."),
-            OnboardingReason.SessionExpired => (DiscordStepIndex, "Reconnexion WaseBoard",
-                "Votre connexion Discord a expiré — reconnectez-vous pour continuer."),
-            _ => (WelcomeStepIndex, "Bienvenue sur WaseBoard", null),
+            OnboardingReason.DeepLinkReconnect => (DiscordStepIndex, Loc.T("onboarding.reconnect_title"),
+                Loc.T("onboarding.reason.deeplink")),
+            OnboardingReason.ServerReconfigNeeded => (ServerStepIndex, Loc.T("onboarding.reconnect_title"),
+                Loc.T("onboarding.reason.server_changed")),
+            OnboardingReason.SessionExpired => (DiscordStepIndex, Loc.T("onboarding.reconnect_title"),
+                Loc.T("onboarding.reason.expired")),
+            _ => (WelcomeStepIndex, Loc.T("onboarding.welcome_title"), null),
         };
 
         public OnboardingWindow(AppSettings settings, SoundLibraryService library, OnboardingReason reason = OnboardingReason.FreshInstall)
@@ -78,15 +78,12 @@ namespace WaseBoard.Windows
             // son propre serveur. Absent en build Dev (pas de défaut) : texte d'origine inchangé.
             if (!string.IsNullOrEmpty(AppIdentity.DefaultServerUrl))
             {
-                ServerModeExplainText.Text = "Vous êtes connecté par défaut à l'instance publique et gratuite de "
-                    + "WaseBoard — il ne reste qu'à vous identifier avec Discord à l'étape suivante.";
+                ServerModeExplainText.Text = Loc.T("onboarding.mode_default");
                 UseCustomServerLink.Visibility = Visibility.Visible;
             }
             else
             {
-                ServerModeExplainText.Text = "Pour l'utiliser, il vous faut un serveur WaseBoard — celui de la personne "
-                    + "qui vous a fait découvrir l'app (demandez-lui l'adresse et le jeton d'accès), ou le vôtre. Deux "
-                    + "petites étapes pour vous connecter ; vous pourrez toujours y revenir depuis les Paramètres.";
+                ServerModeExplainText.Text = Loc.T("onboarding.mode_own_server");
             }
 
             ServerUrlBox.Text = _settings.ServerUrl;
@@ -112,8 +109,8 @@ namespace WaseBoard.Windows
                 _steps[i].Visibility = i == _currentStep ? Visibility.Visible : Visibility.Collapsed;
 
             BackButton.Visibility = _currentStep > 0 ? Visibility.Visible : Visibility.Collapsed;
-            NextButton.Content = _currentStep == _steps.Length - 1 ? "Terminer" : "Suivant";
-            StepIndicatorText.Text = $"Étape {_currentStep + 1} sur {_steps.Length}";
+            NextButton.Content = _currentStep == _steps.Length - 1 ? Loc.T("onboarding.finish") : Loc.T("onboarding.next");
+            StepIndicatorText.Text = Loc.T("onboarding.step", _currentStep + 1, _steps.Length);
 
             // La connexion Discord est obligatoire : impossible de "Passer" une fois sur cette
             // étape, et "Terminer" reste désactivé tant que la connexion n'a pas réussi.
@@ -192,16 +189,15 @@ namespace WaseBoard.Windows
             ServerResultText.Text = result switch
             {
                 SoundLibraryService.ServerStatusResult.Connected =>
-                    $"✅ Serveur joignable. Bot connecté au salon vocal « {channel} ».",
+                    Loc.T("settings.server.test.connected", channel ?? ""),
                 // Jeton accepté mais le bot ne vous voit dans aucun salon vocal en ce moment — ce
                 // n'est pas un problème de jeton, juste un état normal si vous n'êtes pas connecté
                 // à Discord ou dans un salon où le bot est présent.
                 SoundLibraryService.ServerStatusResult.BotNotInVoice =>
-                    "✅ Serveur joignable et jeton accepté — mais le bot ne vous voit dans aucun salon " +
-                    "vocal en ce moment (normal si vous n'êtes pas connecté à Discord/dans un salon où le bot est présent).",
+                    Loc.T("onboarding.test.no_voice"),
                 SoundLibraryService.ServerStatusResult.Unauthorized =>
-                    "❌ Jeton d'accès incorrect.",
-                _ => $"❌ Serveur injoignable.\n{_library.LastErrorDetail}"
+                    Loc.T("settings.server.test.unauthorized"),
+                _ => Loc.T("onboarding.test.unreachable", _library.LastErrorDetail ?? "")
             };
         }
 
@@ -209,7 +205,7 @@ namespace WaseBoard.Windows
         {
             ConnectDiscordButton.IsEnabled = false;
             DiscordResultBorder.Visibility = Visibility.Collapsed;
-            DiscordResultText.Text = "Connexion en cours — suivez les instructions dans votre navigateur...";
+            DiscordResultText.Text = Loc.T("settings.discord.in_progress");
             DiscordResultBorder.Visibility = Visibility.Visible;
             DiscordAvatarBorder.Visibility = Visibility.Collapsed;
 
@@ -219,8 +215,8 @@ namespace WaseBoard.Windows
 
             if (_loginResult.Success)
             {
-                ConnectDiscordButton.Content = "Changer de compte";
-                DiscordResultText.Text = $"✅ Connecté en tant que {_loginResult.Username}";
+                ConnectDiscordButton.Content = Loc.T("settings.discord.switch_account");
+                DiscordResultText.Text = Loc.T("settings.discord.connected_as", _loginResult.Username ?? "");
                 if (!string.IsNullOrEmpty(_loginResult.AvatarUrl))
                 {
                     try
@@ -238,7 +234,7 @@ namespace WaseBoard.Windows
             }
             else
             {
-                DiscordResultText.Text = "❌ " + (_loginResult.Error ?? "Connexion échouée.");
+                DiscordResultText.Text = "❌ " + (_loginResult.Error ?? Loc.T("settings.discord.failed"));
             }
 
             if (_currentStep == DiscordStepIndex) UpdateStepUi();

@@ -9,6 +9,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using WaseBoard.Models;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Services
 {
@@ -419,7 +420,7 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = await ReadServerErrorAsync(response, $"Renommage échoué ({(int)response.StatusCode}).");
+                    LastErrorDetail = await ReadServerErrorAsync(response, Loc.T("api.rename_failed", (int)response.StatusCode));
                     return false;
                 }
 
@@ -449,7 +450,7 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = await ReadServerErrorAsync(response, $"Changement d'emoji échoué ({(int)response.StatusCode}).");
+                    LastErrorDetail = await ReadServerErrorAsync(response, Loc.T("api.emoji_failed", (int)response.StatusCode));
                     return false;
                 }
 
@@ -484,7 +485,7 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = await ReadServerErrorAsync(response, $"Modification échouée ({(int)response.StatusCode}).");
+                    LastErrorDetail = await ReadServerErrorAsync(response, Loc.T("api.edit_failed", (int)response.StatusCode));
                     return false;
                 }
 
@@ -507,6 +508,8 @@ namespace WaseBoard.Services
         private HttpRequestMessage CreateRequest(HttpMethod method, string path)
         {
             var request = new HttpRequestMessage(method, BaseUrl + path);
+            // La langue de l'interface : le serveur y rédige ses messages d'erreur (français si l'en-tête est absent).
+            request.Headers.AcceptLanguage.ParseAdd(Loc.Language);
             if (!string.IsNullOrEmpty(Settings.ServerToken))
                 request.Headers.Add("X-WaseBoard-Token", Settings.ServerToken);
             if (!string.IsNullOrEmpty(Settings.DiscordSessionToken))
@@ -560,7 +563,7 @@ namespace WaseBoard.Services
             LastErrorDetail = null;
             if (string.IsNullOrEmpty(Settings.DiscordSessionToken))
             {
-                LastErrorDetail = "Non connecté à Discord.";
+                LastErrorDetail = Loc.T("api.not_connected");
                 return new List<SoundItem>();
             }
             try
@@ -570,7 +573,7 @@ namespace WaseBoard.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Le serveur a répondu {(int)response.StatusCode}.";
+                    LastErrorDetail = Loc.T("api.server_replied", (int)response.StatusCode);
                     return new List<SoundItem>();
                 }
 
@@ -659,7 +662,7 @@ namespace WaseBoard.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Téléchargement échoué ({(int)response.StatusCode}).";
+                    LastErrorDetail = Loc.T("api.download_failed", (int)response.StatusCode);
                     return null;
                 }
 
@@ -718,7 +721,7 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = await ReadServerErrorAsync(response, $"Envoi échoué ({(int)response.StatusCode}).");
+                    LastErrorDetail = await ReadServerErrorAsync(response, Loc.T("api.upload_failed", (int)response.StatusCode));
                     return null;
                 }
 
@@ -753,8 +756,8 @@ namespace WaseBoard.Services
                 {
                     // 405 : une instance qui n'a pas encore la route de remplacement (PUT refusé sur /sounds/{id}/file).
                     LastErrorDetail = response.StatusCode == HttpStatusCode.MethodNotAllowed
-                        ? "Ce serveur ne gère pas encore le remplacement de fichier : il faut le mettre à jour."
-                        : await ReadServerErrorAsync(response, $"Remplacement échoué ({(int)response.StatusCode}).");
+                        ? Loc.T("api.replace_unsupported")
+                        : await ReadServerErrorAsync(response, Loc.T("api.replace_failed", (int)response.StatusCode));
                     return false;
                 }
 
@@ -800,7 +803,7 @@ namespace WaseBoard.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = await ReadServerErrorAsync(response, $"Suppression échouée ({(int)response.StatusCode}).");
+                    LastErrorDetail = await ReadServerErrorAsync(response, Loc.T("api.delete_failed", (int)response.StatusCode));
                     return false;
                 }
 
@@ -838,7 +841,7 @@ namespace WaseBoard.Services
                 timer.Stop();
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
+                    LastErrorDetail = await ReadServerErrorAsync(response, Loc.T("api.server_replied", (int)response.StatusCode));
                     return false;
                 }
                 Latency.Add(timer.ElapsedMilliseconds, await ReadServerPlayMsAsync(response));
@@ -876,7 +879,7 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
+                    LastErrorDetail = await ReadServerErrorAsync(response, Loc.T("api.server_replied", (int)response.StatusCode));
                     return false;
                 }
                 return true;
@@ -934,7 +937,7 @@ namespace WaseBoard.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = $"Le serveur a répondu {(int)response.StatusCode}.";
+                    LastErrorDetail = Loc.T("api.server_replied", (int)response.StatusCode);
                     return (ServerStatusResult.Unreachable, null);
                 }
 
@@ -970,7 +973,7 @@ namespace WaseBoard.Services
                 var raw = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
-                    return (false, null, null, null, new(), $"Le serveur a répondu {(int)response.StatusCode}.");
+                    return (false, null, null, null, new(), Loc.T("api.server_replied", (int)response.StatusCode));
 
                 JsonDocument doc;
                 try { doc = JsonDocument.Parse(raw); }
@@ -980,7 +983,7 @@ namespace WaseBoard.Services
                     // presque toujours le signe que le serveur tourne encore avec une ancienne
                     // version de server.py, sans cette route/ce champ.
                     return (false, null, null, null, new(),
-                        "Réponse inattendue du serveur — server.py a-t-il bien été redéployé avec la dernière version ?");
+                        Loc.T("api.unexpected_response"));
                 }
                 using (doc)
                 {
@@ -1013,7 +1016,7 @@ namespace WaseBoard.Services
         public async Task<(bool Success, string? GuildName, string? ChannelName, string? Error)> JoinMyChannelAsync()
         {
             if (string.IsNullOrEmpty(Settings.DiscordSessionToken))
-                return (false, null, null, "Non connecté à Discord.");
+                return (false, null, null, Loc.T("api.not_connected"));
 
             try
             {
@@ -1027,16 +1030,14 @@ namespace WaseBoard.Services
                 catch
                 {
                     return (false, null, null,
-                        "Réponse inattendue du serveur (pas du JSON) — server.py a-t-il bien été " +
-                        "redéployé avec la dernière version (route /join-my-channel) ? Extrait reçu : " +
-                        raw.Substring(0, Math.Min(120, raw.Length)));
+                        Loc.T("api.not_json", raw.Substring(0, Math.Min(120, raw.Length))));
                 }
 
                 using (doc)
                 {
                     if (!response.IsSuccessStatusCode)
                     {
-                        var error = doc.RootElement.TryGetProperty("error", out var e) ? e.GetString() : $"Le serveur a répondu {(int)response.StatusCode}.";
+                        var error = doc.RootElement.TryGetProperty("error", out var e) ? e.GetString() : Loc.T("api.server_replied", (int)response.StatusCode);
                         return (false, null, null, error);
                     }
 
@@ -1088,7 +1089,7 @@ namespace WaseBoard.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    var error = doc.RootElement.TryGetProperty("error", out var e) ? e.GetString() : $"Le serveur a répondu {(int)response.StatusCode}.";
+                    var error = doc.RootElement.TryGetProperty("error", out var e) ? e.GetString() : Loc.T("api.server_replied", (int)response.StatusCode);
                     return (false, null, null, null, null, error);
                 }
 
@@ -1242,7 +1243,7 @@ namespace WaseBoard.Services
                 request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
-                    LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
+                    LastErrorDetail = await ReadServerErrorAsync(response, Loc.T("api.server_replied", (int)response.StatusCode));
                 return response.IsSuccessStatusCode;
             }
             catch (Exception ex) { LastErrorDetail = ex.Message; return false; }

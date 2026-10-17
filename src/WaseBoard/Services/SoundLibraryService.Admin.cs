@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Services
 {
@@ -149,7 +150,7 @@ namespace WaseBoard.Services
                 using var response = await SendAsync(request);
                 if (!response.IsSuccessStatusCode)
                 {
-                    LastErrorDetail = await ReadServerErrorAsync(response, $"Le serveur a répondu {(int)response.StatusCode}.");
+                    LastErrorDetail = await ReadServerErrorAsync(response, Loc.T("api.server_replied", (int)response.StatusCode));
                     return null;
                 }
                 return JsonSerializer.Deserialize<T>(await response.Content.ReadAsStringAsync());

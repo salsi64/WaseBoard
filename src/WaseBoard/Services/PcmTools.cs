@@ -136,7 +136,7 @@ namespace WaseBoard.Services
 
         public static void WriteWavHeader(Span<byte> header, int dataBytes, int sampleRate, int channels)
         {
-            if (header.Length < 44) throw new ArgumentException("L'en-tête WAV fait 44 octets.", nameof(header));
+            if (header.Length < 44) throw new ArgumentException("The WAV header is 44 bytes long.", nameof(header));
 
             "RIFF"u8.CopyTo(header);
             BinaryPrimitives.WriteInt32LittleEndian(header[4..], 36 + dataBytes);

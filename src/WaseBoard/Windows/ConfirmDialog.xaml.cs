@@ -1,4 +1,5 @@
 using System.Windows;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Windows
 {
@@ -29,9 +30,9 @@ namespace WaseBoard.Windows
         }
 
         /// <summary>Affiche une confirmation Oui/Non stylée WaseBoard. Retourne true si "Oui".</summary>
-        public static bool Show(Window owner, string message, string title = "Confirmer")
+        public static bool Show(Window owner, string message, string? title = null)
         {
-            var dialog = new ConfirmDialog(message, title) { Owner = owner };
+            var dialog = new ConfirmDialog(message, title ?? Loc.T("dialog.confirm.title")) { Owner = owner };
             dialog.ShowDialog();
             return dialog.Result;
         }

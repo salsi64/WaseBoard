@@ -80,6 +80,34 @@ public class LocTests
         }
     }
 
+    [Fact]
+    public void Every_key_used_in_the_sources_exists()
+    {
+        // Une faute de frappe dans Loc.T("...") ou {loc:Loc ...} afficherait la clé brute à l'utilisateur.
+        var directory = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !System.IO.Directory.Exists(System.IO.Path.Combine(directory.FullName, "src", "WaseBoard", "Localization")))
+            directory = directory.Parent;
+        Assert.NotNull(directory);
+        var sourceRoot = System.IO.Path.Combine(directory!.FullName, "src", "WaseBoard");
+
+        var known = Loc.Keys("fr").ToHashSet();
+        var separator = System.IO.Path.DirectorySeparatorChar;
+        var missing = new List<string>();
+        foreach (var file in System.IO.Directory.EnumerateFiles(sourceRoot, "*.*", System.IO.SearchOption.AllDirectories))
+        {
+            if (!(file.EndsWith(".cs") || file.EndsWith(".xaml"))) continue;
+            if (file.Contains($"{separator}obj{separator}") || file.Contains($"{separator}bin{separator}")) continue;
+            // Les exemples des commentaires (///) ne comptent pas.
+            var text = string.Join(Environment.NewLine, System.IO.File.ReadAllLines(file).Where(line => !line.TrimStart().StartsWith("//")));
+            var uses = System.Text.RegularExpressions.Regex.Matches(text, @"Loc\.T\(\s*""([A-Za-z0-9_.]+)""")
+                .Concat(System.Text.RegularExpressions.Regex.Matches(text, @"\{loc:Loc\s+([A-Za-z0-9_.]+)\}"));
+            foreach (System.Text.RegularExpressions.Match use in uses)
+                if (!known.Contains(use.Groups[1].Value))
+                    missing.Add($"{System.IO.Path.GetFileName(file)} : {use.Groups[1].Value}");
+        }
+        Assert.True(missing.Count == 0, "Clés de traduction inconnues : " + string.Join(", ", missing));
+    }
+
     private static int[] ParameterNumbers(string text) =>
         System.Text.RegularExpressions.Regex.Matches(text, @"\{(\d+)")
             .Select(m => int.Parse(m.Groups[1].Value)).Distinct().OrderBy(n => n).ToArray();

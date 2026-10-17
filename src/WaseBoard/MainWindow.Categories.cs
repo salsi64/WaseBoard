@@ -22,6 +22,7 @@ using WaseBoard.Models;
 using WaseBoard.Services;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard
 {
@@ -201,11 +202,11 @@ namespace WaseBoard
         {
             var menu = new ContextMenu { PlacementTarget = AddCategoryButton, Placement = PlacementMode.Bottom };
 
-            var newItem = new MenuItem { Header = "Nouvelle catégorie..." };
+            var newItem = new MenuItem { Header = Loc.T("category.menu.new") };
             newItem.Click += (_, _) => CreateCategoryPrompt();
             menu.Items.Add(newItem);
 
-            var importItem = new MenuItem { Header = "📥 Importer une catégorie..." };
+            var importItem = new MenuItem { Header = Loc.T("category.menu.import") };
             importItem.Click += async (_, _) => await ImportCategoryAsync();
             menu.Items.Add(importItem);
 
@@ -214,7 +215,7 @@ namespace WaseBoard
 
         private void CreateCategoryPrompt()
         {
-            var name = PromptDialog.Show(this, "Nom de la nouvelle catégorie :", "");
+            var name = PromptDialog.Show(this, Loc.T("category.prompt.new_name"), "");
             if (string.IsNullOrWhiteSpace(name)) return;
             _library.CreateCategory(name.Trim());
             RefreshSections();
@@ -245,19 +246,19 @@ namespace WaseBoard
 
             if (canManage)
             {
-                var renameItem = new MenuItem { Header = "✎ Renommer..." };
+                var renameItem = new MenuItem { Header = Loc.T("category.menu.rename") };
                 renameItem.Click += (_, _) => RenameCategory(section);
                 menu.Items.Add(renameItem);
             }
 
-            var exportItem = new MenuItem { Header = "⬇ Exporter cette catégorie..." };
+            var exportItem = new MenuItem { Header = Loc.T("category.menu.export") };
             exportItem.Click += (_, _) => ExportCategory(section);
             menu.Items.Add(exportItem);
 
             if (canManage)
             {
                 menu.Items.Add(new Separator());
-                var deleteItem = new MenuItem { Header = "🗑 Supprimer la catégorie..." };
+                var deleteItem = new MenuItem { Header = Loc.T("category.menu.delete") };
                 deleteItem.Click += (_, _) => DeleteCategory(section);
                 menu.Items.Add(deleteItem);
             }
@@ -271,8 +272,8 @@ namespace WaseBoard
         {
             var dialog = new SaveFileDialog
             {
-                Title = "Exporter la catégorie",
-                Filter = "Catégorie WaseBoard (*.wbcat.json)|*.wbcat.json",
+                Title = Loc.T("category.export.title"),
+                Filter = Loc.T("category.export.filter"),
                 FileName = SanitizeFileName(StripSharedPrefix(section.Name)) + ".wbcat.json"
             };
             if (dialog.ShowDialog(this) != true) return;
@@ -286,11 +287,11 @@ namespace WaseBoard
             try
             {
                 File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(export, new JsonSerializerOptions { WriteIndented = true }));
-                ToastService.Show($"Catégorie « {export.Category} » exportée ({export.Sounds.Count} son(s)).", ToastKind.Success);
+                ToastService.Show(Loc.T("category.export.done", export.Category, export.Sounds.Count), ToastKind.Success);
             }
             catch (Exception ex)
             {
-                ToastService.Show("Échec de l'export : " + ex.Message, ToastKind.Error);
+                ToastService.Show(Loc.T("category.export.failed", ex.Message), ToastKind.Error);
             }
         }
 
@@ -307,8 +308,8 @@ namespace WaseBoard
         {
             var dialog = new OpenFileDialog
             {
-                Title = "Importer une catégorie",
-                Filter = "Catégorie WaseBoard (*.wbcat.json)|*.wbcat.json|Tous les fichiers|*.*"
+                Title = Loc.T("category.import.title"),
+                Filter = Loc.T("category.import.filter")
             };
             if (dialog.ShowDialog(this) != true) return;
 
@@ -320,18 +321,18 @@ namespace WaseBoard
             }
             catch (Exception ex)
             {
-                ToastService.Show("Fichier de catégorie invalide : " + ex.Message, ToastKind.Error);
+                ToastService.Show(Loc.T("category.import.invalid", ex.Message), ToastKind.Error);
                 return;
             }
 
             if (import is null || import.Sounds.Count == 0)
             {
-                ToastService.Show("Ce fichier ne contient aucun son.", ToastKind.Warning);
+                ToastService.Show(Loc.T("category.import.empty"), ToastKind.Warning);
                 return;
             }
 
-            var suggestedName = string.IsNullOrWhiteSpace(import.Category) ? "Catégorie importée" : import.Category;
-            var name = PromptDialog.Show(this, "Nom de la catégorie importée :", suggestedName);
+            var suggestedName = string.IsNullOrWhiteSpace(import.Category) ? Loc.T("category.import.default_name") : import.Category;
+            var name = PromptDialog.Show(this, Loc.T("category.import.prompt"), suggestedName);
             if (string.IsNullOrWhiteSpace(name)) return;
             var trimmedName = name.Trim();
 
@@ -352,8 +353,8 @@ namespace WaseBoard
             var skipped = import.Sounds.Count - found;
             ToastService.Show(
                 skipped > 0
-                    ? $"Catégorie « {trimmedName} » importée : {found} son(s) ajouté(s), {skipped} introuvable(s) sur ce serveur."
-                    : $"Catégorie « {trimmedName} » importée : {found} son(s) ajouté(s).",
+                    ? Loc.T("category.import.done_partial", trimmedName, found, skipped)
+                    : Loc.T("category.import.done", trimmedName, found),
                 skipped > 0 ? ToastKind.Warning : ToastKind.Success);
         }
 
@@ -364,7 +365,7 @@ namespace WaseBoard
         private void RenameCategory(SectionViewModel section)
         {
             if (section.IsShared) return;
-            var newName = PromptDialog.Show(this, "Nouveau nom de catégorie :", section.Name);
+            var newName = PromptDialog.Show(this, Loc.T("category.prompt.rename"), section.Name);
             if (string.IsNullOrWhiteSpace(newName)) return;
 
             _library.RenameCategory(section.CategoryKey, newName.Trim());
@@ -375,7 +376,7 @@ namespace WaseBoard
         {
             if (section.IsShared) return;
 
-            var confirm = ConfirmDialog.Show(this, $"Supprimer la catégorie « {section.Name} » ?");
+            var confirm = ConfirmDialog.Show(this, Loc.T("category.delete.confirm", section.Name));
             if (!confirm) return;
 
             _library.DeleteCategory(section.CategoryKey);

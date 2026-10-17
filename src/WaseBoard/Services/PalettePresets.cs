@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Media;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Services
 {
@@ -18,11 +19,11 @@ namespace WaseBoard.Services
 
         public static readonly IReadOnlyList<PalettePreset> All = new[]
         {
-            new PalettePreset("NightBlue", "Bleu nuit", Hex("#0F1624"), Hex("#182236"), Hex("#26324A"), Hex("#EAF0FA"), Hex("#38BDF8")),
+            new PalettePreset("NightBlue", Loc.T("palette.night_blue"), Hex("#0F1624"), Hex("#182236"), Hex("#26324A"), Hex("#EAF0FA"), Hex("#38BDF8")),
             new PalettePreset("Violet", "Violet", Hex("#1E1E2E"), Hex("#2A2A3C"), Hex("#3A3A50"), Hex("#F2F2F7"), Hex("#7C5CFF")),
-            new PalettePreset("Mint", "Menthe", Hex("#101714"), Hex("#1A2420"), Hex("#2A3A33"), Hex("#EBF5F0"), Hex("#34D399")),
-            new PalettePreset("Rose", "Rose braise", Hex("#1A1419"), Hex("#261D25"), Hex("#3A2B38"), Hex("#F7EEF3"), Hex("#FB7185")),
-            new PalettePreset("Amber", "Ambre", Hex("#17140F"), Hex("#241F16"), Hex("#3A3326"), Hex("#F7F2E8"), Hex("#F59E0B")),
+            new PalettePreset("Mint", Loc.T("palette.mint"), Hex("#101714"), Hex("#1A2420"), Hex("#2A3A33"), Hex("#EBF5F0"), Hex("#34D399")),
+            new PalettePreset("Rose", Loc.T("palette.rose"), Hex("#1A1419"), Hex("#261D25"), Hex("#3A2B38"), Hex("#F7EEF3"), Hex("#FB7185")),
+            new PalettePreset("Amber", Loc.T("palette.amber"), Hex("#17140F"), Hex("#241F16"), Hex("#3A3326"), Hex("#F7F2E8"), Hex("#F59E0B")),
         };
 
         public static PalettePreset Get(string? id) =>

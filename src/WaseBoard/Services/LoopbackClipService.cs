@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
 using NAudio.Wave;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Services
 {
@@ -112,7 +113,7 @@ namespace WaseBoard.Services
             {
                 var capture = new WasapiLoopbackCapture(); // sortie par défaut au moment de l'appel
                 var format = capture.WaveFormat;
-                var kind = DetectKind(format) ?? throw new NotSupportedException($"Format audio non géré ({format.Encoding}, {format.BitsPerSample} bits).");
+                var kind = DetectKind(format) ?? throw new NotSupportedException(Loc.T("clip.format_unsupported", format.Encoding, format.BitsPerSample));
 
                 var session = new Session
                 {

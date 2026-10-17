@@ -467,6 +467,13 @@ son déjà en cours le remplace : jamais refusé). Vous pouvez, en tant qu'hébe
 - Réglages concernés : `max_sounds`, `max_file_mb`, `max_duration_s`, `max_total_mb`, `play_rate_per_min`,
   `max_sources_per_guild`.
 
+### Langues
+
+Les messages d'erreur de l'API sont rédigés dans la langue de l'application qui les demande : le client envoie `Accept-Language: fr` ou `en`, et le serveur
+répond dans cette langue (page d'invitation `/connect/…` comprise, d'après la langue du navigateur). Sans cet en-tête (ancien client, script), les messages restent
+en français, comme avant. Le catalogue est `messages.py` : `tests/test_messages.py` échoue si un message d'erreur ajouté au code n'y a pas sa traduction.
+Les réponses des commandes Discord (`/play`, `/top`…) et des panneaux restent en français pour l'instant.
+
 ### Voir l'état de l'instance : `/instance`
 
 Commande Discord réservée à la personne propriétaire de l'application (réponse visible d'elle seule) : durée de

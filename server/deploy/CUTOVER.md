@@ -68,7 +68,7 @@ vraies données de prod avant d'écrire cette étape (jamais exécuté sur la pr
 ## Le jour J, dans l'ordre
 
 1. [ ] **Arrêter le service** : `sudo systemctl stop waseboard`.
-2. [ ] **Déployer le nouveau code** (`server.py`, `audio.py`, `effects.py`, `diagnostics.py`, `wb_config.py`, `alerts.py`, `reports.py`, `webapp.py` **et le dossier `web/`**, kit Discord `web/vendor/` compris) dans
+2. [ ] **Déployer le nouveau code** (`server.py`, `audio.py`, `effects.py`, `diagnostics.py`, `wb_config.py`, `alerts.py`, `reports.py`, `webapp.py`, `messages.py` **et le dossier `web/`**, kit Discord `web/vendor/` compris) dans
        `~/waseboard-server/` — mêmes fichiers que ceux déployés et validés sur l'instance de test.
 2bis. [ ] **Migrer le catalogue existant** (107 sons, aucun n'a de `guild_id` : sans cette étape, ils
        deviennent invisibles pour tout le monde — voir l'explication complète plus bas). Le bot de prod
@@ -150,6 +150,11 @@ vraies données de prod avant d'écrire cette étape (jamais exécuté sur la pr
       sons, vocal).
 - [ ] Une fois tout le monde migré sur `waseboard.salsi.bid` : envisager de retirer
       `waseboard.duckdns.org` du nginx (pas obligatoire, juste pour alléger).
+
+## Page d'accueil (landing page)
+
+- [ ] Déployer `deploy/landing-page/index.html` **et `index.en.html`**, puis ajouter au vhost nginx de prod le bloc `location = /en { try_files /index.en.html =404; }`
+      (voir `deploy/landing-page/nginx-waseboard-salsi-bid.conf`), `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## Hors de cette liste (étape suivante, plus tard)
 

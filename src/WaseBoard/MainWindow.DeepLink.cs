@@ -22,6 +22,7 @@ using WaseBoard.Models;
 using WaseBoard.Services;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard
 {
@@ -76,7 +77,7 @@ namespace WaseBoard
             if (Application.Current.Windows.Cast<Window>().Any(w => w != this && w.IsVisible))
             {
                 ToastService.Show(
-                    "Lien de connexion WaseBoard reçu — terminez d'abord l'action en cours, puis recliquez le lien.",
+                    Loc.T("deeplink.busy"),
                     ToastKind.Warning);
                 return false;
             }
@@ -97,7 +98,7 @@ namespace WaseBoard
 
             if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
             {
-                ToastService.Show("Lien de connexion WaseBoard invalide ou incomplet.", ToastKind.Warning);
+                ToastService.Show(Loc.T("deeplink.invalid"), ToastKind.Warning);
                 return false;
             }
 
@@ -108,7 +109,7 @@ namespace WaseBoard
             if (!isFreshInstall && url != _library.Settings.ServerUrl)
             {
                 var confirmed = ConfirmDialog.Show(this,
-                    $"Se connecter à un nouveau serveur WaseBoard ?\n\n{url}\n\nVos réglages de connexion actuels seront remplacés.");
+                    Loc.T("deeplink.confirm_new_server", url));
                 if (!confirmed) return false;
 
                 // Les fichiers en cache appartiennent à l'ancien serveur — plus valides une fois
@@ -150,27 +151,27 @@ namespace WaseBoard
         {
             if (string.IsNullOrEmpty(_library.Settings.DiscordSessionToken))
             {
-                SidebarConnectionText.Text = "🔴 Non connecté à Discord";
+                SidebarConnectionText.Text = Loc.T("main.status.not_connected_discord");
                 SidebarConnectionText.ToolTip = null;
                 VoiceChannelMembers.Clear();
                 return;
             }
 
             var (connected, channel, _, guildName, channelMembers, error) = await _library.GetLiveVoiceStatusAsync();
-            var who = _library.Settings.DiscordUsername ?? "vous";
+            var who = _library.Settings.DiscordUsername ?? Loc.T("common.you");
 
             // Une seule ligne dans la barre latérale (le détail complet est dans l'infobulle).
             if (error is not null)
             {
-                SidebarConnectionText.Text = "⚠️ Statut indisponible";
+                SidebarConnectionText.Text = Loc.T("main.status.unavailable");
                 SidebarConnectionText.ToolTip = error;
             }
             else
             {
-                SidebarConnectionText.Text = connected ? $"🟢 {guildName} · {channel}" : "⚪ Bot absent de votre vocal";
+                SidebarConnectionText.Text = connected ? $"🟢 {guildName} · {channel}" : Loc.T("main.status.bot_absent");
                 SidebarConnectionText.ToolTip = connected
-                    ? $"{who} — en vocal sur {guildName} ({channel})"
-                    : $"{who} — le bot n'est pas dans votre salon vocal : cliquez sur « Vocal » pour qu'il vous rejoigne.";
+                    ? Loc.T("main.status.in_voice_tooltip", who, guildName ?? "", channel ?? "")
+                    : Loc.T("main.status.bot_absent_tooltip", who);
             }
 
             var currentIds = VoiceChannelMembers.Select(m => m.UserId).ToHashSet();
@@ -191,11 +192,11 @@ namespace WaseBoard
             if (success)
             {
                 await RefreshVoiceStatusAsync();
-                ToastService.Show($"🔊 Connecté à « {channelName} » sur {guildName}.", ToastKind.Success);
+                ToastService.Show(Loc.T("main.joined_voice", channelName ?? "", guildName ?? ""), ToastKind.Success);
             }
             else
             {
-                ToastService.Show(error ?? "Échec de la connexion au salon vocal.", ToastKind.Warning);
+                ToastService.Show(error ?? Loc.T("main.join_failed"), ToastKind.Warning);
             }
         }
     }

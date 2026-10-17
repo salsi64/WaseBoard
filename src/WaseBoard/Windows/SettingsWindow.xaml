@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:chrome="clr-namespace:WaseBoard.Windows.Chrome"
         xmlns:loc="clr-namespace:WaseBoard.Services.Localization"
-        Title="Paramètres"
+        Title="{loc:Loc common.settings}"
         FontFamily="Segoe UI Emoji, Segoe UI" Height="480" Width="620"
         MinHeight="380" MinWidth="480"
         WindowStartupLocation="CenterOwner"
@@ -15,7 +15,7 @@
             <RowDefinition Height="36"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <chrome:TitleBarControl Grid.Row="0" TitleText="Paramètres" ShowMinMax="True"/>
+        <chrome:TitleBarControl Grid.Row="0" TitleText="{loc:Loc common.settings}" ShowMinMax="True"/>
 
         <Grid Grid.Row="1" Margin="0,4,0,0">
             <Grid.ColumnDefinitions>
@@ -26,16 +26,16 @@
             <!-- Navigation : une entrée par section, plus minimaliste que l'ancien empilement
                  vertical de cartes (moins de défilement, structure plus claire). -->
             <StackPanel Grid.Column="0" Margin="12,8,4,8">
-                <Button x:Name="NavServerButton" Content="Serveur" Tag="Server" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavServerButton" Content="{loc:Loc settings.nav.server}" Tag="Server" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
                 <Button x:Name="NavDiscordButton" Content="Discord" Tag="Discord" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
-                <Button x:Name="NavAppearanceButton" Content="Apparence" Tag="Appearance" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
-                <Button x:Name="NavVolumeButton" Content="Volume" Tag="Volume" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
-                <Button x:Name="NavMicButton" Content="🎮 Micro en jeu" Tag="Mic" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavAppearanceButton" Content="{loc:Loc settings.appearance.title}" Tag="Appearance" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavVolumeButton" Content="{loc:Loc settings.nav.volume}" Tag="Volume" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavMicButton" Content="{loc:Loc settings.nav.mic}" Tag="Mic" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
                 <Button x:Name="NavClipButton" Content="{loc:Loc settings.nav.clip}" Tag="Clip" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
-                <Button x:Name="NavUpdatesButton" Content="Mises à jour" Tag="Updates" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
+                <Button x:Name="NavUpdatesButton" Content="{loc:Loc settings.updates.title}" Tag="Updates" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
                 <Button x:Name="NavDiagnosticButton" Content="{loc:Loc settings.nav.diagnostic}" Tag="Diagnostic" Click="NavButton_Click" Style="{StaticResource SettingsNavButtonStyle}"/>
                 <!-- Visible seulement si l'on administre au moins un serveur Discord -->
-                <Button x:Name="NavAdminButton" Content="🛡 Administration" Tag="Admin" Click="NavButton_Click" Visibility="Collapsed"
+                <Button x:Name="NavAdminButton" Content="{loc:Loc settings.nav.admin}" Tag="Admin" Click="NavButton_Click" Visibility="Collapsed"
                         Style="{StaticResource SettingsNavButtonStyle}"/>
             </StackPanel>
 
@@ -50,24 +50,24 @@
 
                     <!-- Page : Serveur -->
                     <StackPanel x:Name="PageServer">
-                        <TextBlock Text="Serveur WaseBoard" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                        <TextBlock Text="Le catalogue de sons et le bot Discord sont hébergés sur ce serveur, partagé entre tous les utilisateurs." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Loc server.title}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Loc settings.server.intro}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
-                        <TextBlock Text="Adresse du serveur" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Loc server.address}" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                         <TextBox x:Name="ServerUrlBox" Height="28" Margin="0,0,0,10"
-                                 ToolTip="Ex: https://mon-serveur.exemple — voir server/README.md pour héberger le vôtre"/>
+                                 ToolTip="{loc:Loc settings.server.address_tooltip}"/>
 
-                        <TextBlock Text="Jeton d'accès" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Loc server.token}" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                         <TextBox x:Name="ServerTokenBox" Height="28" Margin="0,0,0,14"/>
 
                         <StackPanel Orientation="Horizontal">
-                            <Button x:Name="TestConnectionButton" Content="Tester la connexion" Height="34" HorizontalAlignment="Left" Padding="16,0" Margin="0,0,8,0"
+                            <Button x:Name="TestConnectionButton" Content="{loc:Loc server.test}" Height="34" HorizontalAlignment="Left" Padding="16,0" Margin="0,0,8,0"
                                     Click="TestConnectionButton_Click"
                                     Background="Transparent" Foreground="{DynamicResource TextBrush}"
                                     BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
-                            <Button x:Name="CopyInviteLinkButton" Content="Copier le lien d'invitation" Height="34" HorizontalAlignment="Left" Padding="16,0"
+                            <Button x:Name="CopyInviteLinkButton" Content="{loc:Loc invite.copy}" Height="34" HorizontalAlignment="Left" Padding="16,0"
                                     Click="CopyInviteLinkButton_Click"
-                                    ToolTip="Génère un lien waseboard:// à partir de l'adresse/jeton ci-dessus, pour inviter quelqu'un sans qu'il ait à les saisir"
+                                    ToolTip="{loc:Loc settings.server.copy_invite_tooltip}"
                                     Background="Transparent" Foreground="{DynamicResource TextBrush}"
                                     BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                         </StackPanel>
@@ -75,8 +75,8 @@
 
                     <!-- Page : Discord -->
                     <StackPanel x:Name="PageDiscord" Visibility="Collapsed">
-                        <TextBlock Text="Connexion Discord" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                        <TextBlock Text="Permet d'afficher votre avatar quand vous jouez un son, et de retrouver automatiquement le bon salon vocal. Obligatoire." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Loc discord.title}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Loc settings.discord.intro}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
                         <StackPanel Orientation="Horizontal">
                             <Button x:Name="ConnectDiscordButton" Content="{loc:Loc settings.discord.connect}" Height="34" Click="ConnectDiscordButton_Click"
@@ -102,37 +102,41 @@
 
                     <!-- Page : Apparence -->
                     <StackPanel x:Name="PageAppearance" Visibility="Collapsed">
-                        <TextBlock Text="Apparence" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12"/>
+                        <TextBlock Text="{loc:Loc settings.appearance.title}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,12"/>
 
-                        <TextBlock Text="Palette" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
+                        <TextBlock Text="{loc:Loc settings.appearance.language}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
+                        <ComboBox x:Name="LanguageCombo" Width="200" Height="30" HorizontalAlignment="Left" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Loc settings.appearance.language_hint}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16" TextWrapping="Wrap"/>
+
+                        <TextBlock Text="{loc:Loc settings.appearance.palette}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
                         <WrapPanel x:Name="PaletteList" Margin="0,0,0,16"/>
 
-                        <CheckBox x:Name="FollowSystemThemeCheckBox" Content="Suivre le thème clair/sombre de Windows"
+                        <CheckBox x:Name="FollowSystemThemeCheckBox" Content="{loc:Loc settings.appearance.follow_theme}"
                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"
                                   Checked="FollowSystemTheme_Changed" Unchecked="FollowSystemTheme_Changed"/>
-                        <CheckBox x:Name="FollowSystemAccentCheckBox" Content="Suivre la couleur d'accent de Windows (remplace l'accent de la palette)"
+                        <CheckBox x:Name="FollowSystemAccentCheckBox" Content="{loc:Loc settings.appearance.follow_accent}"
                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"
                                   Checked="FollowSystemTheme_Changed" Unchecked="FollowSystemTheme_Changed"/>
-                        <TextBlock Text="Avec le thème Windows clair, la palette claire s'applique ; le choix ci-dessus ne change alors que l'accent." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Loc settings.appearance.light_note}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16" TextWrapping="Wrap"/>
 
-                        <TextBlock Text="Thème de l'interface" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
+                        <TextBlock Text="{loc:Loc settings.appearance.style}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
-                            <Button x:Name="ClassicThemeButton" Content="Classique" Padding="14,6" Margin="0,0,8,0" Click="ClassicThemeButton_Click"
+                            <Button x:Name="ClassicThemeButton" Content="{loc:Loc settings.appearance.style_classic}" Padding="14,6" Margin="0,0,8,0" Click="ClassicThemeButton_Click"
                                     Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
-                            <Button x:Name="ModernThemeButton" Content="Moderne" Padding="14,6" Margin="0,0,8,0" Click="ModernThemeButton_Click"
+                            <Button x:Name="ModernThemeButton" Content="{loc:Loc settings.appearance.style_modern}" Padding="14,6" Margin="0,0,8,0" Click="ModernThemeButton_Click"
                                     Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                             <Button x:Name="FlatThemeButton" Content="Flat" Padding="14,6" Click="FlatThemeButton_Click"
                                     Background="Transparent" Foreground="{DynamicResource TextBrush}" BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                         </StackPanel>
 
-                        <TextBlock Text="Boutons de son" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
-                        <CheckBox x:Name="ShowWaveformsCheckBox" Content="Afficher la forme d'onde (waveform) sur les boutons"
+                        <TextBlock Text="{loc:Loc settings.appearance.buttons}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                        <CheckBox x:Name="ShowWaveformsCheckBox" Content="{loc:Loc settings.appearance.waveform}"
                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                        <TextBlock Text="Décochée, les boutons tiennent sur une seule ligne (plus de sons visibles à la fois). L'avatar de la personne qui joue reste affiché, à droite du nom." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Loc settings.appearance.waveform_hint}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,16" TextWrapping="Wrap"/>
 
                         <StackPanel x:Name="ManualColorSection">
-                            <TextBlock Text="Fond personnalisé (avancé)" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                            <TextBlock Text="Remplace le fond de la palette quand « suivre le thème Windows » est désactivé. Laissez vide pour garder celui de la palette." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                            <TextBlock Text="{loc:Loc settings.appearance.custom_bg}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                            <TextBlock Text="{loc:Loc settings.appearance.custom_bg_hint}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
                             <Grid Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
@@ -140,11 +144,11 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBox x:Name="CustomColorBox" Grid.Column="0" Height="28" Margin="0,0,8,0" ToolTip="Code hexadécimal, ex : #101820"/>
-                                <Button Grid.Column="1" Content="Appliquer" Padding="10,0" Margin="0,0,6,0" Click="ApplyCustomColor_Click"
+                                <TextBox x:Name="CustomColorBox" Grid.Column="0" Height="28" Margin="0,0,8,0" ToolTip="{loc:Loc settings.appearance.hex_tooltip}"/>
+                                <Button Grid.Column="1" Content="{loc:Loc common.apply}" Padding="10,0" Margin="0,0,6,0" Click="ApplyCustomColor_Click"
                                         Background="Transparent" Foreground="{DynamicResource TextBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
-                                <Button Grid.Column="2" Content="Effacer" Padding="10,0" Click="ClearCustomColor_Click"
+                                <Button Grid.Column="2" Content="{loc:Loc common.clear}" Padding="10,0" Click="ClearCustomColor_Click"
                                         Background="Transparent" Foreground="{DynamicResource TextBrush}"
                                         BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                             </Grid>
@@ -155,8 +159,8 @@
 
                     <!-- Page : Volume -->
                     <StackPanel x:Name="PageVolume" Visibility="Collapsed">
-                        <TextBlock Text="Volume d'aperçu" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
-                        <TextBlock Text="Volume de la lecture locale déclenchée par l'icône mégaphone (aperçu, jamais envoyé à Discord)." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Loc settings.volume.title}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Loc settings.volume.hint}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -173,41 +177,41 @@
                          2. régler. Textes volontairement courts. -->
                     <StackPanel x:Name="PageMic" Visibility="Collapsed">
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                            <TextBlock Text="Micro en jeu" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{loc:Loc settings.mic.title}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
                             <Border Margin="10,0,0,0" Padding="7,1" CornerRadius="8" VerticalAlignment="Center"
                                     Background="#26F5A623" BorderBrush="#F5A623" BorderThickness="1">
-                                <TextBlock Text="EXPÉRIMENTAL" FontSize="10" FontWeight="Bold" Foreground="#F5A623"/>
+                                <TextBlock Text="{loc:Loc settings.mic.experimental}" FontSize="10" FontWeight="Bold" Foreground="#F5A623"/>
                             </Border>
                         </StackPanel>
-                        <TextBlock Text="Vos sons passent dans votre micro : vos coéquipiers les entendent dans le vocal du jeu." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2" TextWrapping="Wrap"/>
-                        <TextBlock Text="Fonction en test : elle peut ne pas marcher avec tous les micros." FontSize="11" Foreground="#F5A623" Margin="0,0,0,16" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Loc settings.mic.intro}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Loc settings.mic.beta_note}" FontSize="11" Foreground="#F5A623" Margin="0,0,0,16" TextWrapping="Wrap"/>
 
                         <!-- 1. Installation -->
-                        <TextBlock Text="1. Installer sur votre micro" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Loc settings.mic.step1}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                         <TextBlock x:Name="MicFxStatusText" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6" TextWrapping="Wrap"/>
                         <StackPanel x:Name="MicFxMicList" Margin="0,0,0,8"/>
                         <WrapPanel Margin="0,0,0,2">
-                            <Button x:Name="MicFxInstallButton" Content="Installer" Height="34" Padding="16,0" Margin="0,0,8,6"
+                            <Button x:Name="MicFxInstallButton" Content="{loc:Loc settings.mic.install}" Height="34" Padding="16,0" Margin="0,0,8,6"
                                     Click="MicFxInstallButton_Click" Style="{StaticResource PrimaryButtonStyle}"/>
-                            <Button x:Name="MicFxTestButton" Content="Tester" Height="34" Padding="16,0" Margin="0,0,8,6"
-                                    Click="MicFxTestButton_Click" ToolTip="Envoie un bip dans votre micro"
+                            <Button x:Name="MicFxTestButton" Content="{loc:Loc settings.mic.test}" Height="34" Padding="16,0" Margin="0,0,8,6"
+                                    Click="MicFxTestButton_Click" ToolTip="{loc:Loc settings.mic.test_tooltip}"
                                     Background="Transparent" Foreground="{DynamicResource TextBrush}"
                                     BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
-                            <Button x:Name="MicFxUninstallButton" Content="Désinstaller" Height="34" Padding="16,0" Margin="0,0,0,6"
+                            <Button x:Name="MicFxUninstallButton" Content="{loc:Loc settings.mic.uninstall}" Height="34" Padding="16,0" Margin="0,0,0,6"
                                     Click="MicFxUninstallButton_Click"
                                     Background="Transparent" Foreground="{DynamicResource TextBrush}"
                                     BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                         </WrapPanel>
-                        <TextBlock Text="Demande les droits administrateur. Le son se coupe 2 secondes." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Loc settings.mic.admin_note}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4" TextWrapping="Wrap"/>
                         <TextBlock x:Name="MicFxLiveText" FontSize="11" Opacity="0.8" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,18" TextWrapping="Wrap"/>
 
                         <!-- 2. Réglages -->
-                        <TextBlock Text="2. Réglages" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
-                        <CheckBox x:Name="MicFeatureEnabledCheckBox" Content="Activer le micro en jeu"
+                        <TextBlock Text="{loc:Loc settings.mic.step2}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,6"/>
+                        <CheckBox x:Name="MicFeatureEnabledCheckBox" Content="{loc:Loc settings.mic.enable}"
                                   Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold" Margin="0,0,0,2"/>
-                        <TextBlock Text="Affiche le bouton 🎮 Jeu / 🎧 Discord sur la page principale." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,10" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Loc settings.mic.enable_hint}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,10" TextWrapping="Wrap"/>
 
-                        <TextBlock Text="Volume des sons dans le micro" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Loc settings.mic.volume}" FontSize="12" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -219,12 +223,12 @@
                                        VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12" Opacity="0.8"/>
                         </Grid>
 
-                        <CheckBox x:Name="MicFeedMonitorCheckBox" Content="M'entendre aussi"
+                        <CheckBox x:Name="MicFeedMonitorCheckBox" Content="{loc:Loc settings.mic.hear_myself}"
                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
-                        <TextBlock Text="Décochez si vos coéquipiers n'entendent pas les sons." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,8" TextWrapping="Wrap"/>
-                        <CheckBox x:Name="MicFeedAlsoDiscordCheckBox" Content="Jouer aussi dans Discord (bot)"
+                        <TextBlock Text="{loc:Loc settings.mic.hear_myself_hint}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,8" TextWrapping="Wrap"/>
+                        <CheckBox x:Name="MicFeedAlsoDiscordCheckBox" Content="{loc:Loc settings.mic.also_discord}"
                                   Foreground="{DynamicResource TextBrush}" Margin="0,0,0,2"/>
-                        <TextBlock Text="Laissez décoché si Discord utilise ce micro (sinon, son en double)." FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,0" TextWrapping="Wrap"/>
+                        <TextBlock Text="{loc:Loc settings.mic.also_discord_hint}" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="20,0,0,0" TextWrapping="Wrap"/>
 
                         <TextBlock Text="{loc:Loc settings.mic.hotkey_title}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" Margin="0,18,0,6"/>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -278,15 +282,15 @@
 
                     <!-- Page : Mises à jour -->
                     <StackPanel x:Name="PageUpdates" Visibility="Collapsed">
-                        <TextBlock Text="Mises à jour" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Loc settings.updates.title}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                         <TextBlock x:Name="CurrentVersionText" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
-                        <Button x:Name="CheckUpdateButton" Content="Rechercher les mises à jour" Height="34" HorizontalAlignment="Left" Padding="16,0"
+                        <Button x:Name="CheckUpdateButton" Content="{loc:Loc settings.updates.check}" Height="34" HorizontalAlignment="Left" Padding="16,0"
                                 Click="CheckUpdateButton_Click"
                                 Background="Transparent" Foreground="{DynamicResource TextBrush}"
                                 BorderThickness="1" BorderBrush="{DynamicResource OutlineBrush}"/>
                         <TextBlock x:Name="UpdateResultText" Margin="0,10,0,10" FontSize="12" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}"/>
-                        <Button x:Name="OpenReleaseButton" Content="Voir la nouvelle version" Height="34" HorizontalAlignment="Left" Padding="16,0"
+                        <Button x:Name="OpenReleaseButton" Content="{loc:Loc settings.updates.view}" Height="34" HorizontalAlignment="Left" Padding="16,0"
                                 Click="OpenReleaseButton_Click" Visibility="Collapsed"
                                 Style="{StaticResource PrimaryButtonStyle}"/>
                     </StackPanel>
@@ -313,19 +317,19 @@
 
                     <!-- Page : Administration (admins de serveur uniquement) -->
                     <StackPanel x:Name="PageAdmin" Visibility="Collapsed">
-                        <TextBlock Text="Administration" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
+                        <TextBlock Text="{loc:Loc settings.admin.title}" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,4"/>
                         <TextBlock x:Name="AdminSummaryText" FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
-                        <Button x:Name="OpenAdminPanelButton" Content="Ouvrir le panel d'administration" Height="34" HorizontalAlignment="Left" Padding="16,0"
+                        <Button x:Name="OpenAdminPanelButton" Content="{loc:Loc settings.admin.open}" Height="34" HorizontalAlignment="Left" Padding="16,0"
                                 Click="OpenAdminPanelButton_Click"
                                 Style="{StaticResource PrimaryButtonStyle}"/>
-                        <TextBlock Text="Sons du serveur, corbeille, réglages (rôle admin, quotas, anti-spam, membres bloqués), statistiques, journal d'actions et lien d'invitation."
+                        <TextBlock Text="{loc:Loc settings.admin.hint}"
                                    FontSize="11" Opacity="0.7" Foreground="{DynamicResource TextBrush}" Margin="0,10,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Grid>
             </ScrollViewer>
 
-            <Button Grid.Row="1" Content="Enregistrer" Height="38" HorizontalAlignment="Right" Width="130" Margin="20,0,20,16"
+            <Button Grid.Row="1" Content="{loc:Loc common.save}" Height="38" HorizontalAlignment="Right" Width="130" Margin="20,0,20,16"
                     Style="{StaticResource PrimaryButtonStyle}"
                     FontWeight="SemiBold" Click="SaveButton_Click"/>
             </Grid>

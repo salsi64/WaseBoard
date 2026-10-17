@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Services
 {
@@ -34,7 +35,7 @@ namespace WaseBoard.Services
         {
             var clientId = await _library.FetchOAuthClientIdAsync();
             if (clientId is null)
-                return new(false, null, null, null, null, "Client OAuth2 introuvable (serveur non configuré, ou injoignable).");
+                return new(false, null, null, null, null, Loc.T("oauth.client_missing"));
 
             var state = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
 
@@ -47,7 +48,7 @@ namespace WaseBoard.Services
             catch (HttpListenerException ex)
             {
                 return new(false, null, null, null, null,
-                    $"Port {LoopbackPort} déjà utilisé (une connexion est-elle déjà en cours ?) : {ex.Message}");
+                    Loc.T("oauth.port_busy", LoopbackPort, ex.Message));
             }
 
             var authorizeUrl = "https://discord.com/oauth2/authorize" +
@@ -63,7 +64,7 @@ namespace WaseBoard.Services
             catch (Exception ex)
             {
                 listener.Stop();
-                return new(false, null, null, null, null, $"Impossible d'ouvrir le navigateur : {ex.Message}");
+                return new(false, null, null, null, null, Loc.T("oauth.browser_failed", ex.Message));
             }
 
             HttpListenerContext ctx;
@@ -74,7 +75,7 @@ namespace WaseBoard.Services
                 var timeoutTask = Task.Delay(Timeout.Infinite, cts.Token);
                 var winner = await Task.WhenAny(getContextTask, timeoutTask);
                 if (winner != getContextTask)
-                    return new(false, null, null, null, null, "Délai dépassé — connexion non terminée dans le navigateur.");
+                    return new(false, null, null, null, null, Loc.T("oauth.timeout"));
                 ctx = await getContextTask;
             }
             catch (Exception ex)
@@ -99,12 +100,12 @@ namespace WaseBoard.Services
             if (discordError is not null)
             {
                 return new(false, null, null, null, null,
-                    discordError == "access_denied" ? "Connexion annulée : autorisation refusée." : $"Discord : {discordError}");
+                    discordError == "access_denied" ? Loc.T("oauth.cancelled") : Loc.T("oauth.discord_error", discordError ?? ""));
             }
             if (receivedState != state)
-                return new(false, null, null, null, null, "Échec de vérification de sécurité — réessayez.");
+                return new(false, null, null, null, null, Loc.T("oauth.state_failed"));
             if (code is null)
-                return new(false, null, null, null, null, "Aucun code reçu de Discord.");
+                return new(false, null, null, null, null, Loc.T("oauth.no_code"));
 
             var result = await _library.ExchangeOAuthCodeAsync(code, RedirectUri);
             return new(result.Success, result.SessionToken, result.UserId, result.Username, result.AvatarUrl, result.Error);
@@ -125,23 +126,23 @@ namespace WaseBoard.Services
 
         // Site et communauté du projet, pas spécifiques à ce serveur WaseBoard — utile même si la
         // personne qui vous a invité n'a pas (encore) tout configuré.
-        private const string FooterLinks =
-            """
+        private static string FooterLinks =>
+            $"""
             <div class="links">
-                <a class="link" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord WaseBoard</a>
-                <a class="link" href="https://waseboard.salsi.bid/">🌐 Le site</a>
-                <a class="link" href="https://github.com/salsi64/WaseBoard">🐙 Code source (GitHub)</a>
+                <a class="link" href="https://discord.gg/HAGTNGFyQd">{Loc.T("oauth.link_discord")}</a>
+                <a class="link" href="https://waseboard.salsi.bid/">{Loc.T("oauth.link_site")}</a>
+                <a class="link" href="https://github.com/salsi64/WaseBoard">{Loc.T("oauth.link_source")}</a>
             </div>
             """;
 
         private static async Task RespondToBrowserAsync(HttpListenerContext ctx, bool ok)
         {
             var message = ok
-                ? "Connexion réussie — vous pouvez fermer cet onglet et revenir dans WaseBoard."
-                : "Échec de la connexion — vous pouvez fermer cet onglet et réessayer dans WaseBoard.";
+                ? Loc.T("oauth.page_ok")
+                : Loc.T("oauth.page_failed");
             var html =
                 $"""
-                <!doctype html><html lang="fr"><head><meta charset="utf-8"><title>WaseBoard</title>
+                <!doctype html><html lang="{Loc.Language}"><head><meta charset="utf-8"><title>WaseBoard</title>
                 <meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
                 <style>{PageStyle}</style></head><body><main>
                 <div style="font-size:36px;margin-bottom:8px">🎛️</div>

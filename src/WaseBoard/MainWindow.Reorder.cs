@@ -22,6 +22,7 @@ using WaseBoard.Models;
 using WaseBoard.Services;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard
 {
@@ -211,13 +212,13 @@ namespace WaseBoard
                 if (!CanShareTo(_sharedCategories.FirstOrDefault(s => s.GuildId == section.CategoryKey), item))
                 {
                     ToastService.Show(
-                        "Seuls l'auteur du son ou un administrateur du serveur peuvent l'ajouter à cette catégorie.",
+                        Loc.T("category.add_not_allowed"),
                         ToastKind.Warning);
                     return;
                 }
 
                 if (!await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, true))
-                    ToastService.Show("Ajout à la catégorie impossible. " + _library.LastErrorDetail, ToastKind.Warning);
+                    ToastService.Show(Loc.T("category.add_failed") + " " + _library.LastErrorDetail, ToastKind.Warning);
                 _sharedCategories = await _library.FetchSharedCategoriesAsync();
             }
             else

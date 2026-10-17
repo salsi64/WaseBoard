@@ -150,7 +150,7 @@ namespace WaseBoard.Services.MicFx
                 _thread = new Thread(Run)
                 {
                     IsBackground = true,
-                    Name = "WaseBoard micro (écriture)",
+                    Name = "WaseBoard microphone (writer)",
                     Priority = ThreadPriority.AboveNormal,
                 };
                 _thread.Start();

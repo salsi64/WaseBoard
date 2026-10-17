@@ -94,6 +94,10 @@ dépannage est dans le [guide Micro en jeu](micro-en-jeu.md#ça-ne-marche-pas-).
 Le client est pour l'instant Windows uniquement. Le bot Discord, lui, joue dans le vocal quel que soit
 l'appareil des autres membres : eux n'ont besoin de rien installer pour *entendre*.
 
+**L'application existe-t-elle en anglais ?**
+Oui : WaseBoard suit la langue de Windows (français, sinon anglais). Pour la changer à la main : Paramètres › Apparence › Langue, puis relancez
+l'application. Les messages du serveur (erreurs, par exemple) suivent la langue de l'application.
+
 **Mes données sont-elles partagées avec un tiers ?**
 Non : votre serveur WaseBoard est hébergé par un membre de votre groupe (pas par les auteurs du
 logiciel), et votre connexion Discord ne sert qu'à vérifier votre identité et afficher votre avatar —

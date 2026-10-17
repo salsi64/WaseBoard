@@ -79,8 +79,8 @@ namespace WaseBoard.Windows
             {
                 NavAdminButton.Visibility = Visibility.Visible;
                 AdminSummaryText.Text = _adminGuilds.Count == 1
-                    ? $"Vous administrez {_adminGuilds[0].GuildName}."
-                    : $"Vous administrez {_adminGuilds.Count} serveurs : " + string.Join(", ", _adminGuilds.Select(g => g.GuildName)) + ".";
+                    ? Loc.T("settings.admin.one_guild", _adminGuilds[0].GuildName)
+                    : Loc.T("settings.admin.n_guilds", _adminGuilds.Count, string.Join(", ", _adminGuilds.Select(g => g.GuildName)));
             }
 
             ServerUrlBox.Text = _settings.ServerUrl;
@@ -88,9 +88,9 @@ namespace WaseBoard.Windows
 
             if (!string.IsNullOrEmpty(_settings.DiscordSessionToken))
             {
-                ConnectDiscordButton.Content = "Changer de compte";
+                ConnectDiscordButton.Content = Loc.T("settings.discord.switch_account");
                 LogoutDiscordButton.Visibility = Visibility.Visible;
-                ShowVerifyResult(true, $"✅ Connecté en tant que {_settings.DiscordUsername}", _settings.DiscordAvatarUrl);
+                ShowVerifyResult(true, Loc.T("settings.discord.connected_as", _settings.DiscordUsername ?? ""), _settings.DiscordAvatarUrl);
             }
 
             LocalVolumeSlider.Value = _settings.LocalPlaybackVolume;
@@ -128,8 +128,14 @@ namespace WaseBoard.Windows
             ShowWaveformsCheckBox.IsChecked = _settings.ShowWaveforms;
             UpdateManualColorSectionEnabled();
 
+            LanguageCombo.Items.Add(new ComboBoxItem { Content = Loc.T("settings.appearance.language_auto"), Tag = "auto" });
+            LanguageCombo.Items.Add(new ComboBoxItem { Content = "Français", Tag = "fr" }); // loc-ok : le nom de la langue, dans sa langue
+            LanguageCombo.Items.Add(new ComboBoxItem { Content = "English", Tag = "en" });
+            var savedLanguage = (_settings.Language ?? "auto").Trim().ToLowerInvariant();
+            LanguageCombo.SelectedIndex = savedLanguage switch { "fr" => 1, "en" => 2, _ => 0 };
+
             var currentVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-            CurrentVersionText.Text = $"Version actuelle : {currentVersion?.ToString(3) ?? "?"}";
+            CurrentVersionText.Text = Loc.T("settings.updates.current", currentVersion?.ToString(3) ?? "?");
 
             SelectPage(initialPage);
         }
@@ -410,7 +416,7 @@ namespace WaseBoard.Windows
             }
             catch
             {
-                AlertDialog.Show(this, "Couleur invalide. Utilisez un code hexadécimal, ex: #101820",
+                AlertDialog.Show(this, Loc.T("settings.appearance.invalid_color"),
                     "WaseBoard", AlertKind.Warning);
             }
         }
@@ -456,10 +462,10 @@ namespace WaseBoard.Windows
             foreach (var mic in state.Microphones)
             {
                 var label = mic.Name;
-                if (mic.IsDefaultCommunications) label += " (par défaut)";
-                if (!mic.Compatible) label += " — non compatible";
-                else if (mic.NeedsRepair) label += " — à réparer";
-                else if (mic.Equipped) label += " — installé";
+                if (mic.IsDefaultCommunications) label += Loc.T("settings.mic.label_default");
+                if (!mic.Compatible) label += Loc.T("settings.mic.label_incompatible");
+                else if (mic.NeedsRepair) label += Loc.T("settings.mic.label_repair");
+                else if (mic.Equipped) label += Loc.T("settings.mic.label_installed");
 
                 var checkBox = new CheckBox
                 {
@@ -476,36 +482,36 @@ namespace WaseBoard.Windows
 
             if (!MicFxSetup.IsBundled)
             {
-                SetMicStatus(MicFxStatusText, "Module micro absent de cette version de WaseBoard.", WarningBrush);
+                SetMicStatus(MicFxStatusText, Loc.T("settings.mic.status.absent"), WarningBrush);
                 MicFxInstallButton.IsEnabled = false;
             }
             else if (state.Microphones.Count == 0)
             {
-                SetMicStatus(MicFxStatusText, "Aucun micro détecté.", WarningBrush);
+                SetMicStatus(MicFxStatusText, Loc.T("settings.mic.status.none"), WarningBrush);
                 MicFxInstallButton.IsEnabled = false;
             }
             else if (state.AnyNeedsRepair)
             {
-                SetMicStatus(MicFxStatusText, "À réparer (souvent après une mise à jour du pilote du micro).", WarningBrush);
-                MicFxInstallButton.Content = "Réparer";
+                SetMicStatus(MicFxStatusText, Loc.T("settings.mic.status.repair"), WarningBrush);
+                MicFxInstallButton.Content = Loc.T("settings.mic.repair");
                 MicFxInstallButton.IsEnabled = true;
             }
             else if (state.NeedsUpdate)
             {
-                SetMicStatus(MicFxStatusText, "Mise à jour de l'effet disponible.", WarningBrush);
-                MicFxInstallButton.Content = "Mettre à jour";
+                SetMicStatus(MicFxStatusText, Loc.T("settings.mic.status.update"), WarningBrush);
+                MicFxInstallButton.Content = Loc.T("settings.mic.update");
                 MicFxInstallButton.IsEnabled = true;
             }
             else if (state.Registered && state.AnyEquipped)
             {
-                SetMicStatus(MicFxStatusText, "Installé.", SuccessBrush);
-                MicFxInstallButton.Content = "Appliquer";
+                SetMicStatus(MicFxStatusText, Loc.T("settings.mic.status.installed"), SuccessBrush);
+                MicFxInstallButton.Content = Loc.T("common.apply");
                 MicFxInstallButton.IsEnabled = true;
             }
             else
             {
-                SetMicStatus(MicFxStatusText, "Cochez le micro que vous utilisez en jeu, puis « Installer ».", null);
-                MicFxInstallButton.Content = "Installer";
+                SetMicStatus(MicFxStatusText, Loc.T("settings.mic.status.pick"), null);
+                MicFxInstallButton.Content = Loc.T("settings.mic.install");
                 MicFxInstallButton.IsEnabled = true;
             }
 
@@ -532,11 +538,11 @@ namespace WaseBoard.Windows
             var missing = activity.FirstOrDefault(m => m.EffectMissing && _micMissingStreak[m.EndpointGuid] >= 2);
             var active = activity.FirstOrDefault(m => m.EffectActive);
             if (missing is not null)
-                SetMicStatus(MicFxLiveText, $"« {missing.Name} » : une application écoute ce micro mais l'effet ne s'active pas. Ce micro n'est peut-être pas compatible.", WarningBrush);
+                SetMicStatus(MicFxLiveText, Loc.T("settings.mic.live.missing", missing.Name), WarningBrush);
             else if (active is not null)
-                SetMicStatus(MicFxLiveText, $"Actif sur « {active.Name} ».", SuccessBrush);
+                SetMicStatus(MicFxLiveText, Loc.T("settings.mic.live.active", active.Name), SuccessBrush);
             else
-                SetMicStatus(MicFxLiveText, "Prêt : s'active dès qu'une application écoute votre micro.", null);
+                SetMicStatus(MicFxLiveText, Loc.T("settings.mic.live.ready"), null);
         }
 
         // Pas d'emoji d'état ici : WPF les affiche en noir et blanc, et ✅ y ressemble à une case à cocher.
@@ -556,12 +562,12 @@ namespace WaseBoard.Windows
             var selected = _micCheckBoxes.Where(kv => kv.Value.IsChecked == true).Select(kv => kv.Key).ToList();
             if (selected.Count == 0)
             {
-                AlertDialog.Show(this, "Cochez au moins un micro.", "Micro en jeu", AlertKind.Warning);
+                AlertDialog.Show(this, Loc.T("settings.mic.pick_one"), Loc.T("settings.mic.title"), AlertKind.Warning);
                 return;
             }
             if (!ConfirmDialog.Show(this,
-                    "Windows va demander les droits administrateur, et le son se coupera 2 secondes.\n\nContinuer ?",
-                    "Micro en jeu"))
+                    Loc.T("settings.mic.confirm_install"),
+                    Loc.T("settings.mic.title")))
                 return;
 
             MicFxInstallButton.IsEnabled = false;
@@ -571,15 +577,15 @@ namespace WaseBoard.Windows
             RefreshMicFxState();
             if (result.Cancelled) return;
             if (result.Ok) MicFeatureEnabledCheckBox.IsChecked = true;
-            AlertDialog.Show(this, string.Join("\n", result.Messages), "Micro en jeu",
+            AlertDialog.Show(this, string.Join("\n", result.Messages), Loc.T("settings.mic.title"),
                 result.Ok ? AlertKind.Info : AlertKind.Warning);
         }
 
         private async void MicFxUninstallButton_Click(object sender, RoutedEventArgs e)
         {
             if (!ConfirmDialog.Show(this,
-                    "Retirer le micro en jeu de tous les micros ? Le son se coupera 2 secondes.",
-                    "Micro en jeu"))
+                    Loc.T("settings.mic.confirm_uninstall"),
+                    Loc.T("settings.mic.title")))
                 return;
 
             MicFxUninstallButton.IsEnabled = false;
@@ -589,7 +595,7 @@ namespace WaseBoard.Windows
             RefreshMicFxState();
             if (result.Cancelled) return;
             if (result.Ok) MicFeatureEnabledCheckBox.IsChecked = false;
-            AlertDialog.Show(this, string.Join("\n", result.Messages), "Micro en jeu",
+            AlertDialog.Show(this, string.Join("\n", result.Messages), Loc.T("settings.mic.title"),
                 result.Ok ? AlertKind.Info : AlertKind.Warning);
         }
 
@@ -600,8 +606,8 @@ namespace WaseBoard.Windows
             _micFeed.PlayTestTone();
             if (!MicFeedService.ReadStatus().MicInUse)
                 AlertDialog.Show(this,
-                    "Bip envoyé. Pour l'entendre, ouvrez une application qui écoute votre micro (l'Enregistreur vocal de Windows par exemple), puis recliquez « Tester ».",
-                    "Micro en jeu");
+                    Loc.T("settings.mic.beep_sent"),
+                    Loc.T("settings.mic.title"));
         }
 
         private async void TestConnectionButton_Click(object sender, RoutedEventArgs e)
@@ -619,18 +625,17 @@ namespace WaseBoard.Windows
             var message = result switch
             {
                 SoundLibraryService.ServerStatusResult.Connected =>
-                    $"✅ Serveur joignable. Bot connecté au salon vocal « {channel} ».",
+                    Loc.T("settings.server.test.connected", channel ?? ""),
                 SoundLibraryService.ServerStatusResult.BotNotInVoice =>
-                    "✅ Serveur joignable, jeton correct. Le bot n'est simplement dans aucun salon vocal pour l'instant — " +
-                    "faites « /join » dans Discord, ou utilisez le bouton « 🔊 Rejoindre mon vocal » dans WaseBoard.",
+                    Loc.T("settings.server.test.no_voice"),
                 SoundLibraryService.ServerStatusResult.Unauthorized =>
-                    "❌ Jeton d'accès incorrect.",
-                _ => "❌ Serveur injoignable." +
-                     (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : "\nDétail : " + _library.LastErrorDetail)
+                    Loc.T("settings.server.test.unauthorized"),
+                _ => Loc.T("settings.server.test.unreachable") +
+                     (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : "\n" + Loc.T("common.detail", _library.LastErrorDetail))
             };
 
             var isOk = result is SoundLibraryService.ServerStatusResult.Connected or SoundLibraryService.ServerStatusResult.BotNotInVoice;
-            AlertDialog.Show(this, message, "Serveur WaseBoard", isOk ? AlertKind.Info : AlertKind.Warning);
+            AlertDialog.Show(this, message, Loc.T("server.title"), isOk ? AlertKind.Info : AlertKind.Warning);
 
             _settings.ServerUrl = previousUrl;
             _settings.ServerToken = previousToken;
@@ -645,7 +650,7 @@ namespace WaseBoard.Windows
             var token = ServerTokenBox.Text;
             if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(token))
             {
-                AlertDialog.Show(this, "Renseignez d'abord l'adresse du serveur et le jeton d'accès.", "WaseBoard", AlertKind.Warning);
+                AlertDialog.Show(this, Loc.T("settings.server.fill_first"), "WaseBoard", AlertKind.Warning);
                 return;
             }
 
@@ -653,7 +658,7 @@ namespace WaseBoard.Windows
             Clipboard.SetText(link);
 
             var original = CopyInviteLinkButton.Content;
-            CopyInviteLinkButton.Content = "✅ Copié !";
+            CopyInviteLinkButton.Content = Loc.T("settings.diagnostic.copied");
             var timer = new System.Windows.Threading.DispatcherTimer { Interval = System.TimeSpan.FromSeconds(2) };
             timer.Tick += (_, _) => { CopyInviteLinkButton.Content = original; timer.Stop(); };
             timer.Start();
@@ -671,7 +676,7 @@ namespace WaseBoard.Windows
             _settings.ServerToken = ServerTokenBox.Text;
 
             ConnectDiscordButton.IsEnabled = false;
-            ShowVerifyResult(true, "Connexion en cours — suivez les instructions dans votre navigateur...", null);
+            ShowVerifyResult(true, Loc.T("settings.discord.in_progress"), null);
 
             var oauth = new DiscordOAuthService(_library);
             var result = await oauth.LoginAsync();
@@ -689,14 +694,14 @@ namespace WaseBoard.Windows
                 _settings.DiscordAvatarUrl = result.AvatarUrl;
                 _library.SaveSettings();
 
-                ConnectDiscordButton.Content = "Changer de compte";
+                ConnectDiscordButton.Content = Loc.T("settings.discord.switch_account");
                 LogoutDiscordButton.Visibility = Visibility.Visible;
                 LoggedOut = false;
-                ShowVerifyResult(true, $"✅ Connecté en tant que {result.Username}", result.AvatarUrl);
+                ShowVerifyResult(true, Loc.T("settings.discord.connected_as", result.Username ?? ""), result.AvatarUrl);
             }
             else
             {
-                ShowVerifyResult(false, "❌ " + (result.Error ?? "Connexion échouée."), null);
+                ShowVerifyResult(false, "❌ " + (result.Error ?? Loc.T("settings.discord.failed")), null);
             }
         }
 
@@ -826,7 +831,7 @@ namespace WaseBoard.Windows
 
             CheckUpdateButton.IsEnabled = false;
             OpenReleaseButton.Visibility = Visibility.Collapsed;
-            UpdateResultText.Text = "Recherche en cours...";
+            UpdateResultText.Text = Loc.T("settings.updates.checking");
 
             var result = await UpdateCheckService.CheckForUpdateAsync(currentVersion);
             if (_isClosed) return;
@@ -835,17 +840,17 @@ namespace WaseBoard.Windows
 
             if (!string.IsNullOrEmpty(result.Error))
             {
-                UpdateResultText.Text = $"❌ Recherche impossible : {result.Error}";
+                UpdateResultText.Text = Loc.T("settings.updates.failed", result.Error);
             }
             else if (result.Available)
             {
-                UpdateResultText.Text = $"🎉 Une nouvelle version est disponible : v{result.LatestVersion}.";
+                UpdateResultText.Text = Loc.T("settings.updates.available", result.LatestVersion ?? "");
                 _latestReleaseUrl = result.ReleaseUrl;
                 OpenReleaseButton.Visibility = string.IsNullOrEmpty(_latestReleaseUrl) ? Visibility.Collapsed : Visibility.Visible;
             }
             else
             {
-                UpdateResultText.Text = "✅ Vous avez déjà la dernière version.";
+                UpdateResultText.Text = Loc.T("settings.updates.up_to_date");
             }
         }
 
@@ -881,6 +886,12 @@ namespace WaseBoard.Windows
             _settings.ClipSeconds = ClipSecondsCombo.SelectedItem is ComboBoxItem { Tag: int seconds } ? seconds : LoopbackClipService.DefaultSeconds;
             _settings.ClipHotkey = _clipHotkey;
             _settings.ClipBeep = ClipBeepCheckBox.IsChecked == true;
+
+            var newLanguage = LanguageCombo.SelectedItem is ComboBoxItem { Tag: string code } ? code : "auto";
+            var languageChanged = !string.Equals((_settings.Language ?? "auto"), newLanguage, StringComparison.OrdinalIgnoreCase);
+            _settings.Language = newLanguage;
+            if (languageChanged)
+                AlertDialog.Show(this, Loc.T("settings.appearance.language_restart"), "WaseBoard", AlertKind.Info);
 
             DialogResult = true;
             Close();

@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using NAudio.Wave;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Services
 {
@@ -43,7 +44,7 @@ namespace WaseBoard.Services
 
             if (!isFloat32 && !isPcm16)
                 throw new NotSupportedException(
-                    $"Format audio non pris en charge pour l'aperçu waveform : {reader.WaveFormat.Encoding}, {reader.WaveFormat.BitsPerSample} bits.");
+                    Loc.T("trim.waveform_unsupported", reader.WaveFormat.Encoding, reader.WaveFormat.BitsPerSample));
 
             double totalFrames = Math.Max(1, reader.Length / (double)(channels * bytesPerSample));
 

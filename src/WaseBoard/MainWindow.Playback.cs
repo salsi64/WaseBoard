@@ -122,8 +122,8 @@ namespace WaseBoard
             MicModeGameButton.IsChecked = game;
             MicModeDiscordButton.IsChecked = !game;
             MicModeSwitch.ToolTip = game
-                ? "Mode jeu : les sons passent dans votre micro (chat vocal du jeu). Cliquer pour passer en mode Discord."
-                : "Mode Discord : les sons sont joués par le bot dans votre salon vocal. Cliquer pour passer en mode jeu.";
+                ? Loc.T("main.mic_mode.game_tooltip")
+                : Loc.T("main.mic_mode.discord_tooltip");
             // La largeur de l'interrupteur change avec le mode (« Jeu » / « Discord ») : la barre se réajuste.
             ApplyToolbarDensity();
         }
@@ -145,7 +145,7 @@ namespace WaseBoard
             var localPath = await _library.GetOrDownloadCachedFileAsync(item);
             if (localPath is null)
             {
-                ToastService.Show($"Impossible de jouer « {item.Name} » dans le micro : fichier indisponible.", ToastKind.Error);
+                ToastService.Show(Loc.T("play.mic_file_unavailable", item.Name), ToastKind.Error);
                 return;
             }
 
@@ -158,7 +158,7 @@ namespace WaseBoard
             }
             catch (Exception ex)
             {
-                ToastService.Show($"Impossible de jouer « {item.Name} » dans le micro : {ex.Message}", ToastKind.Error);
+                ToastService.Show(Loc.T("play.mic_error", item.Name, ex.Message), ToastKind.Error);
                 return;
             }
 
@@ -176,7 +176,7 @@ namespace WaseBoard
             {
                 item.IsPlaying = false; // rien n'a réellement démarré, pas la peine d'attendre le sondage
                 ToastService.Show(
-                    $"Impossible de jouer « {item.Name} »." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    Loc.T("play.failed", item.Name) + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
                     ToastKind.Error);
                 return;
             }
@@ -239,7 +239,7 @@ namespace WaseBoard
             if (!ok)
             {
                 ToastService.Show(
-                    "Impossible de couper les sons côté serveur." +
+                    Loc.T("play.stop_failed") +
                     (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
                     ToastKind.Warning);
             }

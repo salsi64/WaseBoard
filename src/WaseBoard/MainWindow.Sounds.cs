@@ -22,6 +22,7 @@ using WaseBoard.Models;
 using WaseBoard.Services;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard
 {
@@ -36,8 +37,8 @@ namespace WaseBoard
         {
             var dialog = new OpenFileDialog
             {
-                Title = "Choisir un fichier audio",
-                Filter = "Fichiers audio (*.mp3;*.wav;*.ogg;*.flac)|*.mp3;*.wav;*.ogg;*.flac|Tous les fichiers|*.*",
+                Title = Loc.T("sounds.pick.title"),
+                Filter = Loc.T("sounds.pick.filter"),
                 Multiselect = true
             };
 
@@ -71,7 +72,7 @@ namespace WaseBoard
             if (_sharedCategories.Count == 0)
             {
                 ToastService.Show(
-                    "Impossible d'ajouter un son : vous ne semblez membre d'aucun serveur Discord où WaseBoard est installé.",
+                    Loc.T("sounds.add.no_server"),
                     ToastKind.Error);
                 return;
             }
@@ -81,7 +82,7 @@ namespace WaseBoard
             if (uploadableGuilds.Count == 0)
             {
                 ToastService.Show(
-                    "Vous ne pouvez ajouter de sons sur aucun de vos serveurs : l'ajout y est réservé aux administrateurs, ou votre accès a été retiré.",
+                    Loc.T("sounds.add.not_allowed"),
                     ToastKind.Warning);
                 return;
             }
@@ -134,14 +135,14 @@ namespace WaseBoard
                 if (hashMatch is not null)
                 {
                     var proceed = ConfirmDialog.Show(this,
-                        $"Ce fichier est identique à « {hashMatch.Name} », déjà présent dans le catalogue.\n" +
-                        "Pour une autre portion du même son, vous pouvez aussi modifier l'existant (clic droit › Éditer).\nL'ajouter quand même ?");
+                        Loc.T("sounds.add.duplicate_hash", hashMatch.Name) + "\n" +
+                        Loc.T("sounds.add.duplicate_hash_hint"));
                     if (!proceed) continue;
                 }
                 else if (nameMatch is not null)
                 {
                     var proceed = ConfirmDialog.Show(this,
-                        $"Un son nommé « {nameMatch.Name} » existe déjà (contenu différent). L'ajouter quand même ?");
+                        Loc.T("sounds.add.duplicate_name", nameMatch.Name));
                     if (!proceed) continue;
                 }
 
@@ -157,7 +158,7 @@ namespace WaseBoard
                 else
                 {
                     ToastService.Show(
-                        $"Impossible d'envoyer « {trimWindow.ResultName} » au serveur." +
+                        Loc.T("sounds.add.upload_failed", trimWindow.ResultName) +
                         (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
                         ToastKind.Error);
                 }
@@ -168,7 +169,7 @@ namespace WaseBoard
             if (rejected.Count > 0)
             {
                 ToastService.Show(
-                    "Fichier(s) ignoré(s), format non supporté : " + string.Join(", ", rejected),
+                    Loc.T("sounds.add.rejected", string.Join(", ", rejected)),
                     ToastKind.Warning);
             }
         }
@@ -198,7 +199,7 @@ namespace WaseBoard
 
             var menu = new ContextMenu();
 
-            var editItem = new MenuItem { Header = "✏ Éditer…" };
+            var editItem = new MenuItem { Header = Loc.T("sounds.menu.edit") };
             editItem.Click += async (_, _) => await EditSoundAsync(item);
             menu.Items.Add(editItem);
 
@@ -215,8 +216,8 @@ namespace WaseBoard
             if (section is not null && !isNativeToGuildSection && canRemoveFromSection && section.CategoryKey != FavoritesKey)
             {
                 var label = section.IsShared
-                    ? $"Retirer de « {StripSharedPrefix(section.Name)} » (partagée)"
-                    : $"Retirer de « {section.Name} »";
+                    ? Loc.T("sounds.menu.remove_from_shared", StripSharedPrefix(section.Name))
+                    : Loc.T("sounds.menu.remove_from", section.Name);
 
                 var removeFromSectionItem = new MenuItem { Header = label };
                 removeFromSectionItem.Click += async (_, _) =>
@@ -224,7 +225,7 @@ namespace WaseBoard
                     if (section.IsShared)
                     {
                         if (!await _library.SetSharedCategorySoundAsync(section.CategoryKey, item, false))
-                            ToastService.Show("Retrait de la catégorie impossible. " + _library.LastErrorDetail, ToastKind.Warning);
+                            ToastService.Show(Loc.T("sounds.remove_from_category_failed") + " " + _library.LastErrorDetail, ToastKind.Warning);
                         await RefreshSharedCategoriesAsync();
                     }
                     else
@@ -236,10 +237,10 @@ namespace WaseBoard
                 menu.Items.Add(removeFromSectionItem);
             }
 
-            var hotkeyItem = new MenuItem { Header = string.IsNullOrEmpty(item.Hotkey) ? "Définir un raccourci..." : $"Modifier le raccourci ({item.Hotkey})" };
+            var hotkeyItem = new MenuItem { Header = string.IsNullOrEmpty(item.Hotkey) ? Loc.T("sounds.menu.set_hotkey") : Loc.T("sounds.menu.change_hotkey", item.Hotkey) };
             hotkeyItem.Click += (_, _) => AssignHotkey(item);
 
-            var removeHotkeyItem = new MenuItem { Header = "Retirer le raccourci", IsEnabled = !string.IsNullOrEmpty(item.Hotkey) };
+            var removeHotkeyItem = new MenuItem { Header = Loc.T("sounds.menu.remove_hotkey"), IsEnabled = !string.IsNullOrEmpty(item.Hotkey) };
             removeHotkeyItem.Click += (_, _) =>
             {
                 _library.SetHotkey(item, null);
@@ -267,7 +268,7 @@ namespace WaseBoard
             else
             {
                 ToastService.Show(
-                    "Suppression échouée." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    Loc.T("sounds.delete_failed") + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
                     ToastKind.Warning);
             }
         }
@@ -285,7 +286,7 @@ namespace WaseBoard
                 if (downloaded is null)
                 {
                     ToastService.Show(
-                        "Impossible de charger le son complet." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                        Loc.T("sounds.load_full_failed") + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
                         ToastKind.Warning);
                     return;
                 }
@@ -333,7 +334,7 @@ namespace WaseBoard
                 if (!await _library.ReplaceSoundFileAsync(item, replacementFile))
                 {
                     ToastService.Show(
-                        "Remplacement du fichier échoué." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                        Loc.T("sounds.replace_failed") + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
                         ToastKind.Warning);
                     return;
                 }
@@ -378,7 +379,7 @@ namespace WaseBoard
             }
             if (sharedChanged) await RefreshSharedCategoriesAsync();
             if (sharedFailed)
-                ToastService.Show("Une catégorie de serveur n'a pas pu être modifiée. " + _library.LastErrorDetail, ToastKind.Warning);
+                ToastService.Show(Loc.T("sounds.shared_category_failed") + " " + _library.LastErrorDetail, ToastKind.Warning);
 
             if (!canEdit)
             {
@@ -399,12 +400,12 @@ namespace WaseBoard
             if (await _library.UpdateSoundDetailsAsync(item, newName, newEmoji, newTrim))
             {
                 RefreshSections();
-                ToastService.Show($"« {item.Name} » mis à jour.", ToastKind.Success);
+                ToastService.Show(Loc.T("sounds.updated", item.Name), ToastKind.Success);
             }
             else
             {
                 ToastService.Show(
-                    "Modification échouée." + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
+                    Loc.T("sounds.edit_failed") + (string.IsNullOrEmpty(_library.LastErrorDetail) ? "" : " " + _library.LastErrorDetail),
                     ToastKind.Warning);
             }
         }

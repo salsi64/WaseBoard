@@ -1,5 +1,7 @@
 # 🎛️ WaseBoard
 
+*[🇬🇧 English version](README.en.md)*
+
 Soundboard partagé pour Discord : cliquez un son, il joue à la fois sur vos enceintes et dans
 votre salon vocal, pour tout le monde — sans jamais passer par votre micro (donc pas filtré par
 les suppressions de bruit type Krisp).
@@ -66,6 +68,8 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 - **Panel d'administration** par serveur (rôles, corbeille avec restauration, statistiques,
   journal d'actions, quotas, anti-spam) et un **panneau de boutons Discord tout-en-un**
   (`/bot-setup`) pour démarrer, rejoindre le vocal ou ajouter le bot ailleurs sans quitter Discord.
+- **Interface en français et en anglais** : WaseBoard suit la langue de Windows (ou le réglage Langue dans Apparence) ; les
+  messages du serveur la suivent aussi.
 - Formats supportés : mp3, wav, ogg (Vorbis et Opus), flac, m4a, wma.
 
 ## Héberger
