@@ -1,6 +1,9 @@
 // WaseBoard web : l'interface. Toute la logique testable est dans logic.js ; ici, le navigateur (DOM, réseau, stockage).
 // Règles : jamais de HTML construit à partir de données (les noms de sons et pseudos sont du texte), aucun style en ligne (CSP),
 // l'API est celle de l'application Windows, authentifiée par la session Discord en « Authorization: Bearer ».
+import { avatar, closeAllOverlays, closeOverlay, h, openOverlay, toast } from './dom.js';
+import { audioFiles, uploadableGuilds } from './editor-logic.js';
+import { createEditor } from './editor.js';
 import { LANGUAGES, makeTranslator, pickLanguage } from './i18n.js';
 import {
   PALETTE, buildAuthorizeUrl, buildSections, colorFor, dedupeById, errorText, favoriteSounds, filterSounds, loadJson, makeState,
@@ -46,41 +49,18 @@ let busy = { status: false, activity: false };
 let preview = null;       // { audio, url } : écoute locale en cours
 
 const root = document.getElementById('root');
-const toastLayer = document.getElementById('toasts');
-
-// ---------- Petits outils DOM ----------
-function h(tag, props = {}, ...children) {
-  const el = document.createElement(tag);
-  for (const [key, value] of Object.entries(props)) {
-    if (value === null || value === undefined || value === false) continue;
-    if (key === 'class') el.className = value;
-    else if (key === 'text') el.textContent = value;
-    else if (key === 'vars') for (const [name, v] of Object.entries(value)) el.style.setProperty(name, v);
-    else if (key.startsWith('on')) el.addEventListener(key.slice(2), value);
-    else el.setAttribute(key, value === true ? '' : String(value));
-  }
-  for (const child of children.flat()) if (child !== null && child !== undefined && child !== false) el.append(child.nodeType ? child : document.createTextNode(String(child)));
-  return el;
-}
-
-function avatar(url, size) {
-  return url ? h('img', { src: url, alt: '', width: size, height: size, referrerpolicy: 'no-referrer', loading: 'lazy' }) : null;
-}
-
-function toast(message, kind = 'info') {
-  const el = h('div', { class: `toast ${kind}`, text: message });
-  toastLayer.append(el);
-  setTimeout(() => el.remove(), kind === 'error' ? 5000 : 3000);
-}
 
 // ---------- Réseau ----------
-async function api(path, { method = 'GET', body } = {}) {
+async function api(path, { method = 'GET', body, form } = {}) {
   const headers = {};
   if (state.session) headers.Authorization = `Bearer ${state.session.session_token}`;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  let payload;
+  if (form) payload = form;                       // FormData : le navigateur pose lui-même le Content-Type (avec sa frontière)
+  else if (body !== undefined) payload = JSON.stringify(body);
   let response;
   try {
-    response = await fetch(path, { method, headers, credentials: 'omit', cache: 'no-store', body: body === undefined ? undefined : JSON.stringify(body) });
+    response = await fetch(path, { method, headers, credentials: 'omit', cache: 'no-store', body: payload });
   } catch {
     return { ok: false, status: 0, data: null, offline: true };
   }
@@ -109,6 +89,7 @@ function endSession(messageKey) {
   storage.removeItem(KEYS.session);
   stopPolling();
   stopPreview();
+  closeAllOverlays();
   showLogin(messageKey ? { text: t(messageKey) } : null);
 }
 
@@ -187,6 +168,9 @@ function showApp() {
     h('header', { class: 'topbar' },
       h('div', { class: 'brand' }, h('img', { src: LOGO, alt: '', width: 34, height: 34 }), h('span', { text: t('app.name') })),
       h('div', { class: 'search' }, h('span', { class: 'icon', 'aria-hidden': 'true', text: '🔍' }), search),
+      (ui.addButton = h('button', { class: 'btn primary add-btn', id: 'add', hidden: true, 'aria-label': t('menu.add'), title: t('menu.add'), onclick: () => ui.fileInput.click() },
+        h('span', { 'aria-hidden': 'true', text: '＋' }), h('span', { class: 'label', text: t('menu.add') }))),
+      (ui.fileInput = h('input', { type: 'file', multiple: true, hidden: true, accept: 'audio/*,.mp3,.wav,.ogg,.flac,.m4a,.wma', onchange: onFilesChosen })),
       h('button', { class: 'avatar-btn', id: 'account', 'aria-label': t('menu.open'), 'aria-haspopup': 'true', onclick: openMenu },
         state.session.avatar_url ? avatar(state.session.avatar_url, 44) : h('span', { class: 'initial', text: (state.session.username || '?').slice(0, 1).toUpperCase() }))),
     (ui.tabs = h('nav', { class: 'tabs', role: 'tablist', 'aria-label': t('tabs.label') })),
@@ -194,7 +178,7 @@ function showApp() {
     h('footer', { class: 'dock' },
       (ui.voice = h('div', { class: 'voice' })),
       h('button', { class: 'btn', id: 'join', 'aria-label': t('voice.join'), title: t('voice.join'), onclick: joinVoice }, h('span', { 'aria-hidden': 'true', text: '🔊' }), h('span', { class: 'label', text: t('voice.join') })),
-      h('button', { class: 'btn danger', id: 'stop', onclick: stopAll, text: `⏹ ${t('stop')}` })));
+      h('button', { class: 'btn danger', id: 'stop', onclick: stopAll, text: `⏹︎ ${t('stop')}` })));
   ui.search = search;
   ui.search.value = state.query;
   root.replaceChildren(ui.main);
@@ -203,23 +187,47 @@ function showApp() {
   startPolling();
 }
 
+/** Catalogue, serveurs, catégories partagées et état vocal ; { error } si le chargement échoue, null si la session a pris fin. */
+async function fetchCatalog() {
+  const [sounds, guilds, status] = await Promise.all([api('/sounds'), api('/my-guilds'), api('/status?strict=1')]);
+  if (!state.session) return null;   // déconnecté pendant le chargement (session expirée)
+  if (!sounds.ok || !guilds.ok) {
+    return { error: sounds.offline || guilds.offline ? t('offline') : errorText(sounds.status || guilds.status, sounds.data || guilds.data) };
+  }
+  const guildList = guilds.data.guilds || [];
+  const sharedLists = await Promise.all(guildList.map((guild) => api(`/shared-categories?guild_id=${encodeURIComponent(guild.id)}`)));
+  const shared = {};
+  guildList.forEach((guild, index) => { if (sharedLists[index].ok) shared[guild.id] = sharedLists[index].data.sound_ids || []; });
+  return { sounds: dedupeById(sounds.data.sounds || []), guilds: guildList, shared, voice: status.ok ? voiceSummary(status.data) : null };
+}
+
+function applyCatalog(catalog) {
+  state.sounds = catalog.sounds;
+  state.guilds = catalog.guilds;
+  state.shared = catalog.shared;
+  if (catalog.voice) state.voice = catalog.voice;
+  state.load = 'ready';
+}
+
 async function loadData() {
   state.load = 'loading';
   renderContent();
-  const [sounds, guilds, status] = await Promise.all([api('/sounds'), api('/my-guilds'), api('/status?strict=1')]);
-  if (!state.session) return;   // déconnecté pendant le chargement (session expirée)
-  if (!sounds.ok || !guilds.ok) {
+  const catalog = await fetchCatalog();
+  if (!catalog) return;
+  if (catalog.error) {
     state.load = 'error';
-    state.loadError = sounds.offline || guilds.offline ? t('offline') : errorText(sounds.status || guilds.status, sounds.data || guilds.data);
+    state.loadError = catalog.error;
     return renderContent();
   }
-  state.sounds = dedupeById(sounds.data.sounds || []);
-  state.guilds = guilds.data.guilds || [];
-  if (status.ok) state.voice = voiceSummary(status.data);
-  const sharedLists = await Promise.all(state.guilds.map((guild) => api(`/shared-categories?guild_id=${encodeURIComponent(guild.id)}`)));
-  state.shared = {};
-  state.guilds.forEach((guild, index) => { if (sharedLists[index].ok) state.shared[guild.id] = sharedLists[index].data.sound_ids || []; });
-  state.load = 'ready';
+  applyCatalog(catalog);
+  renderAll();
+}
+
+/** Recharge le catalogue après un ajout, une modification ou une suppression (sans écran de chargement). */
+async function refreshCatalog() {
+  const catalog = await fetchCatalog();
+  if (!catalog || catalog.error) return;
+  applyCatalog(catalog);
   renderAll();
 }
 
@@ -228,6 +236,7 @@ function renderAll() {
   renderTabs();
   renderContent();
   renderVoice();
+  ui.addButton.hidden = uploadableGuilds(state.guilds).length === 0;   // aucun serveur où l'on peut ajouter : pas de bouton
 }
 
 function tabList() {
@@ -398,22 +407,6 @@ window.addEventListener('offline', () => toast(t('offline'), 'error'));
 window.addEventListener('online', () => { toast(t('online'), 'success'); if (state.session && state.load === 'error') { state.load = 'idle'; loadData(); } });
 
 // ---------- Feuille d'options d'un son ----------
-let overlayOpener = null;
-
-function closeOverlay() {
-  document.querySelectorAll('.overlay, .menu-layer').forEach((el) => el.remove());
-  if (overlayOpener && overlayOpener.isConnected) overlayOpener.focus();
-  overlayOpener = null;
-}
-
-function openOverlay(node) {
-  closeOverlay();
-  overlayOpener = document.activeElement;
-  document.body.append(node);
-  const first = node.querySelector('button');
-  if (first) first.focus();
-}
-
 function openSheet(sound) {
   const isFavorite = state.favorites.has(sound.id);
   const chosen = state.colors[sound.id];
@@ -423,6 +416,7 @@ function openSheet(sound) {
   });
   const sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': sound.name },
     h('h2', { vars: { '--c': colorFor(sound, state.colors) } }, h('span', { class: 'emoji', 'aria-hidden': 'true', text: sound.emoji || '🔊' }), h('span', { text: sound.name })),
+    sound.can_edit ? h('button', { class: 'btn row', id: 'edit-sound', onclick: () => { closeOverlay(); editor.openEdit(sound); }, text: `✏️ ${t('sheet.edit')}` }) : null,
     h('button', { class: 'btn row', onclick: () => { toggleFavorite(sound); closeOverlay(); }, text: `${isFavorite ? '☆' : '★'} ${t(isFavorite ? 'sheet.favorite.remove' : 'sheet.favorite.add')}` }),
     h('button', { class: 'btn row', onclick: () => { closeOverlay(); previewSound(sound); }, text: `🔈 ${t('sheet.preview')}` }),
     h('div', { class: 'label', text: t('sheet.color') }),
@@ -444,6 +438,46 @@ function setColor(sound, color) {
   closeOverlay();
   renderContent();
 }
+
+// ---------- Ajout de sons : sélecteur de fichiers et glisser-déposer ----------
+function addFiles(files) {
+  const accepted = audioFiles(files);
+  if (accepted.length === 0) return toast(t('drop.none'), 'error');
+  if (uploadableGuilds(state.guilds).length === 0) return toast(t('editor.error.noGuild'), 'error');
+  if (accepted.length < files.length) toast(t('drop.ignored', files.length - accepted.length), 'info');
+  editor.openAdd(accepted);
+}
+
+function onFilesChosen(event) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = '';
+  if (files.length) addFiles(files);
+}
+
+let dragDepth = 0;
+function isFileDrag(event) {
+  return event.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files');
+}
+function dropAllowed() {
+  return Boolean(state.session && ui.main && state.load === 'ready' && uploadableGuilds(state.guilds).length > 0);
+}
+document.addEventListener('dragenter', (event) => {
+  if (!isFileDrag(event) || !dropAllowed()) return;
+  event.preventDefault();
+  if (++dragDepth === 1) document.body.append(h('div', { class: 'drop-overlay', id: 'drop-overlay', text: t('drop.overlay') }));
+});
+document.addEventListener('dragover', (event) => { if (isFileDrag(event) && dropAllowed()) event.preventDefault(); });
+document.addEventListener('dragleave', (event) => {
+  if (!isFileDrag(event) || dragDepth === 0) return;
+  if (--dragDepth === 0) document.getElementById('drop-overlay')?.remove();
+});
+document.addEventListener('drop', (event) => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  dragDepth = 0;
+  document.getElementById('drop-overlay')?.remove();
+  if (dropAllowed()) addFiles(Array.from(event.dataTransfer.files));
+});
 
 // ---------- Écoute sur cet appareil ----------
 function stopPreview() {
@@ -472,6 +506,24 @@ async function previewSound(sound) {
   audio.addEventListener('ended', stopPreview);
   try { await audio.play(); } catch (error) { stopPreview(); toast(t('preview.error', error.name || 'audio'), 'error'); }
 }
+
+/** Contenu du fichier d'un son (pour la forme d'onde de l'éditeur) ; null si indisponible. */
+async function fetchSoundFile(id) {
+  try {
+    const response = await fetch(`/sounds/${encodeURIComponent(id)}/file`, { headers: { Authorization: `Bearer ${state.session.session_token}` }, credentials: 'omit' });
+    if (response.status === 401) { endSession('login.expired'); return null; }
+    return response.ok ? await response.arrayBuffer() : null;
+  } catch { return null; }
+}
+
+const editor = createEditor({
+  t: (key, ...args) => t(key, ...args),
+  api,
+  fetchFile: fetchSoundFile,
+  getState: () => state,
+  refresh: refreshCatalog,
+  currentTab: () => state.tab,
+});
 
 // ---------- Menu du compte ----------
 function openMenu() {

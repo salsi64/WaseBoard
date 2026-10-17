@@ -479,7 +479,11 @@ espace disque libre, serveurs les plus lourds et plafonds actifs. Pour une sonde
 Le serveur sert aussi une **page web** sous `/app/` : la même liste de sons, le même bot, depuis un navigateur ou un téléphone
 (« Ajouter à l'écran d'accueil » l'installe comme une application), sans rien installer. On s'y connecte avec Discord ; on
 y joue un son, on coupe tout, on fait rejoindre le bot à son salon vocal, on cherche, on garde des favoris et des couleurs
-(enregistrés dans le navigateur) et on peut écouter un son sur l'appareil. Elle est en français et en anglais (langue du navigateur).
+(enregistrés dans le navigateur) et on peut écouter un son sur l'appareil. On peut aussi **gérer les sons** : en ajouter (bouton « + » ou glisser-déposer de
+fichiers, formats mp3, wav, ogg, flac, m4a, wma, jusqu'à 64 Mo), les modifier (nom, emoji, **découpe avec forme d'onde** — le son complet reste conservé —, nouveau
+fichier audio, catégories des serveurs où il apparaît) et les supprimer (ils vont à la corbeille du serveur), avec exactement les droits de l'application
+Windows : le serveur refait chaque vérification. La découpe demande que le navigateur sache décoder le format ; sinon le son s'ajoute en entier.
+Elle est en français et en anglais (langue du navigateur).
 
 Pour l'activer, il faut **`public_url`** (l'adresse HTTPS publique du serveur : Discord ramène la personne sur
 `<public_url>/app/callback`) et l'identifiant/secret OAuth2 déjà utilisés par l'application Windows. Puis, **une fois**, dans le

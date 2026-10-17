@@ -11,6 +11,8 @@ const WEB = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web');
 const read = (name) => readFileSync(join(WEB, name), 'utf8');
 const walk = (dir) => readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? walk(join(dir, f)) : [join(dir, f)]));
 const files = walk(WEB).map((f) => relative(WEB, f).split('\\').join('/'));
+// Les scripts de la page (le service worker, particulier, est vérifié à part).
+const SCRIPTS = files.filter((f) => f.endsWith('.js') && f !== 'sw.js');
 
 test('traductions : mêmes clés et mêmes {n} dans toutes les langues', () => {
   const base = Object.keys(MESSAGES.fr).sort();
@@ -24,12 +26,12 @@ test('traductions : mêmes clés et mêmes {n} dans toutes les langues', () => {
   }
 });
 
-test('traductions : chaque clé employée dans app.js existe', () => {
-  const code = read('app.js');
+test('traductions : chaque clé employée dans les scripts de la page existe', () => {
+  const code = SCRIPTS.filter((name) => name !== 'i18n.js').map(read).join('\n');   // i18n.js définit les clés (et les cite dans un commentaire)
   const viaTranslator = [...code.matchAll(/\bt\('([^']+)'/g)].map((m) => m[1]);
   // Clés passées par leur nom (endSession('login.expired')…) : toujours de la forme « domaine.nom ».
-  const named = [...code.matchAll(/'((?:login|voice|menu|sheet|tabs|empty|search|section|sound|preview|load)\.[A-Za-z.]+)'/g)].map((m) => m[1]);
-  assert.ok(viaTranslator.length > 15, 'des clés sont employées');
+  const named = [...code.matchAll(/'((?:login|voice|menu|sheet|tabs|empty|search|section|sound|preview|load|editor|drop)\.[A-Za-z.]+)'/g)].map((m) => m[1]);
+  assert.ok(viaTranslator.length > 50, 'des clés sont employées');
   for (const key of new Set([...viaTranslator, ...named])) assert.ok(key in MESSAGES.fr, `clé inconnue : ${key}`);
 });
 
@@ -52,7 +54,7 @@ test('service worker : chaque fichier de la coquille existe, et le jeton de vers
   const shell = [...sw.matchAll(/'(\/app\/[^']*)'/g)].map((m) => m[1]).filter((p) => !p.endsWith('/app/api/') && p !== '/app/');
   assert.ok(shell.length >= 6);
   for (const path of shell) assert.ok(existsSync(join(WEB, path.replace('/app/', ''))), `${path} est précaché mais absent`);
-  for (const needed of ['app.js', 'app.css', 'logic.js', 'i18n.js', 'manifest.webmanifest']) assert.ok(shell.includes(`/app/${needed}`), `${needed} devrait être précaché`);
+  for (const needed of [...SCRIPTS, 'app.css', 'manifest.webmanifest']) assert.ok(shell.includes(`/app/${needed}`), `${needed} devrait être précaché`);
   assert.match(sw, /startsWith\('\/app\/api\/'\)/, 'la configuration ne doit pas être mise en cache');
   assert.ok(!/caches\.[a-z]+\([^)]*(sounds|oauth|activity|status|play|stop)/.test(sw), 'aucune route d\'API dans le cache');
 });
@@ -83,12 +85,12 @@ test('index.html : fichiers référencés présents, aucun script ni style en li
 });
 
 test('code : pas d\'innerHTML, d\'eval ni de document.write (les noms de sons sont du texte, jamais du HTML)', () => {
-  for (const name of ['app.js', 'logic.js', 'i18n.js', 'sw.js']) {
+  for (const name of [...SCRIPTS, 'sw.js']) {
     const code = read(name);
     assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function\(/.test(code), `${name} : API dangereuse`);
     assert.ok(!/setAttribute\(\s*['"]style['"]/.test(code), `${name} : style posé par attribut (bloqué par la CSP)`);
   }
-  assert.ok(!/console\.(log|info|debug)/.test(read('app.js')), 'pas de journal dans la console');
+  for (const name of SCRIPTS) assert.ok(!/console\.(log|info|debug)/.test(read(name)), `${name} : pas de journal dans la console`);
 });
 
 test('le secret partagé de l\'instance n\'apparaît nulle part dans la page', () => {
@@ -101,7 +103,7 @@ test('le secret partagé de l\'instance n\'apparaît nulle part dans la page', (
 
 test('l\'API appelée par la page existe côté serveur', () => {
   const server = readFileSync(join(WEB, '..', 'server.py'), 'utf8');
-  const calls = [...read('app.js').matchAll(/api\(`?'?(\/[a-z-]+)/g)].map((m) => m[1]);
+  const calls = [...SCRIPTS.map(read).join('\n').matchAll(/api\(`?'?(\/[a-z-]+)/g)].map((m) => m[1]);
   assert.ok(calls.length >= 6);
   for (const route of new Set(calls)) assert.ok(server.includes(`"${route}`), `route ${route} absente de server.py`);
 });

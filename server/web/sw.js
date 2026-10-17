@@ -7,7 +7,8 @@
 const BUILD = '__BUILD__';
 const CACHE = `wb-web-${BUILD}`;
 const SHELL = [
-  '/app/', '/app/app.css', '/app/app.js', '/app/logic.js', '/app/i18n.js', '/app/manifest.webmanifest',
+  '/app/', '/app/app.css', '/app/app.js', '/app/logic.js', '/app/i18n.js', '/app/dom.js', '/app/editor.js', '/app/editor-logic.js', '/app/waveform.js',
+  '/app/manifest.webmanifest',
   '/app/icons/icon-192.png', '/app/icons/icon-512.png',
 ];
 

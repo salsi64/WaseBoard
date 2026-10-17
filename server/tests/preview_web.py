@@ -44,8 +44,9 @@ class Guild:
 G1, G2, G3 = Guild(9001, "Alpha Squad", 1), Guild(9002, "Les Potes", 2), Guild(9003, "Un serveur au nom vraiment très long pour tester", 3)
 ME = Member(20, "Alice")
 FRIEND = Member(21, "Bastien")
+ME_ADMIN = Member(20, "Alice", administrator=True)   # Alice est admin de « Les Potes » seulement
 for guild in (G1, G2, G3):
-    guild.members[20] = ME
+    guild.members[20] = ME_ADMIN if guild is G2 else ME
     guild.members[21] = FRIEND
 GUILDS = [G1, G2, G3]
 
@@ -77,7 +78,9 @@ def seed():
     catalog = []
     for index, (name, emoji, guild) in enumerate(SOUNDS):
         sound_id = f"s{index:02d}"
-        entry = {"id": sound_id, "name": name, "extension": ".wav", "hash": f"h{index}", "guild_id": str(guild.id), "uploaded_by": "21"}
+        # Alice est l'auteur de quelques sons (modifiables par elle) ; les autres sont ceux de Bastien (modifiables seulement chez « Les Potes », où elle est admin).
+        author = "20" if name in ("Applaudissements", "Bruh", "Tambour") else "21"
+        entry = {"id": sound_id, "name": name, "extension": ".wav", "hash": f"h{index}", "guild_id": str(guild.id), "uploaded_by": author}
         if emoji:
             entry["emoji"] = emoji
         if name == "Tambour":

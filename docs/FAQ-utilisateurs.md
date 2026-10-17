@@ -127,7 +127,9 @@ Commandes équivalentes à taper dans Discord : `/join`, `/leave` (déconnecte c
 **Depuis un navigateur ou un téléphone** : si votre serveur l'a activée, la page `https://<adresse du serveur>/app/` offre la même chose
 sans rien installer — connexion avec Discord, liste des sons de vos serveurs, un toucher pour jouer, « Rejoindre mon vocal », « Stop ».
 Sur téléphone, le menu du navigateur propose « Ajouter à l'écran d'accueil » : elle s'ouvre alors comme une application. Vos favoris et vos
-couleurs y sont enregistrés dans le navigateur (ils ne sont pas ceux de l'application Windows).
+couleurs y sont enregistrés dans le navigateur (ils ne sont pas ceux de l'application Windows). Vous pouvez aussi y **ajouter** des sons (bouton « + », ou en
+glissant des fichiers audio ; sur téléphone, le sélecteur de fichiers permet d'envoyer un enregistrement vocal), puis les **modifier** (menu ⋯ › Modifier…) :
+nom, emoji, découpe avec forme d'onde, nouveau fichier, serveurs où il apparaît, suppression — avec les mêmes droits que dans l'application Windows.
 
 Sans ouvrir l'application (sur téléphone, par exemple) : `/play son:…` joue un son dans votre salon vocal (tapez quelques lettres, Discord vous propose les sons disponibles), `/stop` les coupe. `/top` montre les sons et les membres les plus actifs du serveur, `/bilan` le bilan de l'année avec vos propres chiffres ; les deux ne s'affichent que pour vous, sauf avec `partager:True`.
 
