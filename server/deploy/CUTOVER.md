@@ -9,6 +9,20 @@ Portée : la bascule de **cette machine** (prod existante, `waseboard.service`) 
 rendu « public » sur le portail Discord, page d'accueil « Ajouter WaseBoard à mon serveur », annonce) est
 une étape **suivante**, volontairement hors de cette liste.
 
+## Bascule 3.4.0 — journal du 17/10/2026
+
+La bascule multi-tenant décrite plus bas est faite depuis longtemps (la prod sert déjà plusieurs serveurs Discord, port 5005 fermé, sauvegardes en place). Celle de la **3.4.0** :
+
+- [x] Version 3.4.0 (client, installeur, `SERVER_VERSION`), notes `docs/release-notes/v3.4.0.md`, CI verte.
+- [x] Sauvegarde complète juste avant (`backup.sh -s -c` : données + secrets), anciens fichiers gardés en `*.bak-20261017-145319`, `server.py --check` 13/13.
+- [x] Serveur 3.4.0 déployé en prod (`server.py audio.py effects.py diagnostics.py wb_config.py alerts.py reports.py webapp.py messages.py` + `web/`) puis `systemctl restart waseboard` (~10 s hors du vocal).
+      Retour arrière : restaurer les `*.bak-20261017-145319` (et `web.bak-…`), `sudo systemctl restart waseboard`.
+- [x] Exploitation : `waseboard-backup.service` avec `-c`, redémarrage hebdomadaire (dimanche 5 h, ancien `daily-reboot.timer` désactivé), nginx (rejet des scanners, limite de débit,
+      `/en`, racine `?frame_id=` → application web) sur `waseboard-salsi-bid` et l'ancien nom, accueil 3.4 fr/en déployée, surveillance indépendante (prod + test), sauvegarde hors machine (tâche planifiée du PC).
+- [ ] **Portail Discord (appli de prod, à faire à la main)** : OAuth2 › Redirects : `https://waseboard.salsi.bid/app/callback` et `https://127.0.0.1` · Activities › Settings : activer, URL Mappings `/` → `waseboard.salsi.bid` (+ `/discord-cdn` → `cdn.discordapp.com`).
+      Le serveur crée la commande de lancement `launch` au prochain démarrage si Discord ne l'a pas créée (message « 50226 » dans le journal tant que les Activités ne sont pas activées : normal).
+- [ ] Merge de `feature/roadmap-3.4` dans `master`, tag `v3.4.0` → la release GitHub (avec l'installeur) est créée par `.github/workflows/release.yml`.
+
 ## Pourquoi client et serveur basculent ensemble (pas l'un avant l'autre)
 
 Un simple `git merge` de `feature/multi-tenant` dans `master` ne change **rien** pour les utilisateurs :
