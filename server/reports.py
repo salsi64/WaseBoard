@@ -11,6 +11,37 @@ from datetime import datetime
 from typing import Iterable, Optional
 
 MONTHS = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre")
+MONTHS_EN = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+
+#: Textes de mise en forme, par langue (« fr » par défaut, comme tout le reste du serveur ; « en » pour les personnes dont Discord est en anglais).
+TEXTS = {
+    "fr": {
+        "deleted_sound": "(son supprimé)", "unknown_member": "Membre inconnu", "this_server": "ce serveur",
+        "days_7": "7 derniers jours", "days_365": "12 derniers mois", "days_n": "{n} derniers jours",
+        "top_title": "🏆 Top de {guild} — {period}", "top_none": "Aucun son joué sur cette période.", "top_total": "**{n}** son(s) joué(s).",
+        "top_sounds": "🔊 Sons les plus joués", "top_users": "👤 Membres les plus actifs",
+        "bilan_title": "🎉 Bilan {year} — {guild}", "bilan_none": "Aucun son joué en {year} sur ce serveur.",
+        "bilan_me": "🙋 Vous", "bilan_me_text": "**{plays}** son(s) joué(s) — **#{rank}** sur {members} membre(s), {share} % du total.",
+        "bilan_peaks": "📅 Temps forts", "bilan_day": "Jour le plus chargé : **{date}** ({count} lectures)",
+        "bilan_hour": "Heure de pointe : **{start} h – {end} h**",
+        "bilan_total": "**{total}** son(s) joué(s), **{distinct}** son(s) différent(s), sur **{days}** jour(s) d'activité.",
+    },
+    "en": {
+        "deleted_sound": "(deleted sound)", "unknown_member": "Unknown member", "this_server": "this server",
+        "days_7": "last 7 days", "days_365": "last 12 months", "days_n": "last {n} days",
+        "top_title": "🏆 Top of {guild} — {period}", "top_none": "No sound played in this period.", "top_total": "**{n}** sound(s) played.",
+        "top_sounds": "🔊 Most played sounds", "top_users": "👤 Most active members",
+        "bilan_title": "🎉 {year} in review — {guild}", "bilan_none": "No sound played in {year} on this server.",
+        "bilan_me": "🙋 You", "bilan_me_text": "**{plays}** sound(s) played — **#{rank}** out of {members} member(s), {share}% of the total.",
+        "bilan_peaks": "📅 Highlights", "bilan_day": "Busiest day: **{date}** ({count} plays)",
+        "bilan_hour": "Peak hour: **{start} – {end}**",
+        "bilan_total": "**{total}** sound(s) played, **{distinct}** different sound(s), over **{days}** active day(s).",
+    },
+}
+
+
+def texts(language: str) -> dict:
+    return TEXTS.get(language, TEXTS["fr"])
 MEDALS = ("🥇", "🥈", "🥉")
 
 #: Un champ d'embed Discord accepte 1024 caractères : on tronque les noms pour que dix lignes y tiennent toujours.
@@ -36,7 +67,7 @@ def _sound_row(sound_id: str, count: int, recorded: dict, catalog_names: dict) -
     current = catalog_names.get(sound_id) or {}
     return {
         "sound_id": sound_id,
-        "name": current.get("name") or recorded.get("sound_name") or "(son supprimé)",
+        "name": current.get("name") or recorded.get("sound_name"),  # None : son supprimé (le texte dépend de la langue, voir _sound_lines)
         "emoji": current.get("emoji") or recorded.get("emoji"),
         "count": count,
     }
@@ -101,27 +132,30 @@ def year_report(records: Iterable[dict], guild_id: str, year: int, user_id: Opti
     return report
 
 
-def _sound_lines(rows: list) -> str:
+def _sound_lines(rows: list, language: str = "fr") -> str:
+    deleted = texts(language)["deleted_sound"]
     return "\n".join(
-        f"{_rank(i)} {row['emoji'] + ' ' if row.get('emoji') else ''}**{escape_text(row['name'])}** — {row['count']}"
+        f"{_rank(i)} {row['emoji'] + ' ' if row.get('emoji') else ''}**{escape_text(row['name'] or deleted)}** — {row['count']}"
         for i, row in enumerate(rows))
 
 
-def _user_lines(rows: list) -> str:
-    return "\n".join(f"{_rank(i)} **{escape_text(row.get('username') or 'Membre inconnu')}** — {row['count']}" for i, row in enumerate(rows))
+def _user_lines(rows: list, language: str = "fr") -> str:
+    unknown = texts(language)["unknown_member"]
+    return "\n".join(f"{_rank(i)} **{escape_text(row.get('username') or unknown)}** — {row['count']}" for i, row in enumerate(rows))
 
 
-def render_top(stats: dict, guild_name: str, days: int) -> dict:
+def render_top(stats: dict, guild_name: str, days: int, language: str = "fr") -> dict:
     """Mise en forme de /top à partir de server.aggregate_play_stats : {"title", "description", "fields": [(nom, valeur)]}."""
-    period = "7 derniers jours" if days == 7 else "12 derniers mois" if days == 365 else f"{days} derniers jours"
-    title = f"🏆 Top de {escape_text(guild_name, 60)} — {period}"
+    t = texts(language)
+    period = t["days_7"] if days == 7 else t["days_365"] if days == 365 else t["days_n"].format(n=days)
+    title = t["top_title"].format(guild=escape_text(guild_name, 60), period=period)
     if not stats["total_plays"]:
-        return {"title": title, "description": "Aucun son joué sur cette période.", "fields": []}
+        return {"title": title, "description": t["top_none"], "fields": []}
     return {
         "title": title,
-        "description": f"**{stats['total_plays']}** son(s) joué(s).",
-        "fields": [("🔊 Sons les plus joués", _sound_lines(stats["top_sounds"])),
-                   ("👤 Membres les plus actifs", _user_lines(stats["top_users"][:5]))],
+        "description": t["top_total"].format(n=stats["total_plays"]),
+        "fields": [(t["top_sounds"], _sound_lines(stats["top_sounds"], language)),
+                   (t["top_users"], _user_lines(stats["top_users"][:5], language))],
     }
 
 
@@ -130,26 +164,38 @@ def _french_date(iso_date: str) -> str:
     return f"{moment.day}{'er' if moment.day == 1 else ''} {MONTHS[moment.month - 1]}"
 
 
-def render_bilan(report: dict, guild_name: str) -> dict:
+def _english_date(iso_date: str) -> str:
+    moment = datetime.fromisoformat(iso_date)
+    return f"{MONTHS_EN[moment.month - 1]} {moment.day}"
+
+
+def _english_hour(hour: int) -> str:
+    return f"{hour % 12 or 12} {'am' if hour % 24 < 12 else 'pm'}"
+
+
+def render_bilan(report: dict, guild_name: str, language: str = "fr") -> dict:
     """Mise en forme de /bilan à partir de year_report : {"title", "description", "fields": [(nom, valeur)]}."""
-    title = f"🎉 Bilan {report['year']} — {escape_text(guild_name, 60)}"
+    t = texts(language)
+    title = t["bilan_title"].format(year=report["year"], guild=escape_text(guild_name, 60))
     if not report["total_plays"]:
-        return {"title": title, "description": f"Aucun son joué en {report['year']} sur ce serveur.", "fields": []}
+        return {"title": title, "description": t["bilan_none"].format(year=report["year"]), "fields": []}
 
     fields = []
     me = report["me"]
     if me:
-        favourites = _sound_lines(me["top_sounds"])
-        fields.append(("🙋 Vous", f"**{me['plays']}** son(s) joué(s) — **#{me['rank']}** sur {me['members']} membre(s), "
-                                  f"{me['share_percent']} % du total.\n\n{favourites}"))
-    fields.append(("🔊 Sons les plus joués", _sound_lines(report["top_sounds"])))
-    fields.append(("👤 Membres les plus actifs", _user_lines(report["top_users"][:5])))
+        favourites = _sound_lines(me["top_sounds"], language)
+        text = t["bilan_me_text"].format(plays=me["plays"], rank=me["rank"], members=me["members"], share=me["share_percent"])
+        fields.append((t["bilan_me"], f"{text}\n\n{favourites}"))
+    fields.append((t["top_sounds"], _sound_lines(report["top_sounds"], language)))
+    fields.append((t["top_users"], _user_lines(report["top_users"][:5], language)))
     day, hour = report["busiest_day"], report["busiest_hour"]
-    fields.append(("📅 Temps forts", f"Jour le plus chargé : **{_french_date(day['date'])}** ({day['count']} lectures)\n"
-                                    f"Heure de pointe : **{hour} h – {(hour + 1) % 24} h**"))
+    if language == "en":
+        date_text, start, end = _english_date(day["date"]), _english_hour(hour), _english_hour(hour + 1)
+    else:
+        date_text, start, end = _french_date(day["date"]), hour, (hour + 1) % 24
+    fields.append((t["bilan_peaks"], t["bilan_day"].format(date=date_text, count=day["count"]) + "\n" + t["bilan_hour"].format(start=start, end=end)))
     return {
         "title": title,
-        "description": (f"**{report['total_plays']}** son(s) joué(s), **{report['distinct_sounds']}** son(s) différent(s), "
-                        f"sur **{report['active_days']}** jour(s) d'activité."),
+        "description": t["bilan_total"].format(total=report["total_plays"], distinct=report["distinct_sounds"], days=report["active_days"]),
         "fields": fields,
     }

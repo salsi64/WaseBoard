@@ -472,7 +472,7 @@ son déjà en cours le remplace : jamais refusé). Vous pouvez, en tant qu'hébe
 Les messages d'erreur de l'API sont rédigés dans la langue de l'application qui les demande : le client envoie `Accept-Language: fr` ou `en`, et le serveur
 répond dans cette langue (page d'invitation `/connect/…` comprise, d'après la langue du navigateur). Sans cet en-tête (ancien client, script), les messages restent
 en français, comme avant. Le catalogue est `messages.py` : `tests/test_messages.py` échoue si un message d'erreur ajouté au code n'y a pas sa traduction.
-Les réponses des commandes Discord (`/play`, `/top`…) et des panneaux restent en français pour l'instant.
+Dans Discord, le bot répond dans la **langue de Discord de la personne** (`interaction.locale`) : français pour le français, anglais pour toutes les autres langues ; les descriptions, options et choix du menu des commandes (`/play`, `/stop`, `/top`, `/bilan`, `/join`…) sont traduits de la même façon (`MessagesTranslator`), et les classements de `/top` et `/bilan` aussi. Restent en français : les panneaux et commandes d'administration (`/bot-setup`, `/panneau`, `/configurer-invitation`, `/diagnostic`, `/instance`) et les libellés des boutons des panneaux.
 
 ### Voir l'état de l'instance : `/instance`
 

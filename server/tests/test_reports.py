@@ -100,6 +100,28 @@ check("None toléré", R.escape_text(None) == "")
 many = [{"name": "N" * 60, "emoji": "🔥", "count": 99999} for _ in range(10)]
 check("dix lignes de noms très longs tiennent dans un champ Discord (1024)", len(R._sound_lines(many)) <= 1024, len(R._sound_lines(many)))
 
+print("\n--- En anglais (Discord en anglais) ---")
+top_en = R.render_top(stats, "My server", 30, "en")
+top_fields = dict(top_en["fields"])
+check("/top en anglais : titre, description, champs", top_en["title"] == "🏆 Top of My server — last 30 days" and top_en["description"] == "**12** sound(s) played."
+      and "🔊 Most played sounds" in top_fields and "👤 Most active members" in top_fields, (top_en["title"], list(top_fields)))
+check("/top en anglais : membre sans nom connu", "Unknown member" in top_fields["👤 Most active members"])
+check("/top en anglais : périodes", "last 7 days" in R.render_top(stats, "S", 7, "en")["title"] and "last 12 months" in R.render_top(stats, "S", 365, "en")["title"])
+check("/top en anglais : aucune lecture", R.render_top({"total_plays": 0, "top_sounds": [], "top_users": []}, "S", 30, "en")["description"] == "No sound played in this period.")
+check("sans langue : français (comme avant)", R.render_top(stats, "S", 7)["title"] == R.render_top(stats, "S", 7, "fr")["title"] and "7 derniers jours" in R.render_top(stats, "S", 7)["title"])
+check("langue inconnue : français", "derniers" in R.render_top(stats, "S", 7, "xx")["title"])
+
+bilan_en = R.render_bilan(r, "My server", "en")
+bf_en = dict(bilan_en["fields"])
+check("/bilan en anglais : titre et description", bilan_en["title"] == "🎉 2026 in review — My server" and bilan_en["description"] == "**12** sound(s) played, **3** different sound(s), over **4** active day(s).", (bilan_en["title"], bilan_en["description"]))
+check("/bilan en anglais : « You » avec le rang", "**#1** out of 3 member(s)" in bf_en["🙋 You"] and "Applaudissements" in bf_en["🙋 You"], bf_en.get("🙋 You"))
+check("/bilan en anglais : temps forts avec date et heure à l'anglaise", "March 14" in bf_en["📅 Highlights"] and "Peak hour: **9 pm – 10 pm**" in bf_en["📅 Highlights"], bf_en["📅 Highlights"])
+late_en = dict(R.render_bilan(late, "S", "en")["fields"])["📅 Highlights"]
+check("heure de pointe 23 h → minuit, midi et minuit bien formés", "11 pm – 12 am" in late_en and R._english_hour(12) == "12 pm" and R._english_hour(0) == "12 am" and R._english_hour(24) == "12 am", late_en)
+check("/bilan en anglais : année vide", R.render_bilan(empty, "S", "en")["description"] == "No sound played in 2020 on this server.")
+deleted = [{"name": None, "emoji": None, "count": 2}]
+check("un son supprimé s'affiche dans la langue demandée", R.escape_text("(son supprimé)") in R._sound_lines(deleted) and R.escape_text("(deleted sound)") in R._sound_lines(deleted, "en"))
+
 print()
 print(f"{sum(results)}/{len(results)} vérifications OK")
 sys.exit(0 if all(results) else 1)

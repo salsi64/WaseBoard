@@ -882,22 +882,46 @@ PANEL_HELP_TEXT = (
 )
 
 
+def tr(interaction: discord.Interaction, text):
+    """Traduit un texte du bot selon la langue de Discord de la personne (`interaction.locale`) : français pour le français, anglais sinon
+    (voir messages.py). Un texte absent du catalogue reste tel quel."""
+    if not isinstance(text, str):
+        return text
+    return messages.translate(text, messages.discord_language(getattr(interaction, "locale", None)))
+
+
+class MessagesTranslator(app_commands.Translator):
+    """Noms, descriptions et choix des commandes affichés en anglais dans le menu de Discord pour toute personne dont Discord n'est pas en français
+    (le français reste la langue du code : c'est le texte par défaut, montré aux personnes dont Discord est en français)."""
+
+    async def translate(self, string: app_commands.locale_str, locale: discord.Locale, context: app_commands.TranslationContextTypes) -> Optional[str]:
+        if locale is discord.Locale.french:
+            return None
+        text = string.message
+        if context.location is app_commands.TranslationContextLocation.command_name:
+            return messages.COMMAND_NAMES_EN.get(text)
+        if context.location is app_commands.TranslationContextLocation.parameter_name:
+            return messages.PARAMETER_NAMES_EN.get(text)
+        translated = messages.translate(text, "en")
+        return translated if translated != text else None
+
+
 async def _handle_join_voice_button(interaction: discord.Interaction) -> None:
     """Logique du bouton "Rejoindre mon vocal", partagée par MemberPanelView et BotSetupView (deux
     boutons différents, même comportement — évite de la dupliquer)."""
     member = interaction.user
     if not isinstance(member, discord.Member) or member.voice is None or member.voice.channel is None:
         await interaction.response.send_message(
-            "Connectez-vous d'abord à un salon vocal sur Discord, puis recliquez ce bouton.", ephemeral=True)
+            tr(interaction, "Connectez-vous d'abord à un salon vocal sur Discord, puis recliquez ce bouton."), ephemeral=True)
         return
     channel = member.voice.channel
     try:
         await bot.join_guild_voice(interaction.guild_id, channel)
     except CapacityError as ex:
-        await interaction.response.send_message(f"⚠️ {ex}", ephemeral=True)
+        await interaction.response.send_message(tr(interaction, f"⚠️ {ex}"), ephemeral=True)
         return
     await interaction.response.send_message(
-        f"Connecté à **{channel.name}**. Prêt à jouer les sons envoyés par WaseBoard.", ephemeral=True)
+        tr(interaction, f"Connecté à **{channel.name}**. Prêt à jouer les sons envoyés par WaseBoard."), ephemeral=True)
 
 
 class MemberPanelView(discord.ui.View):
@@ -915,7 +939,7 @@ class MemberPanelView(discord.ui.View):
 
     @discord.ui.button(label="Aide", emoji="❓", style=discord.ButtonStyle.secondary, custom_id="waseboard_panel_help")
     async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message(PANEL_HELP_TEXT, ephemeral=True)
+        await interaction.response.send_message(tr(interaction, PANEL_HELP_TEXT), ephemeral=True)
 
 
 class InviteView(discord.ui.View):
@@ -934,7 +958,7 @@ class InviteView(discord.ui.View):
     async def send_link(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not PUBLIC_URL or not SHARED_SECRET:
             await interaction.response.send_message(
-                "Lien non configuré côté serveur (public_url/shared_secret manquants dans config.json).",
+                tr(interaction, "Lien non configuré côté serveur (public_url/shared_secret manquants dans config.json)."),
                 ephemeral=True,
             )
             return
@@ -942,9 +966,9 @@ class InviteView(discord.ui.View):
         link_view = discord.ui.View()
         link_view.add_item(discord.ui.Button(label="🚀 Ouvrir WaseBoard", style=discord.ButtonStyle.link, url=page_url))
         await interaction.response.send_message(
-            "Cliquez sur le bouton : WaseBoard s'ouvre et se connecte directement à CE serveur "
+            tr(interaction, "Cliquez sur le bouton : WaseBoard s'ouvre et se connecte directement à CE serveur "
             f"(utile si votre application est reliée à une autre instance — le lien expire dans "
-            f"{INVITE_CODE_TTL_SECONDS // 60} minutes).",
+            f"{INVITE_CODE_TTL_SECONDS // 60} minutes)."),
             view=link_view,
             ephemeral=True,
         )
@@ -972,7 +996,7 @@ class BotSetupView(discord.ui.View):
     async def send_link(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not PUBLIC_URL or not SHARED_SECRET:
             await interaction.response.send_message(
-                "Lien non configuré côté serveur (public_url/shared_secret manquants dans config.json).",
+                tr(interaction, "Lien non configuré côté serveur (public_url/shared_secret manquants dans config.json)."),
                 ephemeral=True,
             )
             return
@@ -980,9 +1004,9 @@ class BotSetupView(discord.ui.View):
         link_view = discord.ui.View()
         link_view.add_item(discord.ui.Button(label="🚀 Ouvrir WaseBoard", style=discord.ButtonStyle.link, url=page_url))
         await interaction.response.send_message(
-            "Cliquez sur le bouton : WaseBoard s'ouvre et se connecte directement à CE serveur "
+            tr(interaction, "Cliquez sur le bouton : WaseBoard s'ouvre et se connecte directement à CE serveur "
             f"(utile si votre application est reliée à une autre instance — le lien expire dans "
-            f"{INVITE_CODE_TTL_SECONDS // 60} minutes).",
+            f"{INVITE_CODE_TTL_SECONDS // 60} minutes)."),
             view=link_view,
             ephemeral=True,
         )
@@ -995,7 +1019,7 @@ class BotSetupView(discord.ui.View):
     @discord.ui.button(label="Aide", emoji="❓", style=discord.ButtonStyle.secondary,
                         custom_id="waseboard_setup_help", row=1)
     async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message(PANEL_HELP_TEXT, ephemeral=True)
+        await interaction.response.send_message(tr(interaction, PANEL_HELP_TEXT), ephemeral=True)
 
     @discord.ui.button(label="➕ Ajouter à un autre serveur", style=discord.ButtonStyle.secondary,
                         custom_id="waseboard_setup_invite", row=3)
@@ -1004,10 +1028,10 @@ class BotSetupView(discord.ui.View):
         invite_view = discord.ui.View()
         invite_view.add_item(discord.ui.Button(label="➕ Ajouter WaseBoard à mon serveur", style=discord.ButtonStyle.link, url=invite_url))
         await interaction.response.send_message(
-            "Ajoutez ce bot WaseBoard à un **autre** serveur Discord (le vôtre ou celui d'un ami) — chaque "
+            tr(interaction, "Ajoutez ce bot WaseBoard à un **autre** serveur Discord (le vôtre ou celui d'un ami) — chaque "
             "serveur obtient sa **propre bibliothèque de sons**, totalement indépendante des autres : pratique "
             "si vous gérez plusieurs communautés Discord. Il faut avoir le droit « Gérer le serveur » sur ce "
-            "nouveau serveur pour l'ajouter.",
+            "nouveau serveur pour l'ajouter."),
             view=invite_view,
             ephemeral=True,
         )
@@ -1119,6 +1143,7 @@ class WaseBoardServer(commands.Bot):
         self.add_view(InviteView())
         self.add_view(MemberPanelView())
         self.add_view(BotSetupView())
+        await self.tree.set_translator(MessagesTranslator())  # avant toute synchronisation des commandes (voir plus bas)
 
         if not GUILD_ID:
             await self.tree.sync()
@@ -3183,18 +3208,18 @@ bot = WaseBoardServer()
 async def join(interaction: discord.Interaction) -> None:
     member = interaction.user
     if not isinstance(member, discord.Member) or member.voice is None or member.voice.channel is None:
-        await interaction.response.send_message("Vous devez d'abord être connecté à un salon vocal.", ephemeral=True)
+        await interaction.response.send_message(tr(interaction, "Vous devez d'abord être connecté à un salon vocal."), ephemeral=True)
         return
 
     channel = member.voice.channel
     try:
         await bot.join_guild_voice(interaction.guild_id, channel)
     except CapacityError as ex:
-        await interaction.response.send_message(f"⚠️ {ex}", ephemeral=True)
+        await interaction.response.send_message(tr(interaction, f"⚠️ {ex}"), ephemeral=True)
         return
 
     await interaction.response.send_message(
-        f"Connecté à **{channel.name}**. Prêt à jouer les sons envoyés par WaseBoard.",
+        tr(interaction, f"Connecté à **{channel.name}**. Prêt à jouer les sons envoyés par WaseBoard."),
         ephemeral=True
     )
 
@@ -3203,7 +3228,7 @@ async def join(interaction: discord.Interaction) -> None:
 async def leave(interaction: discord.Interaction) -> None:
     left = await bot.leave_guild_voice(interaction.guild_id)
     await interaction.response.send_message(
-        "Déconnecté du salon vocal." if left else "Je ne suis connecté à aucun salon vocal ici.",
+        tr(interaction, "Déconnecté du salon vocal." if left else "Je ne suis connecté à aucun salon vocal ici."),
         ephemeral=True
     )
 
@@ -3429,44 +3454,44 @@ def _embed_from(view: dict) -> discord.Embed:
 async def play_command(interaction: discord.Interaction, son: str) -> None:
     member = interaction.user
     if not isinstance(member, discord.Member) or member.voice is None or member.voice.channel is None:
-        await interaction.response.send_message("Vous devez d'abord être connecté à un salon vocal.", ephemeral=True)
+        await interaction.response.send_message(tr(interaction, "Vous devez d'abord être connecté à un salon vocal."), ephemeral=True)
         return
     channel, guild_id = member.voice.channel, interaction.guild_id
     await interaction.response.defer(ephemeral=True, thinking=True)  # rejoindre le salon peut prendre un instant
 
     entry, problem = find_sound_for_command(son, await _catalog_for_user(member.id))
     if entry is None:
-        await interaction.followup.send(f"❌ {problem}", ephemeral=True)
+        await interaction.followup.send(tr(interaction, f"❌ {problem}"), ephemeral=True)
         return
     file_path = SOUNDS_DIR / f"{entry['id']}{entry['extension']}"
     if not file_path.exists():
-        await interaction.followup.send("❌ Le fichier de ce son est introuvable sur le serveur.", ephemeral=True)
+        await interaction.followup.send(tr(interaction, "❌ Le fichier de ce son est introuvable sur le serveur."), ephemeral=True)
         return
 
     vc = bot.voice_clients_map.get(guild_id)
     if vc is not None and vc.is_connected():
         if vc.channel.id != channel.id:
             await interaction.followup.send(
-                f"Le bot est dans « {vc.channel.name} ». Rejoignez ce salon, ou utilisez /join pour l'amener dans le vôtre.",
+                tr(interaction, f"Le bot est dans « {vc.channel.name} ». Rejoignez ce salon, ou utilisez /join pour l'amener dans le vôtre."),
                 ephemeral=True)
             return
     else:
         try:
             await bot.join_guild_voice(guild_id, channel)
         except CapacityError as ex:
-            await interaction.followup.send(f"⚠️ {ex}", ephemeral=True)
+            await interaction.followup.send(tr(interaction, f"⚠️ {ex}"), ephemeral=True)
             return
         except Exception:
             log.exception("/play : impossible de rejoindre le salon vocal")
-            await interaction.followup.send("❌ Impossible de rejoindre votre salon vocal (le bot a-t-il la permission « Se connecter » ?).", ephemeral=True)
+            await interaction.followup.send(tr(interaction, "❌ Impossible de rejoindre votre salon vocal (le bot a-t-il la permission « Se connecter » ?)."), ephemeral=True)
             return
 
     try:
         await bot._start_playback(guild_id, member.id, entry, file_path, 1.0, bot.mixers[guild_id])
     except PlayRefused as refused:
-        await interaction.followup.send(f"⚠️ {refused.message}", ephemeral=True)
+        await interaction.followup.send(tr(interaction, f"⚠️ {refused.message}"), ephemeral=True)
         return
-    await interaction.followup.send(f"▶️ {_choice_label(entry)}", ephemeral=True)
+    await interaction.followup.send(tr(interaction, f"▶️ {_choice_label(entry)}"), ephemeral=True)
 
 
 @bot.tree.command(name="stop", description="Coupe les sons en cours dans le salon vocal")
@@ -3476,20 +3501,20 @@ async def play_command(interaction: discord.Interaction, son: str) -> None:
 async def stop_command(interaction: discord.Interaction, son: Optional[str] = None) -> None:
     guild_id = interaction.guild_id
     if bot.mixers.get(guild_id) is None:
-        await interaction.response.send_message("Je ne suis connecté à aucun salon vocal ici.", ephemeral=True)
+        await interaction.response.send_message(tr(interaction, "Je ne suis connecté à aucun salon vocal ici."), ephemeral=True)
         return
     if not son:
         bot._stop_guild_sounds(guild_id)
-        await interaction.response.send_message("⏹️ Sons coupés.", ephemeral=True)
+        await interaction.response.send_message(tr(interaction, "⏹️ Sons coupés."), ephemeral=True)
         return
 
     entry, problem = find_sound_for_command(son, await _catalog_for_user(interaction.user.id))
     if entry is None:
-        await interaction.response.send_message(f"❌ {problem}", ephemeral=True)
+        await interaction.response.send_message(tr(interaction, f"❌ {problem}"), ephemeral=True)
         return
     stopped = bot._stop_guild_sounds(guild_id, entry["id"])
     await interaction.response.send_message(
-        f"⏹️ {_choice_label(entry)} coupé." if stopped else f"{_choice_label(entry)} ne jouait pas.", ephemeral=True)
+        tr(interaction, f"⏹️ {_choice_label(entry)} coupé." if stopped else f"{_choice_label(entry)} ne jouait pas."), ephemeral=True)
 
 
 @bot.tree.command(name="top", description="Les sons les plus joués et les membres les plus actifs du serveur")
@@ -3505,10 +3530,11 @@ async def top_command(interaction: discord.Interaction, periode: int = 30, parta
     try:
         names = {e["id"]: e for e in load_catalog()}
         stats = await asyncio.to_thread(aggregate_play_stats, str(interaction.guild_id), periode, names)
-        view = reports.render_top(stats, interaction.guild.name if interaction.guild else "ce serveur", periode)
+        language = messages.discord_language(getattr(interaction, "locale", None))
+        view = reports.render_top(stats, interaction.guild.name if interaction.guild else reports.texts(language)["this_server"], periode, language)
     except Exception:
         log.exception("Échec de /top")
-        await interaction.followup.send("❌ Impossible de calculer le classement (voir les journaux du serveur).", ephemeral=True)
+        await interaction.followup.send(tr(interaction, "❌ Impossible de calculer le classement (voir les journaux du serveur)."), ephemeral=True)
         return
     await interaction.followup.send(embed=_embed_from(view))
 
@@ -3525,10 +3551,11 @@ async def bilan_command(interaction: discord.Interaction, annee: Optional[app_co
         names = {e["id"]: e for e in load_catalog()}
         guild_key, user_key = str(interaction.guild_id), str(interaction.user.id)
         report = await asyncio.to_thread(lambda: reports.year_report(_read_jsonl(STATS_PATH), guild_key, year, user_key, names))
-        view = reports.render_bilan(report, interaction.guild.name if interaction.guild else "ce serveur")
+        language = messages.discord_language(getattr(interaction, "locale", None))
+        view = reports.render_bilan(report, interaction.guild.name if interaction.guild else reports.texts(language)["this_server"], language)
     except Exception:
         log.exception("Échec de /bilan")
-        await interaction.followup.send("❌ Impossible de calculer le bilan (voir les journaux du serveur).", ephemeral=True)
+        await interaction.followup.send(tr(interaction, "❌ Impossible de calculer le bilan (voir les journaux du serveur)."), ephemeral=True)
         return
     await interaction.followup.send(embed=_embed_from(view))
 
