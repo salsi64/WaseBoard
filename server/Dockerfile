@@ -1,6 +1,6 @@
 # Serveur WaseBoard — image autonome (Python + ffmpeg + libopus).
 # Les données (catalogue, sons, sessions...) vivent dans le volume /data, jamais dans l'image.
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # ffmpeg : décodage des sons ; libopus0 : le serveur envoie du PCM, discord.py l'encode donc en Opus.
 RUN apt-get update \
