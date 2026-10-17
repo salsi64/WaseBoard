@@ -4,349 +4,338 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WaseBoard</title>
+<meta name="description" content="Soundboard partagé pour Discord : cliquez un son, il joue sur vos enceintes et dans le vocal, pour tout le monde. Application Windows, version web et téléphone.">
+<meta name="theme-color" content="#0b1220">
+<link rel="alternate" hreflang="fr" href="/">
 <link rel="alternate" hreflang="en" href="/en">
-<meta name="description" content="Soundboard partagé pour Discord : cliquez un son, il joue sur vos enceintes et dans le vocal, pour tout le monde.">
+<meta property="og:title" content="WaseBoard">
+<meta property="og:description" content="Le soundboard partagé de votre vocal Discord.">
+<meta property="og:image" content="https://waseboard.salsi.bid/img/hero-flat-3.4.png">
 <style>
+  /* Une seule ambiance (nuit bleue de l'application) ; les accents reprennent ceux des boutons de son : bleu, rose, vert, ambre. */
   :root {
-    --bg: #0F1624;
-    --panel: #182236;
-    --panel-hi: #1E2C45;
-    --accent: #38BDF8;
-    --accent-2: #F472B6;
-    --accent-3: #34D399;
-    --accent-4: #FBBF24;
-    --on-accent: #0B1220;
-    --text: #EAF0FA;
-    --text-dim: #B8C4D9;
-    --track: #26324A;
+    color-scheme: dark;
+    --bg: #0b1220;
+    --bg-2: #0f1830;
+    --panel: #131d33;
+    --panel-hi: #1a2745;
+    --line: #24324f;
+    --text: #eaf0fa;
+    --dim: #a3b2cc;
+    --accent: #38bdf8;
+    --pink: #f472b6;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --on-accent: #08121f;
+    --radius: 16px;
+    --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
   body {
-    margin: 0;
-    background:
-      radial-gradient(600px 300px at 50% -10%, #1C2B47 0%, transparent 70%),
-      var(--bg);
-    color: var(--text);
-    font-family: "Segoe UI", -apple-system, sans-serif;
-    line-height: 1.6;
+    margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 16px; line-height: 1.6;
+    background-image:
+      radial-gradient(900px 420px at 80% -80px, rgba(56, 189, 248, .14), transparent 70%),
+      radial-gradient(700px 360px at 0% 320px, rgba(244, 114, 182, .08), transparent 70%);
+    background-repeat: no-repeat;
   }
-  .wrap {
-    max-width: 760px;
-    margin: 0 auto;
-    padding: 48px 20px 80px;
-  }
-  header {
-    text-align: center;
-    margin-bottom: 8px;
-  }
-  header .emoji { font-size: 48px; }
-  h1 { font-size: 32px; margin: 8px 0 4px; }
-  .tagline {
-    color: var(--text-dim);
-    font-size: 15px;
-    max-width: 480px;
-    margin: 0 auto;
-  }
+  img { max-width: 100%; height: auto; }
+  a { color: var(--accent); }
+  code { background: var(--panel-hi); padding: 1px 7px; border-radius: 6px; font-size: .9em; }
+  .wrap { max-width: 1140px; margin: 0 auto; padding-inline: max(20px, env(safe-area-inset-left, 0px)) max(20px, env(safe-area-inset-right, 0px)); }
+  h1, h2, h3 { font-family: var(--font-display); letter-spacing: -.02em; line-height: 1.15; text-wrap: balance; margin: 0; }
+  h2 { font-size: clamp(1.5rem, 3.2vw, 2.1rem); }
+  h3 { font-size: 1.1rem; letter-spacing: -.01em; }
+  p { margin: 0; }
+  .eyebrow { color: var(--accent); font-weight: 700; font-size: .8rem; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 10px; }
+  .lead { color: var(--dim); font-size: 1.08rem; max-width: 56ch; }
 
-  /* égaliseur décoratif */
-  .eq { display: flex; justify-content: center; gap: 4px; align-items: flex-end; height: 22px; margin: 14px 0 22px; }
-  .eq span {
-    width: 4px; border-radius: 2px; opacity: .9;
-    animation: bounce 1.1s ease-in-out infinite;
-  }
-  .eq span:nth-child(1) { height: 6px;  background: var(--accent);   animation-delay: 0s; }
-  .eq span:nth-child(2) { height: 16px; background: var(--accent-2); animation-delay: .1s; }
-  .eq span:nth-child(3) { height: 22px; background: var(--accent-4); animation-delay: .2s; }
-  .eq span:nth-child(4) { height: 12px; background: var(--accent-3); animation-delay: .3s; }
-  .eq span:nth-child(5) { height: 18px; background: var(--accent-2); animation-delay: .4s; }
-  @keyframes bounce { 0%, 100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
-  @media (prefers-reduced-motion: reduce) { .eq span { animation: none; } }
+  /* Barre du haut */
+  .nav { position: sticky; top: 0; z-index: 10; background: rgba(11, 18, 32, .82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+  .nav .wrap { display: flex; align-items: center; gap: 22px; min-height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.15rem; color: var(--text); text-decoration: none; margin-right: auto; }
+  .brand span { font-size: 1.5rem; }
+  .nav a.link { color: var(--dim); text-decoration: none; font-weight: 600; font-size: .95rem; }
+  .nav a.link:hover { color: var(--text); }
+  .nav .lang { border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; font-size: .85rem; }
 
-  .hero-shot {
-    display: block;
-    max-width: 100%;
-    width: 100%;
-    border-radius: 14px;
-    border: 1px solid var(--track);
-    box-shadow: 0 20px 60px -20px #000A;
-    margin: 28px 0;
-    height: auto;
+  /* Boutons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 13px 22px; border-radius: 12px; font-weight: 700; font-size: 1rem;
+    text-decoration: none; border: 1px solid transparent; transition: transform .12s ease, filter .12s ease, background .12s ease;
   }
+  .btn:hover { transform: translateY(-1px); filter: brightness(1.08); }
+  .btn:focus-visible, .nav a:focus-visible, a.card-link:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .btn.primary { background: var(--accent); color: var(--on-accent); }
+  .btn.web { background: linear-gradient(135deg, var(--green), var(--accent)); color: var(--on-accent); }
+  .btn.ghost { background: var(--panel); color: var(--text); border-color: var(--line); }
+  .btn.small { padding: 8px 16px; font-size: .9rem; border-radius: 10px; }
+  .btn.big { padding: 14px 22px; font-size: 1rem; }
 
-  .card {
-    background: var(--panel);
-    border-radius: 12px;
-    padding: 24px 28px;
-    margin-bottom: 20px;
-  }
-  .card h2 { margin-top: 0; font-size: 18px; }
-  .card h3 { font-size: 15px; margin: 0 0 6px; }
-  .card p, .card li { font-size: 14px; color: var(--text-dim); }
-  ol, ul { padding-left: 20px; margin-bottom: 0; }
-  li { margin-bottom: 8px; }
-  li:last-child { margin-bottom: 0; }
+  /* En-tête */
+  .hero { padding-block: 56px 28px; }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.2fr); gap: 40px; align-items: center; }
+  .hero h1 { font-size: clamp(2.1rem, 5vw, 3.3rem); font-weight: 800; }
+  .hero h1 em { font-style: normal; background: linear-gradient(120deg, var(--accent), var(--pink)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero .lead { margin-top: 18px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; padding: 0; list-style: none; }
+  .chips li { color: var(--dim); font-size: .88rem; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; }
+  .shot { border-radius: 14px; border: 1px solid var(--line); box-shadow: 0 30px 80px -30px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .03); display: block; width: 100%; }
+  .also { margin-top: 14px; color: var(--dim); font-size: .92rem; }
 
-  a.button {
-    display: inline-block;
-    text-decoration: none;
-    padding: 12px 22px;
-    border-radius: 10px;
-    font-weight: 600;
-    font-size: 14px;
-  }
-  a.button.primary { background: var(--accent); color: var(--on-accent); }
-  a.button.secondary { background: var(--panel-hi); color: var(--text); border: 1px solid var(--track); }
-  a.button:hover { opacity: 0.85; }
-  a.button.block { display: block; text-align: center; margin-top: 16px; }
-  a.link { color: var(--accent); }
-  code {
-    background: var(--track);
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 13px;
-  }
-  .actions {
-    text-align: center;
-    margin: 28px 0;
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-    flex-wrap: wrap;
-  }
+  /* Sections */
+  section { padding-block: 56px; }
+  .head { display: grid; gap: 4px; margin-bottom: 30px; }
 
-  /* diagramme d'architecture */
-  .diagram { width: 100%; height: auto; margin: 4px 0 12px; }
-  .diagram .box { fill: var(--panel-hi); stroke: var(--track); }
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; counter-reset: step; padding: 0; margin: 0; list-style: none; }
+  .steps li { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; counter-increment: step; }
+  .steps li::before {
+    content: counter(step); display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; margin-bottom: 14px;
+    background: var(--accent); color: var(--on-accent); font-weight: 800;
+  }
+  .steps li:nth-child(2)::before { background: var(--pink); }
+  .steps li:nth-child(3)::before { background: var(--green); }
+  .steps p { color: var(--dim); margin-top: 6px; font-size: .96rem; }
+  .steps .more { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .web-panel {
+    display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 40px; align-items: center; padding: 38px;
+    background: linear-gradient(135deg, rgba(52, 211, 153, .12), rgba(56, 189, 248, .10)), var(--panel); border: 1px solid var(--line); border-radius: 24px;
+  }
+  .web-panel ul { margin: 20px 0 26px; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .web-panel li { padding-left: 30px; position: relative; color: var(--dim); }
+  .web-panel li::before { content: "✓"; position: absolute; left: 0; color: var(--green); font-weight: 800; }
+  .web-panel li strong { color: var(--text); }
+  .phone { justify-self: center; width: min(100%, 300px); border-radius: 36px; padding: 10px; background: #05080f; border: 1px solid var(--line); box-shadow: 0 30px 70px -28px rgba(0, 0, 0, .9); }
+  .phone img { display: block; width: 100%; border-radius: 27px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .feature { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
+  .feature .ico { font-size: 1.7rem; line-height: 1; display: block; margin-bottom: 12px; }
+  .feature p { color: var(--dim); margin-top: 6px; font-size: .95rem; }
+  .feature a { color: var(--accent); font-weight: 600; text-decoration: none; display: inline-block; margin-top: 10px; font-size: .92rem; }
+  .feature a:hover { text-decoration: underline; }
+
+  .spot { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 36px; align-items: center; margin-top: 22px; padding: 28px;
+    border: 1px solid var(--line); border-radius: 22px; background: var(--panel); }
+  .spot.flip { grid-template-columns: minmax(0, 1fr) minmax(0, 280px); }
+  .spot.flip .shot-wrap { order: 2; }
+  .spot img { border-radius: 14px; border: 1px solid var(--line); display: block; margin: 0 auto; }
+  .spot p { color: var(--dim); margin-top: 10px; }
+  .spot .btn { margin-top: 18px; }
+  .spot .tag { display: inline-block; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--amber); border: 1px solid var(--amber); border-radius: 999px; padding: 2px 10px; margin-bottom: 12px; }
+
+  .hosts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .host { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; display: flex; flex-direction: column; }
+  .host.rec { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(56, 189, 248, .25); }
+  .host .badge { align-self: flex-start; background: var(--accent); color: var(--on-accent); font-size: .72rem; font-weight: 800; letter-spacing: .06em; padding: 3px 10px; border-radius: 999px; margin-bottom: 12px; }
+  .host ul { padding-left: 20px; color: var(--dim); margin: 12px 0 22px; display: grid; gap: 4px; }
+  .host .btn { margin-top: auto; align-self: flex-start; }
+  .diagram { width: 100%; max-width: 640px; height: auto; margin: 0 auto 26px; display: block; }
+  .diagram .box { fill: var(--panel-hi); stroke: var(--line); }
   .diagram text { fill: var(--text); font-family: inherit; font-size: 13px; }
-  .diagram .sub { fill: var(--text-dim); font-size: 11px; }
+  .diagram .sub { fill: var(--dim); font-size: 11px; }
   .diagram .flow { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 5; fill: none; animation: dash 1.2s linear infinite; }
   @keyframes dash { to { stroke-dashoffset: -20; } }
-  @media (prefers-reduced-motion: reduce) { .diagram .flow { animation: none; } }
 
-  /* choix du mode d'installation */
-  .choice-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 16px;
-    margin-bottom: 20px;
-  }
-  .choice {
-    background: var(--panel);
-    border-radius: 12px;
-    padding: 22px 24px;
-    border: 1px solid var(--track);
-    display: flex;
-    flex-direction: column;
-  }
-  .choice.recommended {
-    --card-accent: var(--accent);
-    border-color: var(--card-accent);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--card-accent) 25%, transparent);
-    position: relative;
-  }
-  .choice.accent { --card-accent: var(--accent); border-color: var(--card-accent); }
-  .badge {
-    position: absolute; top: -11px; left: 20px;
-    background: var(--card-accent, var(--accent)); color: var(--on-accent);
-    font-size: 11px; font-weight: 700; letter-spacing: .02em;
-    padding: 3px 10px; border-radius: 999px;
-  }
-  .choice p, .choice li { font-size: 13.5px; }
-  .choice .spacer { flex: 1; }
+  .final { text-align: center; padding-block: 64px; border-block: 1px solid var(--line); background: radial-gradient(600px 240px at 50% 0, rgba(56, 189, 248, .12), transparent 70%), var(--bg-2); }
+  .final .cta { justify-content: center; }
+  .final .lead { margin: 12px auto 0; }
 
-  .note {
-    font-size: 12px;
-    color: var(--text-dim);
-    opacity: 0.8;
-    text-align: center;
-    margin-top: 40px;
-  }
-  .actions-hint {
-    text-align: center;
-    font-size: 13px;
-    color: var(--text-dim);
-    margin: -14px 0 28px;
-  }
-  .section-label {
-    text-align: center;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: .04em;
-    margin: 36px 0 -4px;
-  }
+  footer { padding-block: 34px 56px; color: var(--dim); font-size: .9rem; text-align: center; }
+  footer a { color: var(--dim); }
+  footer .links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin-top: 10px; }
 
-  /* nouveautés de la version */
-  .news {
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    gap: 28px;
-    align-items: center;
-    border: 1px solid var(--track);
-    background:
-      radial-gradient(420px 220px at 0% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
-      var(--panel);
+  @media (max-width: 860px) {
+    .hero .wrap, .web-panel, .spot, .spot.flip { grid-template-columns: minmax(0, 1fr); }
+    .spot.flip .shot-wrap { order: 0; }
+    .steps, .grid, .hosts { grid-template-columns: minmax(0, 1fr); }
+    .hero { padding-block: 36px 12px; }
+    .web-panel { padding: 26px 20px; }
+    .nav .link { display: none; }
+    .nav .wrap { gap: 12px; }
   }
-  .news-shot {
-    width: 100%;
-    height: auto;
-    border-radius: 14px;
-    border: 1px solid var(--track);
-    box-shadow: 0 18px 44px -18px #000C;
-  }
-  .news h2 { font-size: 19px; margin: 0 0 14px; }
-  .news ul { list-style: none; padding: 0; margin: 0 0 18px; }
-  .news li { padding-left: 30px; position: relative; margin-bottom: 10px; font-size: 14px; }
-  .news li::before { content: attr(data-i); position: absolute; left: 0; top: 0; font-size: 16px; }
-  .news li strong { color: var(--text); }
-  .news .fine { font-size: 12px; opacity: .8; margin: -6px 0 16px; }
-  @media (max-width: 640px) {
-    .news { grid-template-columns: 1fr; }
-    .news-shot { max-width: 280px; margin: 0 auto; }
-  }
-
-  /* apparition progressive au scroll (dégradée proprement si JS coupé) */
-  html.js .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
-  html.js .reveal.in { opacity: 1; transform: none; }
+  @media (max-width: 520px) { .nav .lang { display: none; } .nav .btn.small { padding: 8px 12px; } .cta .btn { flex: 1 1 100%; } .final .cta .btn { flex: 1 1 100%; } }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .btn { transition: none; } .diagram .flow { animation: none; } }
 </style>
 </head>
 <body>
-  <script>document.documentElement.classList.add('js');</script>
-  <div class="wrap">
-    <header>
-      <div class="emoji">🎛️</div>
-      <h1>WaseBoard</h1>
-      <div class="tagline">Soundboard partagé pour Discord — cliquez un son, il joue à la fois sur vos enceintes et dans le vocal, pour tout le monde, sans jamais passer par votre micro.</div>
-      <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
-    </header>
-
-    <img class="hero-shot reveal" src="img/hero-flat-3.4.png" width="1760" height="1056" alt="Capture d'écran de WaseBoard 3.4 : boutons de son en pilules colorées avec leur forme d'onde, catégories repliables, bouton Clip, barre latérale avec les serveurs Discord et les personnes qui jouent un son en ce moment">
-
-    <div class="actions">
-      <a class="button primary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger le client Windows</a>
-      <a class="button secondary" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter WaseBoard à mon serveur</a>
-      <a class="button secondary" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord WaseBoard</a>
+  <nav class="nav" aria-label="Navigation">
+    <div class="wrap">
+      <a class="brand" href="/"><span aria-hidden="true">🎛️</span> WaseBoard</a>
+      <a class="link" href="#demarrer">Démarrer</a>
+      <a class="link" href="#web">Version web</a>
+      <a class="link" href="#fonctions">Fonctions</a>
+      <a class="link" href="#heberger">Héberger</a>
+      <a class="link lang" href="/en" hreflang="en">English</a>
+      <a class="btn web small" href="/app/">🌐 Utiliser sur le web</a>
     </div>
-    <div class="actions-hint">La plupart des gens n'ont besoin que du premier bouton — voir ci-dessous. <a class="link" href="#nouveautes">Nouveautés de la 3.4 ↓</a></div>
+  </nav>
 
-    <div class="choice recommended reveal" style="--card-accent: var(--accent-2); margin-bottom: 20px;">
-      <span class="badge">LE PLUS FRÉQUENT</span>
-      <h3>🙋 Vous voulez juste utiliser WaseBoard</h3>
-      <p>Le bot est presque sûrement déjà sur votre serveur Discord :</p>
-      <ol>
-        <li>Téléchargez le client ci-dessus</li>
-        <li>Connectez-vous avec Discord</li>
-      </ol>
-      <p style="opacity:.8; margin-top:12px; margin-bottom:0;">C'est tout, rien d'autre à saisir. Vous rejoignez plutôt un autre serveur WaseBoard auto-hébergé ? Cliquez « Vous avez votre propre serveur WaseBoard ? » au premier lancement.</p>
-    </div>
-
-    <div class="section-label">Nouveau · expérimental</div>
-
-    <div class="card news reveal">
-      <img class="news-shot" src="img/micro-en-jeu-interrupteur.png" width="185" height="174" loading="lazy" alt="L'interrupteur Jeu / Discord de WaseBoard : le mode actif est allumé">
+  <header class="hero">
+    <div class="wrap">
       <div>
-        <h2>🎮 Vos sons aussi dans le vocal de vos jeux</h2>
-        <p>Avec le <strong>micro en jeu</strong>, vos sons passent dans votre micro : vos coéquipiers les entendent dans Valorant, CS2, Fortnite… Sans logiciel en plus, sans rien changer dans le jeu. Un bouton <strong>🎮 Jeu / 🎧 Discord</strong> choisit où vont vos sons.</p>
-        <a class="button secondary" href="/micro-en-jeu.html">Découvrir le micro en jeu →</a>
-      </div>
-    </div>
-
-    <div class="section-label" id="nouveautes">Nouveau dans la version 3.4</div>
-
-    <div class="card news reveal">
-      <img class="news-shot" src="img/clip-trim.png" width="420" height="411" loading="lazy" alt="Capture de la fenêtre d'ajout d'un son ouverte par le clip : nom « Clip 18:20 », découpe sur la forme d'onde, boutons Écouter l'extrait et Tout garder">
-      <div>
-        <h2>Créez des sons en une seconde, jouez-les de partout</h2>
-        <ul>
-          <li data-i="🎞"><strong>Clip des dernières secondes</strong> : un raccourci garde ce qui vient de passer sur votre PC (jeu, vidéo, Discord) et ouvre la fenêtre d'ajout pour en faire un son. Désactivé par défaut ; tout reste en mémoire tant que vous ne le demandez pas.</li>
-          <li data-i="🌐"><strong>Version web</strong> : la même liste de sons dans un navigateur ou sur téléphone, avec ajout et édition de sons.</li>
-          <li data-i="🚀"><strong>Activité Discord</strong> : WaseBoard s'ouvre dans votre salon vocal, sans quitter Discord.</li>
-          <li data-i="⌨️"><strong>Commandes <code>/play</code>, <code>/stop</code>, <code>/top</code>, <code>/bilan</code></strong> : jouer un son (avec recherche), tout couper, classements du serveur.</li>
-          <li data-i="🇬🇧"><strong>Interface en anglais</strong> (et toujours en français) : WaseBoard suit la langue de Windows.</li>
-          <li data-i="🛠"><strong>Pour qui héberge</strong> : alertes par message privé, surveillance indépendante, sauvegarde hors de la machine.</li>
+        <p class="eyebrow">Soundboard partagé pour Discord</p>
+        <h1>Cliquez un son. <em>Tout le vocal l'entend.</em></h1>
+        <p class="lead">WaseBoard joue vos sons sur vos enceintes et dans votre salon vocal Discord, pour tout le monde, sans jamais passer par votre micro.</p>
+        <div class="cta">
+          <a class="btn primary big" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger pour Windows</a>
+          <a class="btn web big" href="/app/">🌐 Utiliser sur le web</a>
+        </div>
+        <p class="also">Rien à installer avec la version web : ordinateur, tablette ou téléphone.
+          <a href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">Ajouter le bot à mon serveur</a></p>
+        <ul class="chips" aria-label="Points clés">
+          <li>Gratuit</li><li>Open source</li><li>Windows · Web · Téléphone</li><li>Français et anglais</li>
         </ul>
-        <div class="fine">La version web et l'Activité demandent un serveur WaseBoard à jour (c'est le cas de l'instance publique).</div>
-        <a class="button secondary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Mettre à jour · notes de version</a>
+      </div>
+      <img class="shot" src="img/hero-flat-3.4.png" width="1760" height="1056"
+           alt="Capture d'écran de WaseBoard : boutons de son en pilules colorées avec leur forme d'onde, catégories repliables, bouton Clip, barre latérale avec les serveurs Discord et les personnes qui jouent un son en ce moment">
+    </div>
+  </header>
+
+  <section id="demarrer">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Démarrer</p>
+        <h2>Prêt en trois étapes</h2>
+      </div>
+      <ol class="steps">
+        <li>
+          <h3>Installez ou ouvrez</h3>
+          <p>Téléchargez l'application Windows, ou ouvrez simplement la version web : c'est le même catalogue de sons.</p>
+          <div class="more"><a class="btn primary small" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Windows</a><a class="btn web small" href="/app/">🌐 Web</a></div>
+        </li>
+        <li>
+          <h3>Connectez-vous avec Discord</h3>
+          <p>Votre compte suffit : il sert à afficher votre avatar et à retrouver votre salon vocal. Rien d'autre à saisir.</p>
+          <div class="more"><a class="btn ghost small" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Le bot n'est pas sur mon serveur</a></div>
+        </li>
+        <li>
+          <h3>Rejoignez le vocal, cliquez</h3>
+          <p>Entrez dans un salon vocal, cliquez « 🔊 Rejoindre mon vocal » (ou tapez /join), puis cliquez un son : tout le monde l'entend.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="web">
+    <div class="wrap">
+      <div class="web-panel">
+        <div>
+          <p class="eyebrow">Nouveau · version web</p>
+          <h2>WaseBoard dans votre navigateur</h2>
+          <ul>
+            <li><strong>Aucune installation</strong> : ouvrez la page, connectez-vous avec Discord, c'est prêt.</li>
+            <li><strong>Sur téléphone</strong> : « Ajouter à l'écran d'accueil » et WaseBoard se comporte comme une appli.</li>
+            <li><strong>Tout y est</strong> : jouer, arrêter, favoris, couleurs, et même ajouter ou découper des sons.</li>
+          </ul>
+          <a class="btn web big" href="/app/">🌐 Ouvrir la version web</a>
+        </div>
+        <div class="phone"><img src="img/web-phone.png" width="780" height="1520" loading="lazy"
+          alt="La version web sur téléphone : recherche, serveurs, sons en pilules colorées, bouton Rejoindre mon vocal"></div>
       </div>
     </div>
+  </section>
 
-    <div class="section-label">Vous administrez un serveur Discord ?</div>
+  <section id="fonctions">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Fonctions</p>
+        <h2>Tout ce qu'il faut pour un vocal qui s'amuse</h2>
+      </div>
+      <div class="grid">
+        <article class="feature"><span class="ico" aria-hidden="true">🎞</span><h3>Clip des dernières secondes</h3><p>Un raccourci garde ce qui vient de passer sur votre PC (jeu, vidéo, Discord) et en fait un son.</p></article>
+        <article class="feature"><span class="ico" aria-hidden="true">✏️</span><h3>Éditeur de sons</h3><p>Nom, emoji, couleur, volume de 0 à 200 %, découpe sur la forme d'onde, remplacement du fichier.</p></article>
+        <article class="feature"><span class="ico" aria-hidden="true">⌨️</span><h3>Commandes Discord</h3><p><code>/play</code> avec recherche, <code>/stop</code>, <code>/top</code> et <code>/bilan</code> : sans ouvrir l'application.</p></article>
+        <article class="feature"><span class="ico" aria-hidden="true">🎮</span><h3>Micro en jeu</h3><p>Vos sons passent aussi dans votre micro : vos coéquipiers les entendent dans Valorant, CS2, Fortnite…</p><a href="/micro-en-jeu.html">Découvrir →</a></article>
+        <article class="feature"><span class="ico" aria-hidden="true">🗂</span><h3>Plusieurs serveurs</h3><p>Un catalogue par serveur Discord, des catégories perso, des favoris, des raccourcis clavier globaux.</p></article>
+        <article class="feature"><span class="ico" aria-hidden="true">🌍</span><h3>Français et anglais</h3><p>L'application suit la langue de Windows ; thèmes clair, sombre, Flat et palettes de couleurs au choix.</p></article>
+      </div>
 
-    <div class="card reveal">
-      <h2>Comment ça marche</h2>
-      <p>Le <strong>bot Discord</strong> et l'<strong>application Windows</strong> se connectent tous les deux au même endroit : un « serveur WaseBoard », qui héberge le catalogue de sons et fait le lien entre les deux.</p>
-      <svg class="diagram" viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Schéma : votre serveur Discord et l'application WaseBoard se connectent tous les deux à un serveur WaseBoard central">
+      <div class="spot">
+        <div class="shot-wrap"><img src="img/clip-trim.png" width="420" height="411" loading="lazy" alt="La fenêtre d'ajout ouverte par le clip : nom, découpe sur la forme d'onde"></div>
+        <div>
+          <h3>🎞 Un moment drôle ? Gardez-le en un raccourci</h3>
+          <p>WaseBoard garde en mémoire les 10, 15 ou 30 dernières secondes du son de votre PC. Un raccourci, et la fenêtre d'ajout s'ouvre : vous découpez, vous nommez, c'est un son. Désactivé par défaut ; rien n'est écrit sur le disque avant que vous le demandiez, et un voyant rouge indique que la capture tourne.</p>
+          <a class="btn ghost small" href="https://github.com/salsi64/WaseBoard/blob/master/docs/clip-dernieres-secondes.md">Lire le guide</a>
+        </div>
+      </div>
+      <div class="spot flip">
+        <div>
+          <span class="tag">Expérimental</span>
+          <h3>🎮 Vos sons aussi dans le vocal de vos jeux</h3>
+          <p>Avec le micro en jeu, vos sons passent dans votre micro, sans logiciel en plus et sans rien changer dans le jeu. Un bouton 🎮 Jeu / 🎧 Discord choisit où ils vont.</p>
+          <a class="btn ghost small" href="/micro-en-jeu.html">Découvrir le micro en jeu</a>
+        </div>
+        <div class="shot-wrap"><img src="img/micro-en-jeu-interrupteur.png" width="370" height="348" loading="lazy" alt="L'interrupteur Jeu / Discord de WaseBoard : le mode actif est allumé"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="heberger">
+    <div class="wrap">
+      <div class="head">
+        <p class="eyebrow">Vous administrez un serveur Discord ?</p>
+        <h2>Comment ça marche, côté serveur</h2>
+        <p class="lead">Le bot Discord et l'application se connectent au même endroit : un « serveur WaseBoard », qui héberge le catalogue de sons. Celui de cette page est public et gratuit.</p>
+      </div>
+      <svg class="diagram" viewBox="0 0 600 120" xmlns="http://www.w3.org/2000/svg" role="img"
+           aria-label="Schéma : votre serveur Discord, l'application et la version web se connectent à un serveur WaseBoard central">
         <rect class="box" x="8" y="30" width="162" height="60" rx="12"/>
         <text x="89" y="55" text-anchor="middle">💬 Votre Discord</text>
         <text class="sub" x="89" y="72" text-anchor="middle">salon vocal</text>
-
         <rect class="box" x="219" y="30" width="162" height="60" rx="12"/>
         <text x="300" y="55" text-anchor="middle">🖥️ Serveur</text>
         <text class="sub" x="300" y="72" text-anchor="middle">WaseBoard</text>
-
         <rect class="box" x="430" y="30" width="162" height="60" rx="12"/>
         <text x="511" y="55" text-anchor="middle">🎛️ Application</text>
-        <text class="sub" x="511" y="72" text-anchor="middle">Windows</text>
-
+        <text class="sub" x="511" y="72" text-anchor="middle">Windows · Web</text>
         <path class="flow" d="M170 60 H219"/>
         <path class="flow" d="M381 60 H430"/>
       </svg>
-      <p style="opacity:.85;">Celui de cette page est <strong>public et gratuit</strong> — inutile d'en installer un, sauf si vous voulez le vôtre.</p>
-    </div>
-
-    <div class="choice-grid reveal">
-      <div class="choice recommended" style="--card-accent: var(--accent);">
-        <span class="badge">RECOMMANDÉ</span>
-        <h3>⚡ Utiliser l'instance publique</h3>
-        <p>Ajoutez le bot à votre Discord, téléchargez le client, connectez-vous — c'est tout.</p>
-        <ul>
-          <li>Gratuit, en ligne dès maintenant</li>
-          <li>Aucune compétence technique requise</li>
-          <li>Bibliothèque de sons propre à chaque serveur</li>
-        </ul>
-        <div class="spacer"></div>
-        <a class="button primary block" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter à mon serveur</a>
-      </div>
-      <div class="choice accent" style="--card-accent: var(--accent-3);">
-        <h3>🏠 Héberger mon propre serveur</h3>
-        <p>Open-source, sans serveur central imposé : la vôtre, sans limite, avec un contrôle total des données.</p>
-        <ul>
-          <li>Assistant Docker guidé (~15 min)</li>
-          <li>Aucun plafond : c'est votre machine</li>
-          <li>Votre application Discord, vos données</li>
-        </ul>
-        <div class="spacer"></div>
-        <a class="button secondary block" href="https://github.com/salsi64/WaseBoard/blob/master/server/README.md">📖 Guide d'installation</a>
+      <div class="hosts">
+        <div class="host rec">
+          <span class="badge">RECOMMANDÉ</span>
+          <h3>⚡ Utiliser l'instance publique</h3>
+          <p style="color:var(--dim);margin-top:6px">Ajoutez le bot à votre Discord, téléchargez le client, connectez-vous : c'est tout.</p>
+          <ul><li>Gratuit, en ligne dès maintenant</li><li>Aucune compétence technique requise</li><li>Bibliothèque de sons propre à chaque serveur</li></ul>
+          <a class="btn primary" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter à mon serveur</a>
+        </div>
+        <div class="host">
+          <h3>🏠 Héberger mon propre serveur</h3>
+          <p style="color:var(--dim);margin-top:6px">Open source, sans serveur central imposé : le vôtre, sans limite, avec un contrôle total des données.</p>
+          <ul><li>Assistant Docker guidé (~15 min)</li><li>Aucun plafond : c'est votre machine</li><li>Alertes, sauvegardes et surveillance prévues</li></ul>
+          <a class="btn ghost" href="https://github.com/salsi64/WaseBoard/blob/master/server/README.md">📖 Guide d'installation</a>
+        </div>
       </div>
     </div>
+  </section>
 
-    <div class="note">
-      WaseBoard — projet open-source. Code source et documentation complète sur
-      <a class="link" href="https://github.com/salsi64/WaseBoard">GitHub</a>.<br>
-      <a class="link" href="/privacy.html">Confidentialité</a> ·
-      <a class="link" href="/terms.html">Conditions d'utilisation</a> ·
-      <a class="link" href="/en" hreflang="en">English</a>
+  <div class="final">
+    <div class="wrap">
+      <h2>Prêt à faire entendre vos sons ?</h2>
+      <p class="lead">Gratuit, sans compte à créer : votre compte Discord suffit.</p>
+      <div class="cta">
+        <a class="btn primary big" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger pour Windows</a>
+        <a class="btn web big" href="/app/">🌐 Utiliser sur le web</a>
+        <a class="btn ghost big" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord</a>
+      </div>
     </div>
   </div>
 
-  <script>
-    (function () {
-      var targets = document.querySelectorAll('.reveal');
-      if (!('IntersectionObserver' in window) || !targets.length) {
-        targets.forEach(function (el) { el.classList.add('in'); });
-        return;
-      }
-      var io = new IntersectionObserver(function (entries) {
-        entries.forEach(function (entry) {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('in');
-            io.unobserve(entry.target);
-          }
-        });
-      }, { threshold: 0.15 });
-      targets.forEach(function (el) { io.observe(el); });
-    })();
-  </script>
+  <footer>
+    <div class="wrap">
+      <p>WaseBoard est un projet open source. <a href="https://github.com/salsi64/WaseBoard">GitHub</a></p>
+      <div class="links">
+        <a href="/privacy.html">Confidentialité</a>
+        <a href="/terms.html">Conditions d'utilisation</a>
+        <a href="https://github.com/salsi64/WaseBoard/blob/master/docs/FAQ-utilisateurs.md">FAQ</a>
+        <a href="https://github.com/salsi64/WaseBoard/releases/tag/v3.4.0">Nouveautés de la 3.4</a>
+        <a href="/en" hreflang="en">English</a>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>
