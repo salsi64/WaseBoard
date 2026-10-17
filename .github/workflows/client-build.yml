@@ -30,7 +30,7 @@ jobs:
     needs: micfx
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Cohérence des versions (csproj, installeur, tag)
         shell: pwsh
@@ -54,14 +54,14 @@ jobs:
           }
           if ($failed) { exit 1 }
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "8.0.x"
 
       - name: "Tests du client (logique pure : latences, langues, traductions, clip)"
         run: dotnet test src/WaseBoard.Tests --nologo
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: WaseBoardMicFx-x64
           path: native/WaseBoardMicFx/dist
@@ -82,7 +82,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "ISCC a échoué ($LASTEXITCODE)" }
           Get-ChildItem installer\Output\*.exe | ForEach-Object { Write-Host ("{0} ({1:N1} Mo)" -f $_.Name, ($_.Length / 1MB)) }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: WaseBoard-Setup
           path: installer/Output/WaseBoard-Setup-*.exe
