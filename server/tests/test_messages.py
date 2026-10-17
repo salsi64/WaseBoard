@@ -7,6 +7,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import _env  # noqa: E402  (doit s'exécuter AVANT import server : fixe WASEBOARD_DATA_DIR)
 import messages as M  # noqa: E402
@@ -113,7 +114,163 @@ unused = [fr for fr in frenches if fr not in {t for module in ("server.py", "eff
 check("aucune entrée du catalogue ne reste sans message correspondant dans le code", not unused, unused)
 
 
+# ---------- Messages du bot dans Discord ----------
+print(chr(10) + "--- Discord : langue de la personne ---")
+check("langue de Discord : français pour fr, anglais pour le reste (et pour une langue inconnue)",
+      M.discord_language("fr") == "fr" and M.discord_language("en-US") == "en" and M.discord_language("en-GB") == "en"
+      and M.discord_language("de") == "en" and M.discord_language("ja") == "en" and M.discord_language("zh-CN") == "en")
+check("sans langue connue (ancien appel, objet de test) : français, comme avant", M.discord_language(None) == "fr" and M.discord_language("") == "fr")
+check("accepte directement un discord.Locale", M.discord_language(S.discord.Locale.french) == "fr" and M.discord_language(S.discord.Locale.american_english) == "en")
+
+MEMBER_FUNCTIONS = {"_handle_join_voice_button", "help_button", "send_link", "invite_other_button", "join", "leave",
+                    "play_command", "stop_command", "top_command", "bilan_command"}
+
+
+def render_all(node):
+    """Textes d'une expression : constante, f-string (trous {}), concaténation, ou les deux branches d'un « a if c else b »."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    if isinstance(node, ast.JoinedStr):
+        return ["".join(v.value if isinstance(v, ast.Constant) else "{}" for v in node.values)]
+    if isinstance(node, ast.IfExp):
+        return render_all(node.body) + render_all(node.orelse)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return [a + b for a in render_all(node.left) for b in render_all(node.right)]
+    return []
+
+
+def discord_messages(path):
+    """Les textes en français que le bot envoie dans Discord aux membres, et les descriptions de commandes : (texte -> ligne)."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    constants = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            constants[node.targets[0].id] = node.value
+    found = {}
+
+    def add(node):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "tr" and len(node.args) == 2:
+            node = node.args[1]
+        if isinstance(node, ast.Name) and node.id in constants:
+            node = constants[node.id]
+        for text in render_all(node):
+            found.setdefault(text, node.lineno)
+
+    for fn in ast.walk(tree):
+        if isinstance(fn, (ast.AsyncFunctionDef, ast.FunctionDef)) and fn.name in MEMBER_FUNCTIONS:
+            for call in ast.walk(fn):
+                if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.args:
+                    owner = call.func.value
+                    if (call.func.attr == "send_message" and getattr(owner, "attr", "") == "response") or (call.func.attr == "send" and getattr(owner, "attr", "") == "followup"):
+                        add(call.args[0])
+        if isinstance(fn, (ast.AsyncFunctionDef, ast.FunctionDef)):
+            for deco in fn.decorator_list:
+                if isinstance(deco, ast.Call):
+                    callee = deco.func.attr if isinstance(deco.func, ast.Attribute) else ""
+                    if callee == "command":
+                        for kw in deco.keywords:
+                            if kw.arg == "description":
+                                add(kw.value)
+                    if callee == "describe":
+                        for kw in deco.keywords:
+                            add(kw.value)
+        if isinstance(fn, ast.FunctionDef) and fn.name == "find_sound_for_command":
+            for ret in ast.walk(fn):
+                if isinstance(ret, ast.Return) and isinstance(ret.value, ast.Tuple) and len(ret.value.elts) == 2 and isinstance(ret.value.elts[0], ast.Constant) and ret.value.elts[0].value is None:
+                    add(ret.value.elts[1])
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            name = node.func.id if isinstance(node.func, ast.Name) else node.func.attr if isinstance(node.func, ast.Attribute) else ""
+            if name == "CapacityError" and node.args:
+                add(node.args[0])
+            if name == "Choice":
+                for kw in node.keywords:
+                    if kw.arg == "name" and isinstance(kw.value, ast.Constant):
+                        add(kw.value)
+    constants_used = {k: v for k, v in found.items()}
+    return constants_used
+
+
+GENERIC = {"⚠️ {}", "❌ {}"}
+messages_found = discord_messages(SERVER_DIR / "server.py")
+FRENCH_DISCORD = re.compile(r"[À-ÿ]|\b(le|la|les|un|une|des|du|vous|pour|dans|sur|avec|est|pas|ne|ou|et|derniers|bot|son|sons)\b", re.I)
+needing = {t: line for t, line in messages_found.items() if FRENCH_DISCORD.search(t) or t in GENERIC}
+untranslated_discord = [f"server.py:{line} {t!r}" for t, line in needing.items() if not M.is_translated(t)]
+check(f"chacun des {len(needing)} textes que le bot envoie aux membres dans Discord a sa traduction", len(needing) > 30 and not untranslated_discord, untranslated_discord)
+unused_discord = [fr for fr, _ in M.DISCORD_CATALOG if fr not in messages_found]
+check("aucune entrée du catalogue Discord ne reste sans texte correspondant dans le code", not unused_discord, unused_discord)
+check("les motifs génériques (« ⚠️ {} », « ❌ {} ») sont en dernier : un message précis n'est jamais avalé par eux",
+      [fr for fr, _ in M.DISCORD_CATALOG][-2:] == ["⚠️ {}", "❌ {}"])
+check("« ❌ message précis » est traduit en entier, pas seulement son préfixe",
+      M.translate("❌ Impossible de calculer le bilan (voir les journaux du serveur).", "en") == "❌ Couldn't compute the review (see the server logs).")
+check("le message d'une capacité saturée est traduit à l'intérieur de « ⚠️ … »",
+      M.translate("⚠️ Trop de sons envoyés : réessayez dans 4 s.", "en") == "⚠️ Too many sounds sent: try again in 4 s.")
+check("noms de commandes et d'options en anglais : minuscules, tirets, 32 caractères au plus (règle de Discord)",
+      all(re.fullmatch(r"[-_a-z0-9]{1,32}", v) for v in list(M.COMMAND_NAMES_EN.values()) + list(M.PARAMETER_NAMES_EN.values())))
+
+print(chr(10) + "--- Discord : menu des commandes ---")
+
+
+async def translator_checks():
+    translator = S.MessagesTranslator()
+    ctx = lambda location: SimpleNamespace(location=location, data=None)
+    L = S.app_commands.TranslationContextLocation
+    text = S.app_commands.locale_str("Déconnecte le bot du salon vocal")
+    en = await translator.translate(text, S.discord.Locale.american_english, ctx(L.command_description))
+    check("description d'une commande : anglais pour Discord en anglais", en == "Disconnects the bot from the voice channel", en)
+    check("…anglais aussi pour une autre langue (mieux que le français)", await translator.translate(text, S.discord.Locale.german, ctx(L.command_description)) == en)
+    check("…rien pour le français : le texte par défaut du code s'affiche", await translator.translate(text, S.discord.Locale.french, ctx(L.command_description)) is None)
+    check("nom de commande : traduit si on a une traduction, sinon inchangé (None)",
+          await translator.translate(S.app_commands.locale_str("panneau"), S.discord.Locale.american_english, ctx(L.command_name)) == "panel"
+          and await translator.translate(S.app_commands.locale_str("join"), S.discord.Locale.american_english, ctx(L.command_name)) is None)
+    check("nom d'option : « son » -> « sound »", await translator.translate(S.app_commands.locale_str("son"), S.discord.Locale.american_english, ctx(L.parameter_name)) == "sound")
+    check("choix : « 7 derniers jours » -> « Last 7 days »", await translator.translate(S.app_commands.locale_str("7 derniers jours"), S.discord.Locale.british_english, ctx(L.choice_name)) == "Last 7 days")
+    check("texte inconnu : None (jamais d'exception)", await translator.translate(S.app_commands.locale_str("quelque chose"), S.discord.Locale.american_english, ctx(L.command_description)) is None)
+
+    await S.bot.tree.set_translator(translator)
+    problems = []
+    seen_commands = 0
+    for command in S.bot.tree.get_commands():
+        payload = await command.get_translated_payload(S.bot.tree, translator)
+        seen_commands += 1
+        loc_names = payload.get("name_localizations") or {}
+        loc_desc = payload.get("description_localizations") or {}
+        if "fr" in loc_names or "fr" in loc_desc:
+            problems.append(f"{command.name}: localisation française inutile")
+        if loc_desc.get("en-US") in (None, payload["description"]):
+            problems.append(f"{command.name}: description anglaise absente")
+        for value in list(loc_names.values()):
+            if not re.fullmatch(r"[-_a-z0-9]{1,32}", value):
+                problems.append(f"{command.name}: nom localisé invalide {value!r}")
+        for value in loc_desc.values():
+            if not 1 <= len(value) <= 100:
+                problems.append(f"{command.name}: description localisée de {len(value)} caractères")
+        for option in payload.get("options", []):
+            for value in (option.get("name_localizations") or {}).values():
+                if not re.fullmatch(r"[-_a-z0-9]{1,32}", value):
+                    problems.append(f"{command.name}.{option['name']}: nom d'option localisé invalide {value!r}")
+            for value in (option.get("description_localizations") or {}).values():
+                if not 1 <= len(value) <= 100:
+                    problems.append(f"{command.name}.{option['name']}: description d'option localisée de {len(value)} caractères")
+            for choice in option.get("choices", []):
+                for value in (choice.get("name_localizations") or {}).values():
+                    if not 1 <= len(value) <= 100:
+                        problems.append(f"{command.name}: choix localisé de {len(value)} caractères")
+    check(f"les {seen_commands} commandes, une fois traduites, respectent les limites de Discord (noms, descriptions, choix)", seen_commands >= 12 and not problems, problems)
+    play = next(c for c in S.bot.tree.get_commands() if c.name == "play")
+    payload = await play.get_translated_payload(S.bot.tree, translator)
+    check("/play en anglais : description et option « sound » localisées",
+          payload["description_localizations"]["en-US"] == "Plays a sound in your voice channel, without opening the app"
+          and payload["options"][0]["name_localizations"]["en-US"] == "sound"
+          and payload["options"][0]["description_localizations"]["en-US"] == "The sound to play (type a few letters to search)")
+    top = next(c for c in S.bot.tree.get_commands() if c.name == "top")
+    payload = await top.get_translated_payload(S.bot.tree, translator)
+    choices = payload["options"][0]["choices"]
+    check("/top : les quatre périodes ont leur nom anglais", [c["name_localizations"]["en-US"] for c in choices] == ["Last 7 days", "Last 30 days", "Last 90 days", "Last 12 months"])
+
+
 async def main():
+    await translator_checks()
     print("\n--- Sur HTTP ---")
 
     async def not_found(request):

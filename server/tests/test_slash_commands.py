@@ -105,8 +105,8 @@ class Followup:
 
 
 class Inter:
-    def __init__(self, member, guild=G1):
-        self.user, self.guild, self.guild_id = member, guild, guild.id
+    def __init__(self, member, guild=G1, locale=None):
+        self.user, self.guild, self.guild_id, self.locale = member, guild, guild.id, locale
         self.response, self.followup = Response(), Followup()
 
     def texts(self):
@@ -369,6 +369,59 @@ async def main():
         S.reports.year_report = real_report
     check("/bilan : réservée aux serveurs", S.bilan_command.guild_only)
     S.STATS_PATH.unlink()
+
+    print("\n--- Langue de Discord : réponses en anglais ---")
+    EN, FR, DE = S.discord.Locale.american_english, S.discord.Locale.french, S.discord.Locale.german
+    inter = Inter(make_member(20), locale=EN)
+    await S.join.callback(inter)
+    check("/join hors vocal, Discord en anglais : réponse anglaise", inter.texts() == "You need to be connected to a voice channel first.", inter.texts())
+    inter = Inter(make_member(20), locale=FR)
+    await S.join.callback(inter)
+    check("…Discord en français : réponse française", inter.texts() == "Vous devez d'abord être connecté à un salon vocal.", inter.texts())
+    inter = Inter(make_member(20), locale=DE)
+    await S.join.callback(inter)
+    check("…Discord dans une autre langue : anglais", inter.texts() == "You need to be connected to a voice channel first.", inter.texts())
+    inter = Inter(make_member(20))
+    await S.join.callback(inter)
+    check("…sans langue connue (anciens appels) : français comme avant", "Vous devez d'abord" in inter.texts(), inter.texts())
+    bot.mixers.pop(G1.id, None)
+    bot.voice_clients_map.pop(G1.id, None)
+    inter = Inter(make_member(20), locale=EN)
+    await S.leave.callback(inter)
+    check("/leave sans connexion : « I'm not connected… »", inter.texts() == "I'm not connected to any voice channel here.", inter.texts())
+    inter = Inter(make_member(20, CH_A), locale=EN)
+    await S.play_command.callback(inter, "inexistant")
+    check("/play d'un son inconnu : message anglais, avec le nom tapé", inter.texts() == "❌ No sound matches “inexistant”.", inter.texts())
+    entry, problem = S.find_sound_for_command("bou", [{"id": "1", "name": "Bouh"}, {"id": "2", "name": "Boum"}])
+    check("/play ambigu : message anglais", S.tr(Inter(make_member(20), locale=EN), f"❌ {problem}") == "❌ Several sounds match “bou”: pick one from the suggested list.", problem)
+    inter = Inter(make_member(20, CH_A), locale=EN)
+    await S.play_command.callback(inter, "a")
+    check("/play : confirmation avec le nom du son (non traduit)", inter.texts() == "▶️ 👏 Applaudissements", inter.texts())
+    inter = Inter(make_member(20), locale=EN)
+    await S.stop_command.callback(inter)
+    check("/stop : « Sounds stopped. »", inter.texts() == "⏹️ Sounds stopped.", inter.texts())
+    inter = Inter(make_member(20), locale=EN)
+    await S.stop_command.callback(inter, "b")
+    check("/stop d'un son qui ne joue pas : message anglais", inter.texts() == "💀 Bruh wasn't playing.", inter.texts())
+    inter = Inter(make_member(20), locale=EN)
+    await S.top_command.callback(inter, 7)
+    embed = inter.followup.sent[0][1]["embed"]
+    check("/top en anglais : titre et description", embed.title.startswith("🏆 Top of ") and embed.title.endswith("last 7 days") and embed.description == "No sound played in this period.", (embed.title, embed.description))
+    inter = Inter(make_member(20), locale=EN)
+    await S.bilan_command.callback(inter, 2021)
+    check("/bilan en anglais", inter.followup.sent[0][1]["embed"].description == "No sound played in 2021 on this server." and "2021 in review" in inter.followup.sent[0][1]["embed"].title)
+    inter = Inter(make_member(20, CH_A), locale=EN)
+    real_join = bot.join_guild_voice
+
+    async def saturated(guild_id, channel):
+        raise S.CapacityError("Ce serveur WaseBoard est saturé (40 salons vocaux actifs en même temps) : réessayez dans quelques minutes.")
+
+    bot.join_guild_voice = saturated
+    bot.voice_clients_map.pop(G1.id, None)
+    await S.join.callback(inter)
+    bot.join_guild_voice = real_join
+    check("un message du serveur (capacité) est traduit à l'intérieur de « ⚠️ … »",
+          inter.texts() == "⚠️ This WaseBoard server is at capacity (40 active voice channels at the same time): try again in a few minutes.", inter.texts())
 
     print("\n--- Enregistrement des commandes ---")
     registered = {c.name for c in bot.tree.get_commands()}
