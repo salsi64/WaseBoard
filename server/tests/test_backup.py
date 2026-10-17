@@ -34,6 +34,7 @@ OUT = WORK / "out"
 (DATA / "sounds_data" / "catalog.json").write_text('{"sounds": []}', encoding="utf-8")
 (DATA / "sounds_data" / "a.mp3").write_bytes(b"x" * 1000)
 (DATA / "guild_settings.json").write_text("{}", encoding="utf-8")
+(DATA / "user_categories.json").write_text('{"20": {"categories": {}, "order": []}}', encoding="utf-8")
 (DATA / "config.json").write_text('{"bot_token": "SECRET-TOKEN"}', encoding="utf-8")
 (DATA / "oauth_sessions.json").write_text('{"s": 1}', encoding="utf-8")
 
@@ -59,6 +60,7 @@ try:
     check("une sauvegarde simple réussit et écrit une archive", r.returncode == 0 and len(data_archives) == 1, r.stderr)
     names = members(data_archives[0])
     check("elle contient le catalogue, les sons et les réglages des serveurs", "sounds_data/catalog.json" in names and "sounds_data/a.mp3" in names and "guild_settings.json" in names, names)
+    check("…et les catégories personnelles des membres", "user_categories.json" in names, names)
     check("…mais ni config.json ni les sessions (secrets)", "config.json" not in names and "oauth_sessions.json" not in names)
     check("droits 600 (lisible par le seul propriétaire)", stat.S_IMODE(data_archives[0].stat().st_mode) == 0o600, oct(stat.S_IMODE(data_archives[0].stat().st_mode)))
     check("aucune archive des réglages sans -c", not archives("config"))

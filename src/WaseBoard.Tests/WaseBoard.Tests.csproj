@@ -26,6 +26,7 @@
     <Compile Include="..\WaseBoard\Services\LatencyRecorder.cs" Link="Linked\LatencyRecorder.cs" />
     <Compile Include="..\WaseBoard\Services\BeepTone.cs" Link="Linked\BeepTone.cs" />
     <Compile Include="..\WaseBoard\Services\ClipRingBuffer.cs" Link="Linked\ClipRingBuffer.cs" />
+    <Compile Include="..\WaseBoard\Services\CategoryMirror.cs" Link="Linked\CategoryMirror.cs" />
     <Compile Include="..\WaseBoard\Services\PcmTools.cs" Link="Linked\PcmTools.cs" />
     <Compile Include="..\WaseBoard\Services\Localization\Loc.cs" Link="Linked\Loc.cs" />
     <EmbeddedResource Include="..\WaseBoard\Localization\*.json" LogicalName="Localization.%(Filename)%(Extension)" />

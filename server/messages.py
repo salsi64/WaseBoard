@@ -56,6 +56,8 @@ CATALOG: list[tuple[str, str]] = [
     ("guild_id requis", "guild_id is required"),
     ("action invalide", "invalid action"),
     ("vous n'êtes pas membre de ce serveur Discord", "you are not a member of this Discord server"),
+    ("catégories invalides", "invalid categories"),
+    ("trop de catégories ou de sons dans une catégorie", "too many categories, or too many sounds in a category"),
     ("Réservé aux administrateurs de ce serveur.", "Restricted to administrators of this server."),
     ("rôle introuvable sur ce serveur", "role not found on this server"),
     ("'upload_admins_only' doit être un booléen", "'upload_admins_only' must be a boolean"),

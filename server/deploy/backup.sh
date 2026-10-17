@@ -47,7 +47,7 @@ exec 9>"$out_dir/.lock"
 flock -n 9 || { echo "Sauvegarde WaseBoard : une autre sauvegarde est déjà en cours, rien à faire."; exit 0; }
 
 items=()
-for item in sounds_data shared_categories.json guild_settings.json audit.jsonl stats.jsonl; do
+for item in sounds_data shared_categories.json user_categories.json guild_settings.json audit.jsonl stats.jsonl; do
     [ -e "$data_dir/$item" ] && items+=("$item")
 done
 if [ "$with_secrets" = 1 ]; then

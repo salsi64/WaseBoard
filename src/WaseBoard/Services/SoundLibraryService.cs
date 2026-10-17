@@ -262,6 +262,8 @@ namespace WaseBoard.Services
 
             var json = JsonSerializer.Serialize(Settings, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_settingsFilePath, json);
+
+            QueueCategoryMirror();
         }
 
         public void ToggleFavorite(SoundItem item)
@@ -589,6 +591,9 @@ namespace WaseBoard.Services
                     item.ColorHex = Settings.SoundColors.TryGetValue(entry.id, out var color) ? color : null;
                     return item;
                 }).ToList();
+
+                // Premier chargement après le lancement ou la connexion : la copie des catégories sur le serveur est mise à jour si besoin.
+                QueueCategoryMirror();
 
                 return ApplyCustomOrder(items);
             }

@@ -6,8 +6,9 @@ import { audioFiles, uploadableGuilds } from './editor-logic.js';
 import { createEditor } from './editor.js';
 import { LANGUAGES, makeTranslator, pickLanguage } from './i18n.js';
 import {
-  PALETTE, buildAuthorizeUrl, buildSections, colorFor, dedupeById, errorText, favoriteSounds, filterSounds, isActivityLocation, loadJson, makeState,
-  parseCallback, playingMap, sanitizeColors, sanitizeIds, sanitizeSession, saveJson, sortByName, toggleInSet, trimRange, voiceSummary,
+  PALETTE, buildAuthorizeUrl, buildSections, categoryTabs, colorFor, dedupeById, errorText, favoriteSounds, filterSounds, isActivityLocation, loadJson,
+  makeState, parseCallback, playingMap, sanitizeColors, sanitizeIds, sanitizePersonal, sanitizeSession, saveJson, sortByName, toggleInSet, trimRange,
+  voiceSummary,
 } from './logic.js';
 
 const KEYS = { session: 'wb.session', favorites: 'wb.favorites', colors: 'wb.colors', lang: 'wb.lang', oauthState: 'wb.oauth_state' };
@@ -35,6 +36,8 @@ const state = {
   config: null,
   session: sanitizeSession(loadJson(storage, KEYS.session, null)),
   sounds: [], guilds: [], shared: {},
+  personal: sanitizePersonal(null),   // catégories personnelles de l'application Windows (copie gardée par le serveur)
+  loadedAt: 0,
   voice: voiceSummary(null),
   playing: new Map(),
   tab: 'all', query: '',
@@ -199,9 +202,9 @@ function showApp() {
   startPolling();
 }
 
-/** Catalogue, serveurs, catégories partagées et état vocal ; { error } si le chargement échoue, null si la session a pris fin. */
+/** Catalogue, serveurs, catégories partagées et personnelles, état vocal ; { error } si le chargement échoue, null si la session a pris fin. */
 async function fetchCatalog() {
-  const [sounds, guilds, status] = await Promise.all([api('/sounds'), api('/my-guilds'), api(`/status?strict=1${guildQuery('&')}`)]);
+  const [sounds, guilds, status, personal] = await Promise.all([api('/sounds'), api('/my-guilds'), api(`/status?strict=1${guildQuery('&')}`), api('/me/categories')]);
   if (!state.session) return null;   // déconnecté pendant le chargement (session expirée)
   if (!sounds.ok || !guilds.ok) {
     return { error: sounds.offline || guilds.offline ? t('offline') : errorText(sounds.status || guilds.status, sounds.data || guilds.data) };
@@ -210,15 +213,21 @@ async function fetchCatalog() {
   const sharedLists = await Promise.all(guildList.map((guild) => api(`/shared-categories?guild_id=${encodeURIComponent(guild.id)}`)));
   const shared = {};
   guildList.forEach((guild, index) => { if (sharedLists[index].ok) shared[guild.id] = sharedLists[index].data.sound_ids || []; });
-  return { sounds: dedupeById(sounds.data.sounds || []), guilds: guildList, shared, voice: status.ok ? voiceSummary(status.data) : null };
+  // Les catégories personnelles sont un plus : un serveur plus ancien (404) ou une erreur passagère ne doit pas empêcher d'afficher les sons.
+  return {
+    sounds: dedupeById(sounds.data.sounds || []), guilds: guildList, shared, voice: status.ok ? voiceSummary(status.data) : null,
+    personal: personal.ok ? sanitizePersonal(personal.data) : null,
+  };
 }
 
 function applyCatalog(catalog) {
   state.sounds = catalog.sounds;
   state.guilds = catalog.guilds;
   state.shared = catalog.shared;
+  if (catalog.personal) state.personal = catalog.personal;   // en cas d'échec, on garde les dernières connues
   if (catalog.voice) state.voice = catalog.voice;
   state.load = 'ready';
+  state.loadedAt = Date.now();
 }
 
 async function loadData() {
@@ -255,22 +264,27 @@ function tabList() {
   return [
     { key: 'favorites', label: t('tabs.favorites'), icon: '★' },
     { key: 'all', label: t('tabs.all') },
-    ...state.guilds.map((guild) => ({ key: guild.id, label: guild.name, iconUrl: guild.icon_url })),
+    ...categoryTabs(state.sounds, state.guilds, state.personal).map((tab) => (tab.type === 'guild'
+      ? { key: tab.key, label: tab.guild.name, iconUrl: tab.guild.icon_url }
+      : { key: tab.key, label: tab.name, icon: '📁' })),
   ];
 }
 
 function renderTabs() {
-  if (!state.guilds.some((guild) => guild.id === state.tab) && !['all', 'favorites'].includes(state.tab)) state.tab = 'all';
-  ui.tabs.replaceChildren(...tabList().map((tab) => h('button', {
+  const tabs = tabList();
+  if (!tabs.some((tab) => tab.key === state.tab)) state.tab = 'all';
+  ui.tabs.replaceChildren(...tabs.map((tab) => h('button', {
     class: 'tab', role: 'tab', 'aria-selected': String(state.tab === tab.key && !state.query), onclick: () => { state.tab = tab.key; state.query = ''; ui.search.value = ''; renderTabs(); renderContent(); },
   }, tab.iconUrl ? avatar(tab.iconUrl, 22) : null, tab.icon ? h('span', { 'aria-hidden': 'true', text: tab.icon }) : null, h('span', { text: tab.label }))));
+  // Avec beaucoup d'onglets (serveurs + catégories personnelles), celui qu'on vient de choisir peut être hors de vue sur un petit écran.
+  ui.tabs.querySelector('[aria-selected="true"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 }
 
 function currentView() {
   const all = state.sounds;
   if (state.query.trim()) return { flat: sortByName(filterSounds(all, state.query)), empty: t('empty.search', state.query.trim()) };
   if (state.tab === 'favorites') return { flat: favoriteSounds(all, state.favorites), empty: t('empty.favorites') };
-  const sections = buildSections(all, state.guilds, state.shared).filter((section) => state.tab === 'all' || section.key === state.tab);
+  const sections = buildSections(all, state.guilds, state.shared, state.personal).filter((section) => state.tab === 'all' || section.key === state.tab);
   return { sections, empty: t('empty.none') };
 }
 
@@ -290,8 +304,10 @@ function renderContent() {
     nodes.push(h('p', { class: 'empty', text: view.empty }));
   } else {
     for (const section of view.sections) {
+      const title = section.kind === 'personal' ? section.name : section.guild ? section.guild.name : t('section.other');
       nodes.push(
-        h('h2', { class: 'section-title' }, section.guild ? avatar(section.guild.icon_url, 24) : null, h('span', { text: section.guild ? section.guild.name : t('section.other') })),
+        h('h2', { class: 'section-title' }, section.guild ? avatar(section.guild.icon_url, 24) : null,
+          section.kind === 'personal' ? h('span', { 'aria-hidden': 'true', text: '📁' }) : null, h('span', { text: title })),
         h('div', { class: 'grid' }, section.sounds.map(makeCard)));
     }
   }
@@ -410,9 +426,14 @@ function stopPolling() {
   timers = {};
 }
 
+const RELOAD_AFTER_MS = 60 * 1000;   // une page restée en veille plus longtemps relit le catalogue en revenant (catégories changées ailleurs)
 document.addEventListener('visibilitychange', () => {
   if (!state.session || !ui.main) return;
-  if (document.visibilityState === 'visible') { tickStatus(); startPolling(); } else stopPolling();
+  if (document.visibilityState === 'visible') {
+    tickStatus();
+    startPolling();
+    if (state.load === 'ready' && Date.now() - state.loadedAt > RELOAD_AFTER_MS) refreshCatalog();
+  } else stopPolling();
 });
 window.addEventListener('offline', () => toast(t('offline'), 'error'));
 window.addEventListener('online', () => { toast(t('online'), 'success'); if (state.session && state.load === 'error') { state.load = 'idle'; loadData(); } });

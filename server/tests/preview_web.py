@@ -89,6 +89,10 @@ def seed():
         make_wav(S.SOUNDS_DIR / f"{sound_id}.wav", 1.2 + (index % 4) * 0.7, 300 + index * 40)
     S.save_catalog(catalog)
     S.save_shared_categories({str(G2.id): ["s00", "s01"], str(G3.id): ["s10"]})   # sons partagés dans d'autres serveurs
+    # Catégories personnelles d'Alice (copie envoyée par l'application Windows), mêlées aux serveurs dans l'ordre de l'application.
+    S.save_user_categories({"20": {
+        "categories": {"Réactions": ["s00", "s04", "s06", "s07"], "Fêtes": ["s09", "s10", "s11", "s17"], "Vide": ["supprimé"]},
+        "order": [str(G1.id), "Réactions", str(G2.id), "Fêtes", str(G3.id), "Vide"], "updated_at": time.time()}})
 
 
 async def main(port):

@@ -385,7 +385,8 @@ bloqués), statistiques d'usage, journal d'actions, lien d'invitation. La limite
 nécessite `ffprobe` (fourni avec ffmpeg) ; s'il manque, elle est simplement ignorée.
 
 **Fichiers de données créés à côté de `server.py` (ou dans `WASEBOARD_DATA_DIR`)** (à inclure dans vos sauvegardes avec
-`sounds_data/` et `shared_categories.json`) : `guild_settings.json` (réglages par serveur),
+`sounds_data/` et `shared_categories.json`) : `user_categories.json` (copie des catégories personnelles envoyée par l'application
+Windows, voir ci-dessous), `guild_settings.json` (réglages par serveur),
 `audit.jsonl` (journal d'actions), `stats.jsonl` (lectures), `sounds_data/trash/` +
 `sounds_data/trash.json` (corbeille).
 
@@ -490,6 +491,14 @@ y joue un son, on coupe tout, on fait rejoindre le bot à son salon vocal, on ch
 fichiers, formats mp3, wav, ogg, flac, m4a, wma, jusqu'à 64 Mo), les modifier (nom, emoji, **découpe avec forme d'onde** — le son complet reste conservé —, nouveau
 fichier audio, catégories des serveurs où il apparaît) et les supprimer (ils vont à la corbeille du serveur), avec exactement les droits de l'application
 Windows : le serveur refait chaque vérification. La découpe demande que le navigateur sache décoder le format ; sinon le son s'ajoute en entier.
+
+**Vos catégories personnelles** (celles que vous créez dans l'application Windows) s'affichent aussi dans la page web et l'Activité, comme
+des onglets et des sections, dans le même ordre que dans l'application. L'application en envoie une copie au serveur (`PUT /me/categories`,
+quelques secondes après chaque modification, et au lancement) ; la page la relit (`GET /me/categories`). La copie ne contient que les noms
+des catégories et les identifiants de leurs sons, elle n'est lisible et remplaçable que par la personne concernée (session Discord) et
+elle est effacée dès qu'il n'y a plus rien à garder. **C'est l'application Windows qui reste la source** : la page web les affiche mais ne
+les modifie pas, et avec deux PC c'est le dernier envoyé qui est affiché. Fonction annoncée par `/status` (`personal_categories`).
+
 Elle est en français et en anglais (langue du navigateur).
 
 Pour l'activer, il faut **`public_url`** (l'adresse HTTPS publique du serveur : Discord ramène la personne sur
@@ -640,7 +649,7 @@ données, elle, reste sans secret. `deploy/waseboard-backup.service` l'active d�
 ```bash
 sudo systemctl stop waseboard
 cd ~/waseboard-server            # le dossier de données
-mkdir -p ~/avant-restauration && mv sounds_data shared_categories.json guild_settings.json audit.jsonl stats.jsonl ~/avant-restauration/ 2>/dev/null
+mkdir -p ~/avant-restauration && mv sounds_data shared_categories.json user_categories.json guild_settings.json audit.jsonl stats.jsonl ~/avant-restauration/ 2>/dev/null
 tar xzf ~/waseboard-backups/waseboard-data-AAAAMMJJ-HHMMSS.tgz
 sudo systemctl start waseboard
 ```
