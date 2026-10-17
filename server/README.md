@@ -520,7 +520,9 @@ Discord charge la page par son propre proxy (`https://<identifiant client>.disco
 joignable **depuis Internet en HTTPS** (une adresse du réseau local ne convient pas). Réglages, dans le
 [portail Discord](https://discord.com/developers/applications) › votre application :
 
-1. **Activities › Settings** : activer « Enable Activities ». Discord crée alors la commande d'entrée « Launch ».
+1. **Activities › Settings** : activer « Enable Activities ». Discord crée alors la commande d'entrée « launch » ; si elle manque (application qui avait déjà des
+   commandes, ou synchro globale des commandes slash qui l'efface), le serveur la recrée tout seul à chaque démarrage. Si le lanceur d'activités affiche encore
+   « aucune commande enregistrée », recharger Discord (Ctrl+R).
 2. **Activities › URL Mappings** : `/` → le nom de domaine public de votre serveur, sans `https://` (ex. `waseboard.exemple.org`). Facultatif mais recommandé :
    `/discord-cdn` → `cdn.discordapp.com` (les avatars et icônes de serveurs passent par là si Discord n'autorise pas l'accès direct à son CDN ; sans cela, la page
    retire simplement les images qui ne se chargent pas).

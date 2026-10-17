@@ -139,6 +139,12 @@ WEB_REDIRECT_URIS: list = CONFIG.get("web_redirect_uris") or []
 WEB_DIR = Path(__file__).parent / "web"
 # Activité Discord (la même page, dans un salon vocal de Discord) : voir README. Sans effet si la page web est désactivée.
 WEB_ACTIVITY_ENABLED: bool = CONFIG.get("web_activity_enabled", True)
+# Commande « point d'entrée » (type 4) qui lance l'Activité : Discord ne la crée pas toujours seul (application qui avait déjà
+# des commandes avant l'activation des Activités), et une synchro globale des commandes slash la supprime. handler 2 = Discord
+# lance l'Activité lui-même. integration_types/contexts omis : valeurs par défaut de l'application.
+ACTIVITY_ENTRY_POINT_TYPE = 4
+ACTIVITY_ENTRY_POINT = {"name": "launch", "description": "Ouvre WaseBoard (la planche de sons) dans le salon vocal",
+                        "type": ACTIVITY_ENTRY_POINT_TYPE, "handler": 2}
 ALERTS_RECONNECT_MIN_S = 60  # une coupure de Discord plus courte n'est pas signalée
 ERROR_BURST = alerts.ErrorBurstDetector(ALERTS_ERROR_BURST)
 logging.getLogger().addHandler(ERROR_BURST)
@@ -1075,6 +1081,7 @@ class WaseBoardServer(commands.Bot):
             log.info("Commandes slash synchronisées globalement (peut prendre jusqu'à 1h à apparaître).")
         # Avec guild_id configuré : synchronisation instantanée PAR serveur, faite dans on_ready /
         # on_guild_join (self.guilds n'est pas encore rempli à ce stade).
+        await self._ensure_activity_entry_point()
 
         await self._start_http_server()
 
@@ -1085,6 +1092,26 @@ class WaseBoardServer(commands.Bot):
             return OAUTH2_CLIENT_ID
         application_id = self.application_id or (self.user.id if self.user else None)
         return str(application_id) if application_id else ""
+
+    async def _ensure_activity_entry_point(self) -> None:
+        """Crée la commande qui lance l'Activité si l'application n'en a pas (sans elle, le lanceur d'activités de Discord affiche
+        « aucune commande enregistrée pour les lancer »). Jamais bloquant : un échec (Activités pas encore activées au portail,
+        réseau) est journalisé et le serveur démarre quand même ; l'essai est refait au prochain démarrage."""
+        application_id = self.application_id or (self.user.id if self.user else None)
+        if not (WEB_APP_ENABLED and WEB_ACTIVITY_ENABLED and application_id):
+            return
+        try:
+            existing = await self.http.get_global_commands(application_id)
+            present = [c for c in existing if c.get("type") == ACTIVITY_ENTRY_POINT_TYPE]
+            if present:
+                log.info("Activité Discord : commande de lancement déjà présente (« %s », mode %s).", present[0].get("name"), present[0].get("handler"))
+                return
+            await self.http.upsert_global_command(application_id, dict(ACTIVITY_ENTRY_POINT))
+            log.info("Activité Discord : commande de lancement « %s » créée (à choisir dans le lanceur d'activités d'un salon vocal).",
+                     ACTIVITY_ENTRY_POINT["name"])
+        except Exception as exc:  # noqa: BLE001 — jamais bloquant au démarrage
+            log.warning("Activité Discord : commande de lancement non créée (%s). Vérifiez que les Activités sont activées au portail "
+                        "Discord (voir « Activité Discord » dans le README).", str(exc)[:200])
 
     async def _sync_commands_to_guild(self, guild: discord.abc.Snowflake) -> None:
         """Rend les commandes slash disponibles immédiatement sur ce serveur (la synchro globale

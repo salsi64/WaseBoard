@@ -324,6 +324,50 @@ async def main():
         bot.web_app.note_refused_origin(f"https://spam{i}.example")
     check("…sans jamais remplir la mémoire ni le journal", len(bot.web_app._refused_origins) <= 20)
 
+    print("\n--- Activité Discord : commande de lancement (point d'entrée) ---")
+
+    class FakeHttp:
+        def __init__(self, existing=(), fail=None):
+            self.existing, self.fail, self.created = list(existing), fail, []
+
+        async def get_global_commands(self, app_id):
+            if self.fail:
+                raise self.fail
+            return list(self.existing)
+
+        async def upsert_global_command(self, app_id, payload):
+            self.created.append((app_id, payload))
+
+    real_http, real_app_id = bot.http, bot._connection.application_id
+    bot._connection.application_id = 777
+    try:
+        bot.http = FakeHttp()
+        await bot._ensure_activity_entry_point()
+        (app_id, payload), = bot.http.created
+        check("sans commande de lancement : elle est créée (type 4 = point d'entrée, handler 2 = Discord lance l'Activité)",
+              app_id == 777 and payload["type"] == 4 and payload["handler"] == 2 and payload["name"] == "launch" and 1 <= len(payload["description"]) <= 100, payload)
+        bot.http = FakeHttp(existing=[{"type": 1, "name": "play"}, {"type": 1, "name": "join"}])
+        await bot._ensure_activity_entry_point()
+        check("avec seulement des commandes slash : créée aussi", len(bot.http.created) == 1)
+        bot.http = FakeHttp(existing=[{"type": 1, "name": "play"}, {"type": 4, "name": "lancer"}])
+        await bot._ensure_activity_entry_point()
+        check("une commande de lancement existe déjà (quel que soit son nom) : rien n'est créé ni écrasé", bot.http.created == [])
+        bot.http = FakeHttp(fail=RuntimeError("Activities not enabled"))
+        await bot._ensure_activity_entry_point()
+        check("échec de Discord (Activités pas activées au portail, réseau) : journalisé, jamais d'exception au démarrage", bot.http.created == [])
+        S.WEB_ACTIVITY_ENABLED = False
+        bot.http = FakeHttp()
+        await bot._ensure_activity_entry_point()
+        check("Activité désactivée : aucun appel à Discord", bot.http.created == [])
+        S.WEB_ACTIVITY_ENABLED = True
+        bot._connection.application_id = None
+        bot.http = FakeHttp()
+        await bot._ensure_activity_entry_point()
+        check("identifiant d'application inconnu : aucun appel", bot.http.created == [])
+    finally:
+        bot.http, bot._connection.application_id = real_http, real_app_id
+        S.WEB_ACTIVITY_ENABLED = True
+
     print("\n--- Déconnexion depuis la page ---")
     session_token = "to-delete-12345678901234567890123456"
     bot.oauth_sessions[session_token] = {"user_id": "5", "username": "carl", "created_at": 0, "last_used_at": 0}
