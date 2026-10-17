@@ -102,11 +102,15 @@ img { display: block; }
   border-radius: 999px; border: 1px solid var(--outline); background: var(--surface); font-weight: 600; white-space: nowrap;
 }
 .tab img { width: 22px; height: 22px; border-radius: 50%; }
+.tab.add-category { padding: 0 14px; border-style: dashed; color: var(--muted); }
 .tab[aria-selected='true'] { color: var(--on-accent); border-color: transparent; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
 
 .content { padding: 4px max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left)); max-width: 1200px; margin: 0 auto; }
 .section-title { display: flex; align-items: center; gap: 10px; margin: 18px 4px 10px; font-size: 0.95rem; font-weight: 700; color: var(--muted); text-transform: none; }
 .section-title img { width: 24px; height: 24px; border-radius: 50%; }
+.section-title .section-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.section-title .section-more { margin-left: auto; flex: none; width: 34px; height: 34px; color: var(--muted); }
+.empty-category { margin: 4px 6px 8px; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
 .grid { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .empty, .state-msg { margin: 48px auto; max-width: 420px; text-align: center; color: var(--muted); line-height: 1.55; }
@@ -228,6 +232,14 @@ html.activity .card-main .emoji { width: 26px; height: 26px; font-size: 0.95rem;
 .editor-actions { position: sticky; bottom: -18px; margin-top: 16px; padding: 12px 0 2px; background: var(--surface); border-top: 1px solid var(--outline); }
 
 .share-list { display: flex; flex-direction: column; }
+.sheet .field.new-category { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 14px; }
+.sheet input[type='text'] {
+  flex: 1; min-width: 0; min-height: 44px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--outline); background: var(--surface-2); color: var(--text); font: inherit;
+}
+.sheet input[type='text']:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.form-error { flex-basis: 100%; margin: 6px 2px 0; min-height: 1.2em; font-size: 0.85rem; color: var(--danger); }
+.form-error:empty { display: none; }
+.emoji-small { flex: none; }
 .share { display: flex; align-items: center; gap: 10px; min-height: 44px; }
 .share input { width: 20px; height: 20px; }
 .share img { width: 22px; height: 22px; border-radius: 50%; }
