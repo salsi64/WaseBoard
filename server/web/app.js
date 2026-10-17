@@ -280,10 +280,10 @@ function renderContent() {
 
 function makeCard(sound) {
   const card = h('div', { class: 'card', vars: { '--c': colorFor(sound, state.colors) }, 'data-id': sound.id },
-    h('button', { class: 'card-main', 'aria-label': t('sound.play', sound.name), onclick: () => play(sound, card) },
+    h('button', { class: 'card-main', title: sound.name, 'aria-label': t('sound.play', sound.name), onclick: () => play(sound, card) },
       h('span', { class: 'emoji', 'aria-hidden': 'true', text: sound.emoji || '🔊' }),
-      h('span', { class: 'name', text: sound.name })),
-    state.favorites.has(sound.id) ? h('span', { class: 'fav-badge', 'aria-hidden': 'true', text: '★' }) : null,
+      h('span', { class: 'name', text: sound.name }),
+      state.favorites.has(sound.id) ? h('span', { class: 'fav-badge', 'aria-hidden': 'true', text: '★' }) : null),
     h('button', { class: 'card-more', 'aria-label': t('sound.more', sound.name), onclick: () => openSheet(sound), text: '⋯' }),
     h('span', { class: 'who' }));
   if (!ui.cards.has(sound.id)) ui.cards.set(sound.id, []);
