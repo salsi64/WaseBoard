@@ -49,6 +49,8 @@ Sans `ffmpeg`/`libopus0` installés, les vérifications correspondantes de `diag
 | `test_slash_commands.py` | commandes `/play` (autocomplétion, droits, salon vocal, anti-spam, plafonds), `/stop`, `/top`, `/bilan` |
 | `test_reports.py` | calculs et mise en forme de `/top` et `/bilan` (bilan annuel, rangs, texte sûr) — module `reports.py`, sans Discord |
 | `test_alerts.py` | alertes d'exploitation : anti-répétition, rafale d'erreurs, disque, certificat HTTPS, redémarrage inattendu, reconnexion, message privé, configuration |
+| `test_web_app.py` | page web `/app` : fichiers servis et en-têtes de sécurité, configuration de connexion, origines autorisées, authentification de l'API par session (sans secret partagé), échange du code Discord depuis la page, déconnexion |
+| `web/*.test.mjs` (Node) | logique pure de la page (couleurs identiques au client Windows, recherche, sections, favoris, OAuth), traductions fr/en, cohérence du paquet (service worker, manifeste, icônes, aucun code en ligne), service worker simulé (cache, hors connexion) — `node --test tests/web/*.test.mjs` |
 | `test_watchdog.py` | `deploy/watchdog.sh` : panne confirmée, rappels, retour, webhook en panne, sans webhook (faux `systemctl` et `curl`) |
 
 Volontairement absent de cette suite : un test de lecture multi-guildes qui lisait le catalogue **réel** de

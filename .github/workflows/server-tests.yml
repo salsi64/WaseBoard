@@ -29,11 +29,16 @@ jobs:
       - name: Installer ffmpeg et libopus0
         run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg libopus0
 
+      - name: Installer Node.js (tests de la page web)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Installer les dépendances Python
         run: pip install -r requirements.txt
 
       - name: Vérifier la syntaxe (compilation seule, rapide)
-        run: python -m py_compile server.py audio.py effects.py diagnostics.py wb_config.py alerts.py reports.py
+        run: python -m py_compile server.py audio.py effects.py diagnostics.py wb_config.py alerts.py reports.py webapp.py
 
       - name: Lancer la suite de tests
         run: ./tests/run_all.sh

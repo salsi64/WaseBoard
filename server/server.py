@@ -41,6 +41,7 @@ import audio
 import diagnostics
 import effects
 import reports
+import webapp
 # Le code audio vit dans audio.py ; ces noms restent importables depuis server (les tests lisent S.SILENCE, S.FRAME_BYTES…).
 from audio import (FRAME_BYTES, PCM_BYTES_PER_MS, RTP_CLOCK_HZ, SILENCE, MixingAudioSource, PCMBufferSource,
                    PCMCache, decode_to_pcm)
@@ -130,6 +131,12 @@ ALERTS_USER_ID: str = str(CONFIG.get("alerts_user_id") or "")  # vide = le propr
 ALERTS_DISK_PERCENT: int = CONFIG.get("alerts_disk_percent", 90)
 ALERTS_CERT_DAYS: int = CONFIG.get("alerts_cert_days", 14)
 ALERTS_ERROR_BURST: int = CONFIG.get("alerts_error_burst", 20)  # erreurs en 5 minutes
+# Application web (PWA) servie sous /app : voir webapp.py. Elle exige public_url (adresse de retour de la connexion Discord).
+# web_redirect_uris : adresses de retour supplémentaires acceptées (autre nom de domaine, accès en réseau local…) ; chacune
+# doit aussi être déclarée dans le portail Discord (OAuth2 › Redirects).
+WEB_APP_ENABLED: bool = CONFIG.get("web_app_enabled", True)
+WEB_REDIRECT_URIS: list = CONFIG.get("web_redirect_uris") or []
+WEB_DIR = Path(__file__).parent / "web"
 ALERTS_RECONNECT_MIN_S = 60  # une coupure de Discord plus courte n'est pas signalée
 ERROR_BURST = alerts.ErrorBurstDetector(ALERTS_ERROR_BURST)
 logging.getLogger().addHandler(ERROR_BURST)
@@ -154,7 +161,8 @@ SERVER_VERSION = "3.4.0-dev"
 
 #: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
 #: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).
-SERVER_FEATURES = ["replace_file", "stop_sound", "sequence", "play_effects"] + (["loop"] if LOOP_MAX_MINUTES > 0 else [])
+SERVER_FEATURES = (["replace_file", "stop_sound", "sequence", "play_effects"] + (["loop"] if LOOP_MAX_MINUTES > 0 else [])
+                   + (["web_app"] if WEB_APP_ENABLED and webapp.origin_of(PUBLIC_URL) and (WEB_DIR / "index.html").exists() else []))
 
 # Filet de sécurité seulement : l'activité est normalement effacée précisément à la fin
 # réelle du son (voir MixingAudioSource.on_finish), pas après un délai fixe. Cette valeur ne
@@ -1044,6 +1052,7 @@ class WaseBoardServer(commands.Bot):
         self._alerts_task: Optional[asyncio.Task] = None
         self._ready_seen = False
         self._gateway_down_since: Optional[float] = None
+        self.web_app: Optional[webapp.WebApp] = None  # application web (PWA) sous /app, si activée et complète
 
     async def setup_hook(self) -> None:
         self.http_session = aiohttp.ClientSession()
@@ -1695,6 +1704,12 @@ class WaseBoardServer(commands.Bot):
         app.router.add_post("/oauth/exchange", self._handle_oauth_exchange)
         app.router.add_post("/oauth/logout", self._handle_oauth_logout)
 
+        if WEB_APP_ENABLED:
+            web_app = webapp.WebApp(WEB_DIR, PUBLIC_URL, WEB_REDIRECT_URIS, self.oauth_client_id, SERVER_VERSION, SERVER_FEATURES)
+            if web_app.load():
+                self.web_app = web_app
+                web_app.add_routes(app.router)
+
         self._web_runner = web.AppRunner(app)
         await self._web_runner.setup()
         site = web.TCPSite(self._web_runner, HTTP_HOST, HTTP_PORT)
@@ -1825,12 +1840,25 @@ class WaseBoardServer(commands.Bot):
         return web.json_response({"status": "ok" if ready else "starting"}, status=200 if ready else 503,
                                  headers={"Cache-Control": "no-store"})
 
-    def _check_auth(self, request: web.Request) -> bool:
+    def _check_secret(self, request: web.Request) -> bool:
+        """Le secret partagé de l'instance (application Windows) : vrai s'il est présenté, ou si l'instance n'en a pas."""
         if not SHARED_SECRET:
             return True
         sent = request.headers.get("X-WaseBoard-Token", "")
         # Comparaison à temps constant (pas de fuite du secret par mesure de durée) ; en octets pour accepter tout texte.
         return hmac.compare_digest(sent.encode("utf-8"), SHARED_SECRET.encode("utf-8"))
+
+    def _check_auth(self, request: web.Request) -> bool:
+        """Première barrière de chaque route : le secret partagé, OU un appel de la page web (/app). Une page publique ne peut
+        pas garder de secret : elle s'authentifie par la session Discord obtenue par OAuth2, présentée en `Authorization:
+        Bearer` (la route vérifie ensuite que cette session est valide). On exige ici qu'elle existe et que l'origine
+        éventuelle de l'appel soit celle du site."""
+        if self._check_secret(request):
+            return True
+        if self.web_app is None or not self.web_app.origin_allowed(request.headers.get("Origin")):
+            return False
+        auth = request.headers.get("Authorization", "")
+        return auth.startswith("Bearer ") and auth[len("Bearer "):].strip() in self.oauth_sessions
 
     async def _handle_connect_page(self, request: web.Request) -> web.Response:
         """GET /connect/{code} : page ouverte depuis le bouton Discord (donc SANS en-tête d'authentification, par
@@ -2254,8 +2282,13 @@ class WaseBoardServer(commands.Bot):
 
     async def _handle_oauth_exchange(self, request: web.Request) -> web.Response:
         """Échange un code d'autorisation Discord contre une session WaseBoard. Le
-        client_secret Discord reste ici, jamais transmis au client."""
-        if not self._check_auth(request):
+        client_secret Discord reste ici, jamais transmis au client. Deux appelants : l'application Windows (secret partagé,
+        retour en boucle locale) et la page web /app (origine du site, retour sur /app/callback) — la page n'a pas encore de
+        session, c'est justement ce qu'elle vient chercher."""
+        secret_ok = self._check_secret(request)
+        web_ok = (self.web_app is not None and request.headers.get("Origin") is not None
+                  and self.web_app.origin_allowed(request.headers.get("Origin")))
+        if not (secret_ok or web_ok):
             return web.json_response({"error": "unauthorized"}, status=401)
         if not self.oauth_client_id() or not OAUTH2_CLIENT_SECRET:
             return web.json_response({"error": "OAuth2 non configuré côté serveur"}, status=500)
@@ -2269,10 +2302,12 @@ class WaseBoardServer(commands.Bot):
         redirect_uri = data.get("redirect_uri")
         if not code or not redirect_uri:
             return web.json_response({"error": "'code' et 'redirect_uri' requis"}, status=400)
-        # Défense en profondeur : n'accepte que des redirections en boucle locale, cohérent
-        # avec la restriction que Discord impose déjà côté autorisation — évite d'utiliser cet
-        # endpoint comme proxy générique d'échange de code vers un redirect_uri arbitraire.
-        if not (redirect_uri.startswith("http://127.0.0.1:") or redirect_uri.startswith("http://localhost:")):
+        # Défense en profondeur : n'accepte que les adresses de retour prévues — la boucle locale de l'application Windows,
+        # ou celle de la page web de CE serveur — pour ne pas servir de proxy générique d'échange de code vers un
+        # redirect_uri arbitraire. Sans le secret partagé, seule la page web est acceptée.
+        loopback = isinstance(redirect_uri, str) and redirect_uri.startswith(("http://127.0.0.1:", "http://localhost:"))
+        web_callback = self.web_app is not None and redirect_uri in self.web_app.redirect_uris()
+        if not (web_callback or (secret_ok and loopback)):
             return web.json_response({"error": "redirect_uri non autorisé"}, status=400)
 
         try:

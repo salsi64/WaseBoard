@@ -18,6 +18,8 @@
   "pcm_cache_mb": 0,
   "session_max_idle_days": 90,
   "loop_max_minutes": 30,
+  "web_app_enabled": true,
+  "web_redirect_uris": [],
   "alerts_enabled": true,
   "alerts_user_id": "",
   "alerts_disk_percent": 90,

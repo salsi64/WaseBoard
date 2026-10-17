@@ -37,5 +37,5 @@ jobs:
 
       - name: L'image démarre-t-elle ? (import des modules, ffmpeg présent)
         run: |
-          docker run --rm --entrypoint python waseboard-server:ci -c "import ast,sys; [ast.parse(open(f, encoding='utf-8').read()) for f in ('server.py','audio.py','effects.py','diagnostics.py','wb_config.py','alerts.py','reports.py')]; print('modules présents et valides')"
+          docker run --rm --entrypoint python waseboard-server:ci -c "import ast,sys; [ast.parse(open(f, encoding='utf-8').read()) for f in ('server.py','audio.py','effects.py','diagnostics.py','wb_config.py','alerts.py','reports.py','webapp.py')]; assert open('web/index.html', encoding='utf-8').read(); print('modules et page web présents et valides')"
           docker run --rm --entrypoint ffmpeg waseboard-server:ci -version | head -1

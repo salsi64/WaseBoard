@@ -25,6 +25,17 @@ for f in test_*.py; do
     echo
 done
 
+# Page web (server/web) : tests de sa logique avec Node (>= 18) ; ignorés, avec un avertissement, si Node n'est pas installé.
+if command -v node >/dev/null 2>&1; then
+    total_files=$((total_files + 1))
+    echo "=== web/*.test.mjs (Node) ==="
+    node --test web/*.test.mjs || { echo "❌ les tests de la page web ont échoué"; status=1; }
+    echo
+else
+    echo "⚠️  Node.js introuvable : les tests de la page web (tests/web) sont ignorés."
+    echo
+fi
+
 if [ "$status" -eq 0 ]; then
     echo "✅ $total_files fichier(s) de test, tous au vert."
 else

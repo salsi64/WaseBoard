@@ -38,6 +38,14 @@ def _boolean(value) -> bool:
     raise ValueError("« true » ou « false » est attendu")
 
 
+def _json_list(value) -> list:
+    """Variable d'environnement contenant une liste JSON (ex : ["https://exemple.org/app/callback"])."""
+    parsed = json.loads(value)
+    if not isinstance(parsed, list):
+        raise ValueError("une liste JSON [...] est attendue")
+    return parsed
+
+
 def _json_object(value) -> dict:
     """Variable d'environnement contenant un objet JSON (ex : {"max_total_mb": 500})."""
     parsed = json.loads(value)
@@ -75,6 +83,8 @@ ENV_OVERRIDES: dict[str, tuple[str, Callable]] = {
     "pcm_cache_mb": ("WASEBOARD_PCM_CACHE_MB", float),
     "session_max_idle_days": ("WASEBOARD_SESSION_MAX_IDLE_DAYS", float),
     "loop_max_minutes": ("WASEBOARD_LOOP_MAX_MINUTES", float),
+    "web_app_enabled": ("WASEBOARD_WEB_APP_ENABLED", _boolean),
+    "web_redirect_uris": ("WASEBOARD_WEB_REDIRECT_URIS", _json_list),
     "alerts_enabled": ("WASEBOARD_ALERTS_ENABLED", _boolean),
     "alerts_user_id": ("WASEBOARD_ALERTS_USER_ID", str),
     "alerts_disk_percent": ("WASEBOARD_ALERTS_DISK_PERCENT", int),
@@ -110,6 +120,14 @@ def validate_limits(config: dict) -> None:
         value = config["pcm_cache_mb"]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 8192:
             raise ConfigError(f"pcm_cache_mb doit être une quantité de mémoire en Mo entre 0 (désactivé) et 8192, pas {value!r}.")
+    if "web_app_enabled" in config and not isinstance(config["web_app_enabled"], bool):
+        raise ConfigError(f"web_app_enabled doit être true ou false, pas {config['web_app_enabled']!r}.")
+    if "web_redirect_uris" in config:
+        uris = config["web_redirect_uris"]
+        if uris is not None and (not isinstance(uris, list) or not all(isinstance(u, str) and u.startswith(("http://", "https://"))
+                                                                    and " " not in u and "#" not in u for u in uris)):
+            raise ConfigError("web_redirect_uris doit être une liste d'adresses complètes (http:// ou https://, sans « # »), par exemple "
+                              "[\"https://autre-domaine.exemple/app/callback\"], pas " + repr(uris) + ".")
     if "alerts_enabled" in config and not isinstance(config["alerts_enabled"], bool):
         raise ConfigError(f"alerts_enabled doit être true ou false, pas {config['alerts_enabled']!r}.")
     if "alerts_user_id" in config:

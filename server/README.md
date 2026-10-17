@@ -474,6 +474,37 @@ fonctionnement, serveurs / salons vocaux / sons en lecture face aux plafonds, ap
 espace disque libre, serveurs les plus lourds et plafonds actifs. Pour une sonde externe (UptimeRobot, Kuma…), utilisez
 `GET /health` : `200` quand le bot est connecté à Discord, `503` sinon, sans aucun détail.
 
+### Application web (PWA)
+
+Le serveur sert aussi une **page web** sous `/app/` : la même liste de sons, le même bot, depuis un navigateur ou un téléphone
+(« Ajouter à l'écran d'accueil » l'installe comme une application), sans rien installer. On s'y connecte avec Discord ; on
+y joue un son, on coupe tout, on fait rejoindre le bot à son salon vocal, on cherche, on garde des favoris et des couleurs
+(enregistrés dans le navigateur) et on peut écouter un son sur l'appareil. Elle est en français et en anglais (langue du navigateur).
+
+Pour l'activer, il faut **`public_url`** (l'adresse HTTPS publique du serveur : Discord ramène la personne sur
+`<public_url>/app/callback`) et l'identifiant/secret OAuth2 déjà utilisés par l'application Windows. Puis, **une fois**, dans le
+[portail Discord](https://discord.com/developers/applications) › votre application › OAuth2 › Redirects, ajoutez :
+
+```
+https://votre-domaine.exemple/app/callback
+```
+
+| Réglage | Effet |
+|---|---|
+| `web_app_enabled` | **true** par défaut : la page est servie si `public_url` est valide. `false` la désactive (`/app` répond 404 ; `/status` n'annonce plus `web_app`). |
+| `web_redirect_uris` | liste d'adresses de retour supplémentaires acceptées (autre nom de domaine, accès par adresse IP du réseau local…). Chacune doit aussi figurer dans le portail Discord ; l'adresse d'origine du site doit être celle de `public_url` ou de l'une d'elles. |
+
+Sécurité : la page est publique mais **ne contient aucun secret**. Une page ne peut pas garder le « secret partagé » de l'instance :
+ses appels s'authentifient par la **session Discord** (en-tête `Authorization: Bearer`, pas de cookie, donc pas de CSRF) et doivent venir
+de l'origine du site. Conséquence à connaître : avec la page web activée, toute personne membre d'un serveur Discord où le bot est présent peut
+se connecter **sans** le secret partagé (elle ne voit que les sons de ses serveurs, comme dans l'application) ; `web_app_enabled: false` rétablit
+l'ancien fonctionnement. La page applique une politique de sécurité de contenu stricte (aucun script ni style en ligne, une seule origine,
+aucun cadre), et seuls les fichiers du dossier `web/` présents au démarrage sont servis. Hors connexion, la coquille de la page reste
+disponible (service worker) ; rien de personnel n'est mis en cache.
+
+Derrière nginx ou Caddy, rien à ajouter : `/app/` passe comme le reste. Le service worker et l'installation exigent **HTTPS**
+(ou `http://localhost`). Pour essayer sans bot ni compte : `python tests/preview_web.py` (fausses données, voir l'en-tête du fichier).
+
 ### Alertes d'exploitation
 
 Le bot prévient la personne qui héberge (message privé Discord : le propriétaire de l'application, ou `alerts_user_id`) quand
