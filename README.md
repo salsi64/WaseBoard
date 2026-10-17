@@ -1,5 +1,7 @@
 # 🎛️ WaseBoard
 
+*[🇬🇧 English version](README.en.md)*
+
 Soundboard partagé pour Discord : cliquez un son, il joue à la fois sur vos enceintes et dans
 votre salon vocal, pour tout le monde — sans jamais passer par votre micro (donc pas filtré par
 les suppressions de bruit type Krisp).
@@ -49,7 +51,14 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 - **Fenêtre « Éditer le son »** (clic droit › Éditer) : nom, emoji, couleur du bouton, catégories, volume propre
   à chaque son, favori, **découpe waveform** non destructive (le son complet est conservé, on recoupe quand on
   veut) et **remplacement du fichier audio** sans perdre le reste (nom, catégories, réglages).
-- **Raccourcis clavier globaux**, thème clair/sombre et interface **Flat** (par défaut), moderne ou classique,
+- **🌐 Version web (PWA)** : la même liste de sons depuis un navigateur ou un téléphone (« Ajouter à l'écran d'accueil »), connexion
+  avec Discord, ajout et édition de sons (découpe avec forme d'onde comprise), sans rien installer — sur `https://<votre serveur>/app/`, et même **dans Discord** comme Activité
+  de salon vocal (voir [`server/README.md`](server/README.md#activité-discord-waseboard-dans-un-salon-vocal)). Détails : [`server/README.md`](server/README.md#application-web-pwa).
+- **🎞 Clip des dernières secondes** : un raccourci garde le moment qui vient de passer dans un jeu, une vidéo ou Discord
+  et ouvre la fenêtre d'ajout pour en faire un son (désactivé par défaut ; tout reste en mémoire, rien n'est écrit sur le
+  disque avant que vous le demandiez). Guide : [`docs/clip-dernieres-secondes.md`](docs/clip-dernieres-secondes.md).
+- **Raccourcis clavier globaux** (un par son, et un pour basculer 🎮 Jeu / 🎧 Discord, avec un petit signal sonore
+  de confirmation), **Se déconnecter** de Discord depuis Paramètres, thème clair/sombre et interface **Flat** (par défaut), moderne ou classique,
   au choix, avec des palettes de couleurs indépendantes. La forme d'onde des boutons est optionnelle : masquée, les boutons
   tiennent sur une seule ligne et l'avatar de la personne qui joue reste affiché à droite du nom.
 - **Identification automatique** (connexion Discord) : votre compte suffit, WaseBoard retrouve
@@ -59,6 +68,10 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
 - **Panel d'administration** par serveur (rôles, corbeille avec restauration, statistiques,
   journal d'actions, quotas, anti-spam) et un **panneau de boutons Discord tout-en-un**
   (`/bot-setup`) pour démarrer, rejoindre le vocal ou ajouter le bot ailleurs sans quitter Discord.
+- **Commandes Discord** `/play` (avec recherche), `/stop`, `/top` et `/bilan` : jouer un son ou voir les classements du serveur sans ouvrir l'application ;
+  alertes d'exploitation par message privé à la personne qui héberge.
+- **Interface en français et en anglais** : WaseBoard suit la langue de Windows (ou le réglage Langue dans Apparence) ; les
+  messages du serveur la suivent aussi.
 - Formats supportés : mp3, wav, ogg (Vorbis et Opus), flac, m4a, wma.
 
 ## Héberger

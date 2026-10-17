@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WaseBoard</title>
+<link rel="alternate" hreflang="en" href="/en">
 <meta name="description" content="Soundboard partagé pour Discord : cliquez un son, il joue sur vos enceintes et dans le vocal, pour tout le monde.">
 <style>
   :root {
@@ -220,14 +221,14 @@
       <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
     </header>
 
-    <img class="hero-shot reveal" src="img/hero-flat.png" width="1760" height="1056" alt="Capture d'écran de WaseBoard 3.2 : boutons de son en pilules colorées avec leur forme d'onde, catégories repliables, barre latérale avec les serveurs Discord et les personnes qui jouent un son en ce moment">
+    <img class="hero-shot reveal" src="img/hero-flat-3.4.png" width="1760" height="1056" alt="Capture d'écran de WaseBoard 3.4 : boutons de son en pilules colorées avec leur forme d'onde, catégories repliables, bouton Clip, barre latérale avec les serveurs Discord et les personnes qui jouent un son en ce moment">
 
     <div class="actions">
       <a class="button primary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Télécharger le client Windows</a>
       <a class="button secondary" href="https://discord.com/oauth2/authorize?client_id=1546838877631811656&amp;permissions=3146752&amp;scope=bot%20applications.commands">➕ Ajouter WaseBoard à mon serveur</a>
       <a class="button secondary" href="https://discord.gg/HAGTNGFyQd">💬 Rejoindre le Discord WaseBoard</a>
     </div>
-    <div class="actions-hint">La plupart des gens n'ont besoin que du premier bouton — voir ci-dessous. <a class="link" href="#nouveautes">Nouveautés de la 3.2 ↓</a></div>
+    <div class="actions-hint">La plupart des gens n'ont besoin que du premier bouton — voir ci-dessous. <a class="link" href="#nouveautes">Nouveautés de la 3.4 ↓</a></div>
 
     <div class="choice recommended reveal" style="--card-accent: var(--accent-2); margin-bottom: 20px;">
       <span class="badge">LE PLUS FRÉQUENT</span>
@@ -251,21 +252,21 @@
       </div>
     </div>
 
-    <div class="section-label" id="nouveautes">Nouveau dans la version 3.2</div>
+    <div class="section-label" id="nouveautes">Nouveau dans la version 3.4</div>
 
     <div class="card news reveal">
-      <img class="news-shot" src="img/editer-son.png" width="360" height="592" loading="lazy" alt="Capture de la fenêtre « Éditer le son » : nom, emoji, couleur, catégories, volume de 0 à 200 %, découpe sur la forme d'onde, remplacement du fichier audio">
+      <img class="news-shot" src="img/clip-trim.png" width="420" height="411" loading="lazy" alt="Capture de la fenêtre d'ajout d'un son ouverte par le clip : nom « Clip 18:20 », découpe sur la forme d'onde, boutons Écouter l'extrait et Tout garder">
       <div>
-        <h2>Un client plus net, et chaque son réglé à votre goût</h2>
+        <h2>Créez des sons en une seconde, jouez-les de partout</h2>
         <ul>
-          <li data-i="🎨"><strong>Thème « Flat »</strong>, par défaut : champs en creux, boutons à dégradé, barre d'outils à icônes. Il se règle indépendamment de la palette de couleurs.</li>
-          <li data-i="✏️"><strong>Fenêtre « Éditer le son »</strong> (clic droit › Éditer) : nom, emoji, couleur, catégories, favori, découpe sur la forme d'onde.</li>
-          <li data-i="🔊"><strong>Volume propre à chaque son</strong>, de 0 à 200 % : le cri trop fort baisse, le murmure remonte.</li>
-          <li data-i="📁"><strong>Remplacer le fichier audio</strong> sans perdre le nom, les catégories ni les réglages.</li>
-          <li data-i="🌈"><strong>Boutons teintés</strong> de la couleur choisie, catégories repliables (▾/▸) et renommables par clic droit.</li>
-          <li data-i="🟢"><strong>Le voyant « en train de parler »</strong> du bot s'éteint enfin quand rien ne joue.</li>
+          <li data-i="🎞"><strong>Clip des dernières secondes</strong> : un raccourci garde ce qui vient de passer sur votre PC (jeu, vidéo, Discord) et ouvre la fenêtre d'ajout pour en faire un son. Désactivé par défaut ; tout reste en mémoire tant que vous ne le demandez pas.</li>
+          <li data-i="🌐"><strong>Version web</strong> : la même liste de sons dans un navigateur ou sur téléphone, avec ajout et édition de sons.</li>
+          <li data-i="🚀"><strong>Activité Discord</strong> : WaseBoard s'ouvre dans votre salon vocal, sans quitter Discord.</li>
+          <li data-i="⌨️"><strong>Commandes <code>/play</code>, <code>/stop</code>, <code>/top</code>, <code>/bilan</code></strong> : jouer un son (avec recherche), tout couper, classements du serveur.</li>
+          <li data-i="🇬🇧"><strong>Interface en anglais</strong> (et toujours en français) : WaseBoard suit la langue de Windows.</li>
+          <li data-i="🛠"><strong>Pour qui héberge</strong> : alertes par message privé, surveillance indépendante, sauvegarde hors de la machine.</li>
         </ul>
-        <div class="fine">Remplacer le fichier demande un serveur WaseBoard à jour (c'est le cas de l'instance publique).</div>
+        <div class="fine">La version web et l'Activité demandent un serveur WaseBoard à jour (c'est le cas de l'instance publique).</div>
         <a class="button secondary" href="https://github.com/salsi64/WaseBoard/releases/latest">⬇ Mettre à jour · notes de version</a>
       </div>
     </div>
@@ -324,7 +325,8 @@
       WaseBoard — projet open-source. Code source et documentation complète sur
       <a class="link" href="https://github.com/salsi64/WaseBoard">GitHub</a>.<br>
       <a class="link" href="/privacy.html">Confidentialité</a> ·
-      <a class="link" href="/terms.html">Conditions d'utilisation</a>
+      <a class="link" href="/terms.html">Conditions d'utilisation</a> ·
+      <a class="link" href="/en" hreflang="en">English</a>
     </div>
   </div>
 

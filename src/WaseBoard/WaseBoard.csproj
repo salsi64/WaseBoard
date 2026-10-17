@@ -5,7 +5,7 @@
     <!-- Doit rester synchronisé avec MyAppVersion dans installer/setup.iss (source de vérité
          pour le numéro affiché par l'installeur ; celle-ci est lue à l'exécution pour le
          comparateur de mises à jour, UpdateCheckService). -->
-    <Version>3.3.0</Version>
+    <Version>3.4.0</Version>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
@@ -34,6 +34,8 @@
     <Resource Include="Assets\app.ico" />
     <!-- Index des emojis Fluent 3D (voir EmojiImageResolver). LogicalName : nom stable pour GetManifestResourceStream. -->
     <EmbeddedResource Include="Assets\fluent-emoji-index.txt" LogicalName="fluent-emoji-index.txt" />
+    <!-- Textes de l'interface par langue (voir Services/Localization/Loc.cs) : Localization.fr.json, Localization.en.json. -->
+    <EmbeddedResource Include="Localization\*.json" LogicalName="Localization.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <!-- Effet « micro en jeu » (DLL C++ de native/WaseBoardMicFx) : livrée à côté de WaseBoard.exe,

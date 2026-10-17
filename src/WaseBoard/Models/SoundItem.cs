@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Text.Json.Serialization;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Models
 {
@@ -36,7 +37,7 @@ namespace WaseBoard.Models
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
 
         /// <summary>Nom affiché sur le bouton.</summary>
-        public string Name { get; set; } = "Nouveau son";
+        public string Name { get; set; } = Loc.T("sound.new");
 
         /// <summary>Emoji affiché à côté du nom (préférence locale, purement décorative).</summary>
         public string? Emoji { get; set; }
@@ -105,14 +106,14 @@ namespace WaseBoard.Models
         {
             get
             {
-                const string gestures = "Clic gauche : jouer dans le vocal • Clic droit : options • Glisser : déplacer/classer";
+                var gestures = Loc.T("sound.gestures");
                 if (!IsTrimmed) return gestures;
 
                 static string Fmt(double ms) => $"{(int)(ms / 60000)}:{(int)(ms / 1000) % 60:D2}";
                 var kept = Fmt(_trimEndMs!.Value - _trimStartMs!.Value);
                 var range = $"{Fmt(_trimStartMs.Value)} → {Fmt(_trimEndMs.Value)}";
-                var total = _durationMs > 0 ? $" sur {Fmt(_durationMs)}" : "";
-                return gestures + $"\n✂ Découpé : {range}{total} (durée jouée {kept}) — clic droit › Éditer";
+                var total = _durationMs > 0 ? Loc.T("sound.trim_of_total", Fmt(_durationMs)) : "";
+                return gestures + Loc.T("sound.trim_tooltip", range, total, kept);
             }
         }
 

@@ -1,0 +1,41 @@
+name: Release — publier le client
+
+# Pousser un tag vX.Y.Z (sur le commit de merge dans master) compile le client + l'installeur puis crée la
+# release GitHub avec WaseBoard-Setup-X.Y.Z.exe en pièce jointe. Les clients détectent la mise à jour par le
+# tag de la dernière release (UpdateCheckService) : la release est donc publiée tout de suite.
+#
+# Notes de version : docs/release-notes/vX.Y.Z.md s'il existe, sinon notes générées par GitHub.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/client-build.yml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: WaseBoard-Setup
+          path: dist
+
+      - name: Créer la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          notes="docs/release-notes/${TAG}.md"
+          if [ -f "$notes" ]; then
+            gh release create "$TAG" dist/WaseBoard-Setup-*.exe --title "WaseBoard ${TAG#v}" --notes-file "$notes" --verify-tag
+          else
+            gh release create "$TAG" dist/WaseBoard-Setup-*.exe --title "WaseBoard ${TAG#v}" --generate-notes --verify-tag
+          fi

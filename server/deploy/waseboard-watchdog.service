@@ -1,0 +1,23 @@
+# /etc/systemd/system/waseboard-watchdog.service — surveillance indépendante de WaseBoard (lancée par le minuteur).
+# Prévient sur un webhook Discord quand le service est arrêté ou que /health ne répond plus. Voir deploy/watchdog.sh.
+#
+# Installation :
+#   1. Remplacez VOTRE_USER (et les chemins) ci-dessous.
+#   2. Créez /etc/waseboard/watchdog.env (root, droits 600) avec au minimum :
+#        WEBHOOK_URL=https://discord.com/api/webhooks/…      (webhook d'un salon PRIVÉ : c'est un secret)
+#      et, pour une instance de test ou un autre port :  NAME=WaseBoard-test  UNIT=waseboard-test.service  HEALTH_URL=http://127.0.0.1:5007/health
+#   3. sudo systemctl daemon-reload && sudo systemctl enable --now waseboard-watchdog.timer
+[Unit]
+Description=Surveillance indépendante de WaseBoard
+
+[Service]
+Type=oneshot
+User=VOTRE_USER
+EnvironmentFile=-/etc/waseboard/watchdog.env
+StateDirectory=waseboard-watchdog
+ExecStart=/home/VOTRE_USER/waseboard-server/deploy/watchdog.sh
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only

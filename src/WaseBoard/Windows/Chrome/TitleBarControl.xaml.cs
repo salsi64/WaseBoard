@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Shell;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Windows.Chrome
 {
@@ -43,7 +44,7 @@ namespace WaseBoard.Windows.Chrome
         private void UpdateMaximizeGlyph(Window window)
         {
             MaximizeButton.Content = window.WindowState == WindowState.Maximized ? "" : "";
-            MaximizeButton.ToolTip = window.WindowState == WindowState.Maximized ? "Restaurer" : "Agrandir";
+            MaximizeButton.ToolTip = window.WindowState == WindowState.Maximized ? Loc.T("common.restore") : Loc.T("common.maximize");
         }
 
         private static void OnShowMinMaxChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

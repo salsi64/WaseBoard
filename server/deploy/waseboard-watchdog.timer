@@ -1,0 +1,12 @@
+# /etc/systemd/system/waseboard-watchdog.timer — un contrôle par minute (voir waseboard-watchdog.service).
+[Unit]
+Description=Contrôle de santé de WaseBoard, chaque minute
+
+[Timer]
+# Pas de contrôle pendant le démarrage de la machine : le serveur attend le réseau avant de se lancer.
+OnBootSec=3min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

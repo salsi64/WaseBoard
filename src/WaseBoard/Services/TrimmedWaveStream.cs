@@ -40,7 +40,7 @@ namespace WaseBoard.Services
         public override long Position
         {
             get => _delivered;
-            set => throw new NotSupportedException("Flux découpé : lecture séquentielle uniquement.");
+            set => throw new NotSupportedException("Trimmed stream: sequential reading only.");
         }
 
         public override int Read(byte[] buffer, int offset, int count)

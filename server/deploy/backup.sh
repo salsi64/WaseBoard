@@ -5,12 +5,14 @@
 # atomique), mais une archive prise en pleine copie d'un son peut contenir ce fichier incomplet : il est alors absent
 # du catalogue et sans effet.
 #
-# Usage : backup.sh [-d DOSSIER_DONNEES] [-o DOSSIER_SAUVEGARDES] [-k JOURS] [-s]
+# Usage : backup.sh [-d DOSSIER_DONNEES] [-o DOSSIER_SAUVEGARDES] [-k JOURS] [-s] [-c]
 #   -d  dossier des données (défaut : $WASEBOARD_DATA_DIR, sinon le dossier du serveur, parent de deploy/)
 #   -o  dossier où écrire les archives (défaut : ~/waseboard-backups)
 #   -k  jours de conservation (défaut : 7 ; 0 = ne rien supprimer)
-#   -s  inclut aussi config.json et oauth_sessions.json — SECRETS (jeton du bot, sessions Discord) : à réserver à une
-#       sauvegarde stockée en lieu sûr
+#   -s  inclut aussi config.json et oauth_sessions.json — SECRETS (jeton du bot, sessions Discord) — dans l'archive des données
+#   -c  écrit en plus une archive SÉPARÉE waseboard-config-AAAAMMJJ-HHMMSS.tgz avec config.json et oauth_sessions.json (secrets) :
+#       sans elle, une machine perdue oblige à recréer le jeton du bot et à reconnecter tout le monde. L'archive des données reste
+#       ainsi partageable ; à stocker en lieu sûr (droits 600 ; ne jamais la déposer dans un dépôt ni un service en ligne).
 #
 # Restauration (serveur ARRÊTÉ) : voir le README, « Sauvegarde et restauration ».
 set -euo pipefail
@@ -19,14 +21,16 @@ data_dir="${WASEBOARD_DATA_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 out_dir="$HOME/waseboard-backups"
 keep_days=7
 with_secrets=0
+config_archive=0
 
-while getopts "d:o:k:sh" opt; do
+while getopts "d:o:k:sch" opt; do
     case "$opt" in
         d) data_dir="$OPTARG" ;;
         o) out_dir="$OPTARG" ;;
         k) keep_days="$OPTARG" ;;
         s) with_secrets=1 ;;
-        *) echo "Usage : backup.sh [-d DOSSIER_DONNEES] [-o DOSSIER_SAUVEGARDES] [-k JOURS] [-s]  (voir l'en-tête du script)" >&2; exit 2 ;;
+        c) config_archive=1 ;;
+        *) echo "Usage : backup.sh [-d DOSSIER_DONNEES] [-o DOSSIER_SAUVEGARDES] [-k JOURS] [-s] [-c]  (voir l'en-tête du script)" >&2; exit 2 ;;
     esac
 done
 
@@ -73,7 +77,29 @@ fi
 mv "$tmp" "$final"
 echo "Sauvegarde WaseBoard : $final ($(du -h "$final" | cut -f1), ${#items[@]} éléments)"
 
+# Archive séparée des secrets (config.json : jeton du bot, secret partagé ; oauth_sessions.json : sessions Discord).
+if [ "$config_archive" = 1 ]; then
+    secret_items=()
+    for item in config.json oauth_sessions.json; do
+        [ -e "$data_dir/$item" ] && secret_items+=("$item")
+    done
+    if [ "${#secret_items[@]}" -eq 0 ]; then
+        echo "Sauvegarde WaseBoard : pas de config.json dans $data_dir, archive des réglages ignorée." >&2
+    else
+        config_final="$out_dir/waseboard-config-$stamp.tgz"
+        config_tmp="$config_final.part"
+        trap 'rm -f "$tmp" "$config_tmp"' EXIT
+        tar czf "$config_tmp" -C "$data_dir" "${secret_items[@]}" || die "tar a échoué pour l'archive des réglages."
+        config_listing="$(tar tzf "$config_tmp")" || die "l'archive des réglages est illisible : elle est écartée."
+        if [ -f "$data_dir/config.json" ]; then
+            grep -qx 'config.json' <<<"$config_listing" || die "config.json manque dans l'archive des réglages : elle est écartée."
+        fi
+        mv "$config_tmp" "$config_final"
+        echo "Sauvegarde WaseBoard : $config_final ($(du -h "$config_final" | cut -f1), SECRETS — à garder en lieu sûr)"
+    fi
+fi
+
 if [ "$keep_days" -gt 0 ]; then
-    removed="$(find "$out_dir" -maxdepth 1 -name 'waseboard-data-*.tgz' -mtime "+$keep_days" -print -delete | wc -l)"
+    removed="$(find "$out_dir" -maxdepth 1 \( -name 'waseboard-data-*.tgz' -o -name 'waseboard-config-*.tgz' \) -mtime "+$keep_days" -print -delete | wc -l)"
     [ "$removed" -eq 0 ] || echo "Sauvegarde WaseBoard : $removed archive(s) de plus de $keep_days jours supprimée(s)."
 fi

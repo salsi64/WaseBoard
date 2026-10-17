@@ -1,0 +1,32 @@
+name: Signaler un bug
+description: Quelque chose ne marche pas comme prévu
+labels: ["bug"]
+body:
+  - type: textarea
+    id: quoi
+    attributes:
+      label: Que s'est-il passé ?
+      description: Ce que vous avez fait, ce que vous attendiez, ce qui est arrivé.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Version du client
+      description: Paramètres › Mises à jour (ex. 3.3.0)
+    validations:
+      required: true
+  - type: dropdown
+    id: serveur
+    attributes:
+      label: Serveur utilisé
+      options:
+        - Instance publique (waseboard.salsi.bid)
+        - Mon propre serveur
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Messages d'erreur ou captures
+      description: N'incluez jamais votre jeton de serveur ni votre jeton de bot.

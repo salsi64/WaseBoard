@@ -5,6 +5,10 @@ namespace WaseBoard.Models
 {
     public class AppSettings
     {
+        /// <summary>Langue de l'interface : "auto" (celle de Windows : français, sinon anglais), "fr" ou "en". Lue au
+        /// démarrage par Loc.InitializeFromSettingsFile ; la changer demande de relancer l'application.</summary>
+        public string Language { get; set; } = "auto";
+
         /// <summary>Adresse du serveur WaseBoard (catalogue de sons + bot Discord). Vide par défaut :
         /// chaque installation cible son propre serveur (voir server/README.md pour l'héberger),
         /// aucune adresse par défaut n'est fournie avec l'application.</summary>
@@ -117,6 +121,25 @@ namespace WaseBoard.Models
         /// <summary>Affiche la mini-waveform sur les boutons de son. Désactivée : boutons plus compacts
         /// (une seule ligne), l'avatar de qui joue passe alors à droite de la ligne du nom.</summary>
         public bool ShowWaveforms { get; set; } = true;
+
+        /// <summary>Raccourci clavier global (ex. « Ctrl+Alt+M ») qui bascule le mode 🎮 Jeu / 🎧 Discord ; vide = aucun.</summary>
+        public string? MicModeHotkey { get; set; }
+
+        /// <summary>Petit signal sonore à chaque bascule par le raccourci : en plein jeu, le message à l'écran ne se voit pas.</summary>
+        public bool MicModeBeep { get; set; } = true;
+
+        /// <summary>Clip « les dernières secondes » : garde en mémoire (jamais sur le disque) ce que le PC joue, pour en faire
+        /// un son d'un raccourci. Désactivé par défaut (voir Services/LoopbackClipService.cs).</summary>
+        public bool ClipEnabled { get; set; }
+
+        /// <summary>Durée gardée en mémoire : 10, 15 ou 30 secondes (autre valeur = 15).</summary>
+        public int ClipSeconds { get; set; } = 15;
+
+        /// <summary>Raccourci clavier global (ex. « Ctrl+Alt+C ») qui garde les dernières secondes ; vide = aucun (le bouton de la barre d'outils reste).</summary>
+        public string? ClipHotkey { get; set; }
+
+        /// <summary>Petit signal sonore quand le clip est gardé : en plein jeu, rien ne s'affiche à l'écran.</summary>
+        public bool ClipBeep { get; set; } = true;
 
         /// <summary>Vrai dès que l'assistant de premier lancement a été fermé une fois (Terminer ou Passer) —
         /// évite de le rouvrir à chaque démarrage tant que le jeton/la connexion Discord ne sont pas remplis.</summary>

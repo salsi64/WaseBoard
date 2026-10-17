@@ -25,7 +25,9 @@ class FakeInteraction:
         self.response = FakeResponse()
 
 class FakeReq:
-    def __init__(self, code): self.match_info = {"code": code}
+    def __init__(self, code, language=None):
+        self.match_info = {"code": code}
+        self.headers = {"Accept-Language": language} if language else {}
 
 
 SECRET = "s3cr/et+&=é"
@@ -99,6 +101,16 @@ async def main():
     content, kw = await click()
     check("sans public_url : le bouton le dit au lieu d'émettre un lien", "non configuré" in content and "view" not in kw, content)
     S.PUBLIC_URL = "https://exemple.test"
+
+    print("\n--- Langue de la page ---")
+    code_en = S.create_invite_code()
+    page_fr = (await bot._handle_connect_page(FakeReq(code_en))).text
+    page_en = (await bot._handle_connect_page(FakeReq(code_en, "en-US,en;q=0.9"))).text
+    check("sans Accept-Language : page française", 'lang="fr"' in page_fr and "Ouvrir WaseBoard" in page_fr)
+    check("Accept-Language: en : page anglaise, même lien", 'lang="en"' in page_en and "Open WaseBoard" in page_en and "Ouvrir" not in page_en and expected_link.replace("&", "&amp;") in page_en)
+    gone_en = await bot._handle_connect_page(FakeReq("n-importe-quoi", "en"))
+    check("code inconnu : page anglaise aussi (404)", gone_en.status == 404 and "no longer valid" in gone_en.text)
+    check("langue non gérée : français", "Ouvrir WaseBoard" in (await bot._handle_connect_page(FakeReq(code_en, "de-DE"))).text)
 
     print("\n--- Robustesse ---")
     S.DOWNLOAD_URL = 'https://x.test/"><script>alert(1)</script>'

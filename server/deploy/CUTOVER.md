@@ -9,6 +9,20 @@ Portée : la bascule de **cette machine** (prod existante, `waseboard.service`) 
 rendu « public » sur le portail Discord, page d'accueil « Ajouter WaseBoard à mon serveur », annonce) est
 une étape **suivante**, volontairement hors de cette liste.
 
+## Bascule 3.4.0 — journal du 17/10/2026
+
+La bascule multi-tenant décrite plus bas est faite depuis longtemps (la prod sert déjà plusieurs serveurs Discord, port 5005 fermé, sauvegardes en place). Celle de la **3.4.0** :
+
+- [x] Version 3.4.0 (client, installeur, `SERVER_VERSION`), notes `docs/release-notes/v3.4.0.md`, CI verte.
+- [x] Sauvegarde complète juste avant (`backup.sh -s -c` : données + secrets), anciens fichiers gardés en `*.bak-20261017-145319`, `server.py --check` 13/13.
+- [x] Serveur 3.4.0 déployé en prod (`server.py audio.py effects.py diagnostics.py wb_config.py alerts.py reports.py webapp.py messages.py` + `web/`) puis `systemctl restart waseboard` (~10 s hors du vocal).
+      Retour arrière : restaurer les `*.bak-20261017-145319` (et `web.bak-…`), `sudo systemctl restart waseboard`.
+- [x] Exploitation : `waseboard-backup.service` avec `-c`, redémarrage hebdomadaire (dimanche 5 h, ancien `daily-reboot.timer` désactivé), nginx (rejet des scanners, limite de débit,
+      `/en`, racine `?frame_id=` → application web) sur `waseboard-salsi-bid` et l'ancien nom, accueil 3.4 fr/en déployée, surveillance indépendante (prod + test), sauvegarde hors machine (tâche planifiée du PC).
+- [ ] **Portail Discord (appli de prod, à faire à la main)** : OAuth2 › Redirects : `https://waseboard.salsi.bid/app/callback` et `https://127.0.0.1` · Activities › Settings : activer, URL Mappings `/` → `waseboard.salsi.bid` (+ `/discord-cdn` → `cdn.discordapp.com`).
+      Le serveur crée la commande de lancement `launch` au prochain démarrage si Discord ne l'a pas créée (message « 50226 » dans le journal tant que les Activités ne sont pas activées : normal).
+- [ ] Merge de `feature/roadmap-3.4` dans `master`, tag `v3.4.0` → la release GitHub (avec l'installeur) est créée par `.github/workflows/release.yml`.
+
 ## Pourquoi client et serveur basculent ensemble (pas l'un avant l'autre)
 
 Un simple `git merge` de `feature/multi-tenant` dans `master` ne change **rien** pour les utilisateurs :
@@ -68,7 +82,7 @@ vraies données de prod avant d'écrire cette étape (jamais exécuté sur la pr
 ## Le jour J, dans l'ordre
 
 1. [ ] **Arrêter le service** : `sudo systemctl stop waseboard`.
-2. [ ] **Déployer le nouveau code** (`server.py`, `diagnostics.py`, `wb_config.py`) dans
+2. [ ] **Déployer le nouveau code** (`server.py`, `audio.py`, `effects.py`, `diagnostics.py`, `wb_config.py`, `alerts.py`, `reports.py`, `webapp.py`, `messages.py` **et le dossier `web/`**, kit Discord `web/vendor/` compris) dans
        `~/waseboard-server/` — mêmes fichiers que ceux déployés et validés sur l'instance de test.
 2bis. [ ] **Migrer le catalogue existant** (107 sons, aucun n'a de `guild_id` : sans cette étape, ils
        deviennent invisibles pour tout le monde — voir l'explication complète plus bas). Le bot de prod
@@ -111,6 +125,12 @@ vraies données de prod avant d'écrire cette étape (jamais exécuté sur la pr
        après l'étape 6, pas avant (voir « Pourquoi client et serveur basculent ensemble »). C'est cette
        release, pas le merge, qui déclenche le toast « nouvelle version » chez les utilisateurs déjà
        installés (`UpdateCheckService`, comparaison au tag `vX.Y.Z`).
+6ter. [ ] **Page web et Activité Discord** (J8/J9, voir `server/README.md` › « Activité Discord ») :
+       - portail Discord › OAuth2 › Redirects : ajouter `https://waseboard.salsi.bid/app/callback` (page web) et, pour l'Activité, `https://127.0.0.1` (adresse factice) ;
+       - portail › Activities : activer les Activités, URL Mapping `/` → `waseboard.salsi.bid` (+ `/discord-cdn` → `cdn.discordapp.com`) ;
+       - nginx de prod : la racine du domaine sert la page d'accueil statique, or Discord charge `/?frame_id=…` → dans `location = /`, ajouter
+         `if ($arg_frame_id) { rewrite ^ /app/ last; }`, puis `sudo nginx -t && sudo systemctl reload nginx` ;
+       - vérifier `https://waseboard.salsi.bid/app/` puis lancer l'Activité depuis un salon vocal (propriétaire ou équipe de l'application seulement tant qu'elle n'est pas distribuée).
 7. [ ] **`/diagnostic`** dans chaque serveur Discord déjà utilisateur : droits du bot sur chaque salon
        vocal, intent, redirection OAuth2 — tout au vert.
 8. [ ] **Fermer l'ancien accès direct** (port 5005, commentaire `# WaseBoard direct (retrocompat, a
@@ -144,6 +164,29 @@ vraies données de prod avant d'écrire cette étape (jamais exécuté sur la pr
       sons, vocal).
 - [ ] Une fois tout le monde migré sur `waseboard.salsi.bid` : envisager de retirer
       `waseboard.duckdns.org` du nginx (pas obligatoire, juste pour alléger).
+
+## Exploitation (J11) — à installer en même temps que le reste, jamais avant
+
+Tout ceci a été essayé sur l'instance de test (`waseboard-test.salsi.bid`) ; la machine est partagée, donc ces éléments s'appliquent à la prod dès qu'ils sont installés.
+
+- [ ] **Sauvegarde des secrets** : ajouter `-c` à la commande de `waseboard-backup.service` de prod (`… -k 7 -c`), `sudo systemctl daemon-reload`, lancer une fois
+      `sudo systemctl start waseboard-backup.service` et vérifier la présence d'un `waseboard-config-*.tgz` dans `~/waseboard-backups`.
+- [ ] **Sauvegarde hors machine** : sur le PC Windows, `.\tools\pull-backup.ps1 -Server … -Port … -User … -KeyFile … -RemoteDir '~/waseboard-backups'` une fois à la main,
+      puis `-Install` (tâche planifiée quotidienne). Voir « Sauvegarde hors de la machine » dans `server/README.md`.
+- [ ] **Redémarrage hebdomadaire** : installer `deploy/waseboard-weekly-reboot.service` et `.timer`, puis **désactiver** l'ancien redémarrage quotidien :
+      `sudo systemctl disable --now daily-reboot.timer`.
+- [ ] **nginx** : `deploy/nginx/waseboard-limits.conf` dans `/etc/nginx/conf.d/`, `deploy/nginx/waseboard-hardening.conf` dans `/etc/nginx/snippets/`, et
+      `include /etc/nginx/snippets/waseboard-hardening.conf;` dans le bloc `server { }` du site de prod (`waseboard-salsi-bid` ; `waseboard` pour l'ancien nom),
+      `sudo nginx -t && sudo systemctl reload nginx`. Vérifier : `curl -i https://waseboard.salsi.bid/.env` se termine sans réponse, `/health` répond 200.
+- [ ] **`http_rate_limit_per_min`** : `60` dans le `config.json` de prod (déjà essayé sur le test).
+- [ ] **Surveillance indépendante** : créer un webhook dans un salon **privé** (Intégrations › Webhooks), puis, dans un terminal sur la machine,
+      `~/waseboard-server/deploy/install-watchdog.sh` (le webhook est demandé au clavier, jamais passé en argument), et
+      `install-watchdog.sh -n WaseBoard-test -u waseboard-test.service -p 5007 -i test` pour l'instance de test. Un message d'essai arrive dans le salon.
+
+## Page d'accueil (landing page)
+
+- [ ] Déployer `deploy/landing-page/index.html` **et `index.en.html`**, puis ajouter au vhost nginx de prod le bloc `location = /en { try_files /index.en.html =404; }`
+      (voir `deploy/landing-page/nginx-waseboard-salsi-bid.conf`), `sudo nginx -t && sudo systemctl reload nginx`.
 
 ## Hors de cette liste (étape suivante, plus tard)
 

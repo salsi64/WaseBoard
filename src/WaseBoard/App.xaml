@@ -319,7 +319,7 @@
         <!-- Menus contextuels (clic droit) : remplace le gris clair par défaut de WPF par un fond
              sombre cohérent avec le reste de l'app, tout en gardant un bon contraste (texte quasi
              blanc, surbrillance en couleur d'accent). S'applique à tous les ContextMenu/MenuItem
-             de l'app (sons, catégories, "+ Nouvelle catégorie"...), aucun n'était stylé jusqu'ici. -->
+             de l'app (sons, catégories, bouton + Nouvelle catégorie...), aucun n'était stylé jusqu'ici. -->
         <Style TargetType="ContextMenu">
             <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>

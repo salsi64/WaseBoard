@@ -28,6 +28,24 @@ def _optional_int(value) -> Optional[int]:
     return int(value)
 
 
+def _boolean(value) -> bool:
+    """Variable d'environnement booléenne : 1/true/yes/on ou 0/false/no/off (sans tenir compte de la casse)."""
+    text = str(value).strip().lower()
+    if text in ("1", "true", "yes", "on", "oui"):
+        return True
+    if text in ("0", "false", "no", "off", "non"):
+        return False
+    raise ValueError("« true » ou « false » est attendu")
+
+
+def _json_list(value) -> list:
+    """Variable d'environnement contenant une liste JSON (ex : ["https://exemple.org/app/callback"])."""
+    parsed = json.loads(value)
+    if not isinstance(parsed, list):
+        raise ValueError("une liste JSON [...] est attendue")
+    return parsed
+
+
 def _json_object(value) -> dict:
     """Variable d'environnement contenant un objet JSON (ex : {"max_total_mb": 500})."""
     parsed = json.loads(value)
@@ -63,6 +81,16 @@ ENV_OVERRIDES: dict[str, tuple[str, Callable]] = {
     "http_rate_limit_per_min": ("WASEBOARD_HTTP_RATE_LIMIT_PER_MIN", int),
     "voice_idle_sleep_s": ("WASEBOARD_VOICE_IDLE_SLEEP_S", float),
     "pcm_cache_mb": ("WASEBOARD_PCM_CACHE_MB", float),
+    "session_max_idle_days": ("WASEBOARD_SESSION_MAX_IDLE_DAYS", float),
+    "loop_max_minutes": ("WASEBOARD_LOOP_MAX_MINUTES", float),
+    "web_app_enabled": ("WASEBOARD_WEB_APP_ENABLED", _boolean),
+    "web_redirect_uris": ("WASEBOARD_WEB_REDIRECT_URIS", _json_list),
+    "web_activity_enabled": ("WASEBOARD_WEB_ACTIVITY_ENABLED", _boolean),
+    "alerts_enabled": ("WASEBOARD_ALERTS_ENABLED", _boolean),
+    "alerts_user_id": ("WASEBOARD_ALERTS_USER_ID", str),
+    "alerts_disk_percent": ("WASEBOARD_ALERTS_DISK_PERCENT", int),
+    "alerts_cert_days": ("WASEBOARD_ALERTS_CERT_DAYS", int),
+    "alerts_error_burst": ("WASEBOARD_ALERTS_ERROR_BURST", int),
     "default_guild_limits": ("WASEBOARD_DEFAULT_GUILD_LIMITS", _json_object),
     "guild_limit_ceilings": ("WASEBOARD_GUILD_LIMIT_CEILINGS", _json_object),
 }
@@ -81,10 +109,42 @@ def validate_limits(config: dict) -> None:
         value = config["voice_idle_sleep_s"]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 3600:
             raise ConfigError(f"voice_idle_sleep_s doit être un nombre de secondes entre 0 (jamais) et 3600, pas {value!r}.")
+    if "loop_max_minutes" in config:
+        value = config["loop_max_minutes"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 720:
+            raise ConfigError(f"loop_max_minutes doit être un nombre de minutes entre 0 (boucles désactivées) et 720, pas {value!r}.")
+    if "session_max_idle_days" in config:
+        value = config["session_max_idle_days"]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 3650:
+            raise ConfigError(f"session_max_idle_days doit être un nombre de jours entre 0 (jamais) et 3650, pas {value!r}.")
     if "pcm_cache_mb" in config:
         value = config["pcm_cache_mb"]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 8192:
             raise ConfigError(f"pcm_cache_mb doit être une quantité de mémoire en Mo entre 0 (désactivé) et 8192, pas {value!r}.")
+    if "web_app_enabled" in config and not isinstance(config["web_app_enabled"], bool):
+        raise ConfigError(f"web_app_enabled doit être true ou false, pas {config['web_app_enabled']!r}.")
+    if "web_activity_enabled" in config and not isinstance(config["web_activity_enabled"], bool):
+        raise ConfigError(f"web_activity_enabled doit être true ou false, pas {config['web_activity_enabled']!r}.")
+    if "web_redirect_uris" in config:
+        uris = config["web_redirect_uris"]
+        if uris is not None and (not isinstance(uris, list) or not all(isinstance(u, str) and u.startswith(("http://", "https://"))
+                                                                    and " " not in u and "#" not in u for u in uris)):
+            raise ConfigError("web_redirect_uris doit être une liste d'adresses complètes (http:// ou https://, sans « # »), par exemple "
+                              "[\"https://autre-domaine.exemple/app/callback\"], pas " + repr(uris) + ".")
+    if "alerts_enabled" in config and not isinstance(config["alerts_enabled"], bool):
+        raise ConfigError(f"alerts_enabled doit être true ou false, pas {config['alerts_enabled']!r}.")
+    if "alerts_user_id" in config:
+        value = config["alerts_user_id"]
+        if value not in (None, "") and not str(value).isdigit():
+            raise ConfigError(f"alerts_user_id doit être l'identifiant numérique d'un compte Discord (ou rester vide : le propriétaire "
+                              f"de l'application), pas {value!r}.")
+    for key, low, high, hint in (("alerts_disk_percent", 50, 99, "pourcentage de disque rempli (0 = alerte désactivée)"),
+                                 ("alerts_cert_days", 1, 90, "jours avant l'expiration du certificat (0 = alerte désactivée)"),
+                                 ("alerts_error_burst", 3, 1000, "nombre d'erreurs en 5 minutes (0 = alerte désactivée)")):
+        if key in config:
+            value = config[key]
+            if isinstance(value, bool) or not isinstance(value, int) or not (value == 0 or low <= value <= high):
+                raise ConfigError(f"{key} doit valoir 0 ou être un entier entre {low} et {high} : {hint}, pas {value!r}.")
     for name in ("default_guild_limits", "guild_limit_ceilings"):
         value = config.get(name)
         if value is None:

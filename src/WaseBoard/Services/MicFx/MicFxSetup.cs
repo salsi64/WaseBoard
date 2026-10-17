@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Win32;
 using NAudio.CoreAudioApi;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Services.MicFx
 {
@@ -152,7 +153,7 @@ namespace WaseBoard.Services.MicFx
             var arguments = string.Join(" ",
                 new[] { CommandLineSwitch }.Concat(args).Concat(new[] { "--result", resultPath }).Select(Quote));
 
-            var psi = new ProcessStartInfo(Environment.ProcessPath ?? throw new InvalidOperationException("Chemin de WaseBoard introuvable."))
+            var psi = new ProcessStartInfo(Environment.ProcessPath ?? throw new InvalidOperationException("WaseBoard executable path not found."))
             {
                 Arguments = arguments,
                 UseShellExecute = true,
@@ -163,22 +164,22 @@ namespace WaseBoard.Services.MicFx
             try
             {
                 using var process = Process.Start(psi);
-                if (process is null) return new Result(false, false, new() { "Impossible de lancer l'installation." });
+                if (process is null) return new Result(false, false, new() { Loc.T("mic.setup.launch_failed") });
                 await process.WaitForExitAsync();
             }
             catch (Win32Exception ex) when (ex.NativeErrorCode == 1223) // ERROR_CANCELLED : UAC refusé
             {
-                return new Result(false, true, new() { "Installation annulée (droits administrateur refusés)." });
+                return new Result(false, true, new() { Loc.T("mic.setup.cancelled") });
             }
 
             try
             {
                 var json = await File.ReadAllTextAsync(resultPath);
-                return JsonSerializer.Deserialize<Result>(json) ?? new Result(false, false, new() { "Résultat illisible." });
+                return JsonSerializer.Deserialize<Result>(json) ?? new Result(false, false, new() { Loc.T("mic.setup.unreadable") });
             }
             catch (Exception ex)
             {
-                return new Result(false, false, new() { "L'installation n'a pas rendu de résultat : " + ex.Message });
+                return new Result(false, false, new() { Loc.T("mic.setup.no_result", ex.Message) });
             }
             finally
             {
@@ -218,7 +219,7 @@ namespace WaseBoard.Services.MicFx
                         ok = UninstallElevated(messages);
                         break;
                     default:
-                        messages.Add($"Commande inconnue : « {command} ».");
+                        messages.Add(Loc.T("mic.setup.unknown_command", command));
                         break;
                 }
             }
@@ -240,12 +241,12 @@ namespace WaseBoard.Services.MicFx
         {
             if (!File.Exists(sourceDll))
             {
-                messages.Add("Fichier WaseBoardMicFx.dll introuvable à côté de WaseBoard : cette version ne contient pas le module micro.");
+                messages.Add(Loc.T("mic.setup.dll_missing"));
                 return false;
             }
             if (endpointGuids.Count == 0)
             {
-                messages.Add("Aucun micro sélectionné.");
+                messages.Add(Loc.T("mic.setup.none_selected"));
                 return false;
             }
 
@@ -260,7 +261,7 @@ namespace WaseBoard.Services.MicFx
 
             RestartAudioService(messages);
             DeleteOldDlls(keep: dllPath); // après le redémarrage : l'ancienne version n'est plus chargée
-            if (equipped > 0) messages.Insert(0, equipped == 1 ? "Effet installé sur 1 micro." : $"Effet installé sur {equipped} micros.");
+            if (equipped > 0) messages.Insert(0, equipped == 1 ? Loc.T("mic.setup.installed_one") : Loc.T("mic.setup.installed_n", equipped));
             return equipped > 0;
         }
 
@@ -291,7 +292,7 @@ namespace WaseBoard.Services.MicFx
             DeleteOldDlls(keep: null);
             DeleteIfEmpty(InstallDir);
             DeleteIfEmpty(Path.GetDirectoryName(InstallDir)!); // Program Files\WaseBoard, sauf si WaseBoard y est installé
-            messages.Insert(0, "Effet micro retiré.");
+            messages.Insert(0, Loc.T("mic.setup.removed"));
             return true;
         }
 
@@ -372,7 +373,7 @@ namespace WaseBoard.Services.MicFx
             using var fx = OpenForValues($@"{CaptureRoot}\{guid}\FxProperties");
             if (fx is null)
             {
-                messages.Add($"« {name} » : ce micro n'accepte pas d'effets audio (pilote sans section d'effets).");
+                messages.Add(Loc.T("mic.setup.no_effects", name));
                 return false;
             }
 
@@ -411,7 +412,7 @@ namespace WaseBoard.Services.MicFx
                 }
             }
 
-            messages.Add($"« {name} » : effet ajouté.");
+            messages.Add(Loc.T("mic.setup.effect_added", name));
             return true;
         }
 
@@ -444,7 +445,7 @@ namespace WaseBoard.Services.MicFx
                 props?.SetValue(PkeyDisableSysFx, original, RegistryValueKind.DWord);
             }
 
-            messages.Add($"« {name} » : effet retiré.");
+            messages.Add(Loc.T("mic.setup.effect_removed", name));
         }
 
         private static string MicName(string guid)
@@ -463,7 +464,7 @@ namespace WaseBoard.Services.MicFx
             var stopped = RunHidden(net, "stop AudioEndpointBuilder /y");
             var started = RunHidden(net, "start AudioEndpointBuilder") & RunHidden(net, "start Audiosrv");
             if (!stopped || !started)
-                messages.Add("Le service audio n'a pas pu être redémarré : redémarrez Windows pour finaliser.");
+                messages.Add(Loc.T("mic.setup.restart_windows"));
         }
 
         private static bool RunHidden(string fileName, string arguments)

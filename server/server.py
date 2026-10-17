@@ -8,34 +8,44 @@ Voir README.md pour la mise en place complète.
 
 import asyncio
 import hashlib
+import hmac
 import html
 import ipaddress
 import json
 import logging
+import math
 import os
 import secrets
 import shutil
 import signal
-import subprocess
 import sys
 import threading
 import time
 import uuid
-from collections import Counter, OrderedDict, deque
+from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import aiohttp
 import discord
-import numpy as np
 from discord import app_commands
 from discord.ext import commands
 from aiohttp import web
 
+import alerts
+import audio
 import diagnostics
+import effects
+import messages
+import reports
+import webapp
+# Le code audio vit dans audio.py ; ces noms restent importables depuis server (les tests lisent S.SILENCE, S.FRAME_BYTES…).
+from audio import (FRAME_BYTES, PCM_BYTES_PER_MS, RTP_CLOCK_HZ, SILENCE, MixingAudioSource, PCMBufferSource,
+                   PCMCache, decode_to_pcm)
 from wb_config import DATA_DIR, ConfigError, load_config
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -61,6 +71,7 @@ CATALOG_PATH = SOUNDS_DIR / "catalog.json"
 SHARED_CATEGORIES_PATH = DATA_DIR / "shared_categories.json"
 OAUTH_SESSIONS_PATH = DATA_DIR / "oauth_sessions.json"
 STATS_PATH = DATA_DIR / "stats.jsonl"
+ALERTS_STATE_PATH = DATA_DIR / "alerts_state.json"
 GUILD_SETTINGS_PATH = DATA_DIR / "guild_settings.json"
 AUDIT_PATH = DATA_DIR / "audit.jsonl"
 TRASH_DIR = SOUNDS_DIR / "trash"
@@ -103,9 +114,44 @@ HTTP_RATE_LIMIT_PER_MIN: int = CONFIG.get("http_rate_limit_per_min", 0)  # requ�
 # Voyant « en train de parler » du bot : secondes sans aucun son avant que le bot cesse d'émettre (le voyant s'éteint).
 # 0 (défaut) = le bot émet en continu, voyant toujours allumé mais AUCUNE latence au premier son. Voir MixingAudioSource.
 VOICE_IDLE_SLEEP_S: float = CONFIG.get("voice_idle_sleep_s", 0)
+audio.VOICE_IDLE_SLEEP_S = VOICE_IDLE_SLEEP_S  # lu par MixingAudioSource (module audio)
 # Mémoire (Mo) réservée aux sons déjà décodés : un clic démarre alors instantanément au lieu d'attendre ~50 ms le
 # démarrage de ffmpeg. 0 (défaut) = désactivé (chaque lecture lance ffmpeg). Voir PCMCache.
 PCM_CACHE_MB: float = CONFIG.get("pcm_cache_mb", 0)
+# Jours d'inactivité au bout desquels une session de connexion Discord est supprimée (0 = jamais) : une personne
+# qui n'ouvre plus l'appli ne laisse pas ses jetons Discord sur le serveur indéfiniment.
+SESSION_MAX_IDLE_DAYS: float = CONFIG.get("session_max_idle_days", 90)
+# Boucles (un son qui recommence tant qu'on ne l'arrête pas) : durée maximale en minutes avant arrêt automatique ;
+# 0 = boucles désactivées. Le son doit tenir en mémoire une fois décodé (LOOP_MAX_BYTES).
+LOOP_MAX_MINUTES: float = CONFIG.get("loop_max_minutes", 30)
+LOOP_MAX_BYTES = 32 * 1024 * 1024  # un son plus long (~170 s décodé) ne peut pas tourner en boucle
+# Alertes d'exploitation (message privé au propriétaire de l'application Discord) : voir alerts.py. Un seuil à 0 désactive
+# l'alerte correspondante ; alerts_enabled = false les coupe toutes.
+ALERTS_ENABLED: bool = CONFIG.get("alerts_enabled", True)
+ALERTS_USER_ID: str = str(CONFIG.get("alerts_user_id") or "")  # vide = le propriétaire de l'application
+ALERTS_DISK_PERCENT: int = CONFIG.get("alerts_disk_percent", 90)
+ALERTS_CERT_DAYS: int = CONFIG.get("alerts_cert_days", 14)
+ALERTS_ERROR_BURST: int = CONFIG.get("alerts_error_burst", 20)  # erreurs en 5 minutes
+# Application web (PWA) servie sous /app : voir webapp.py. Elle exige public_url (adresse de retour de la connexion Discord).
+# web_redirect_uris : adresses de retour supplémentaires acceptées (autre nom de domaine, accès en réseau local…) ; chacune
+# doit aussi être déclarée dans le portail Discord (OAuth2 › Redirects).
+WEB_APP_ENABLED: bool = CONFIG.get("web_app_enabled", True)
+WEB_REDIRECT_URIS: list = CONFIG.get("web_redirect_uris") or []
+WEB_DIR = Path(__file__).parent / "web"
+# Activité Discord (la même page, dans un salon vocal de Discord) : voir README. Sans effet si la page web est désactivée.
+WEB_ACTIVITY_ENABLED: bool = CONFIG.get("web_activity_enabled", True)
+# Commande « point d'entrée » (type 4) qui lance l'Activité : Discord ne la crée pas toujours seul (application qui avait déjà
+# des commandes avant l'activation des Activités), et une synchro globale des commandes slash la supprime. handler 2 = Discord
+# lance l'Activité lui-même. integration_types/contexts omis : valeurs par défaut de l'application.
+ACTIVITY_ENTRY_POINT_TYPE = 4
+ACTIVITY_ENTRY_POINT = {"name": "launch", "description": "Ouvre WaseBoard (la planche de sons) dans le salon vocal",
+                        "type": ACTIVITY_ENTRY_POINT_TYPE, "handler": 2}
+ALERTS_RECONNECT_MIN_S = 60  # une coupure de Discord plus courte n'est pas signalée
+ERROR_BURST = alerts.ErrorBurstDetector(ALERTS_ERROR_BURST)
+logging.getLogger().addHandler(ERROR_BURST)
+SEQUENCE_MAX_STEPS = 8           # sons dans un enchaînement
+SEQUENCE_MAX_DELAY_MS = 10_000   # attente maximale avant UNE étape
+SEQUENCE_MAX_SPAN_MS = 60_000    # délai total maximal avant la dernière étape
 # Réglages imposés par l'hébergeur aux guildes : valeurs PAR DÉFAUT de celles qui n'ont encore rien enregistré
 # (leurs admins peuvent les modifier) et PLAFONDS (que leurs admins ne peuvent pas dépasser ; « illimité » n'est alors
 # plus permis pour ce réglage). Clés possibles : voir wb_config.GUILD_LIMIT_KEYS.
@@ -118,14 +164,14 @@ TRASH_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma"}
 
-# Format attendu par discord.py pour une frame audio : 20ms de PCM stéréo 16 bits @ 48kHz.
-FRAME_BYTES = 3840
-SILENCE = b"\x00" * FRAME_BYTES
-RTP_CLOCK_HZ = 48000  # horloge RTP de l'audio Discord (Opus 48 kHz) : l'horodatage d'un paquet avance de 960 par trame de 20 ms
+
+#: Version du serveur, annoncée par /status (page Diagnostic du client, rapports de support).
+SERVER_VERSION = "3.4.0"
 
 #: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
 #: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).
-SERVER_FEATURES = ["replace_file"]
+SERVER_FEATURES = (["replace_file", "stop_sound", "sequence", "play_effects"] + (["loop"] if LOOP_MAX_MINUTES > 0 else [])
+                   + (["web_app"] if WEB_APP_ENABLED and webapp.origin_of(PUBLIC_URL) and (WEB_DIR / "index.html").exists() else []))
 
 # Filet de sécurité seulement : l'activité est normalement effacée précisément à la fin
 # réelle du son (voir MixingAudioSource.on_finish), pas après un délai fixe. Cette valeur ne
@@ -233,6 +279,20 @@ def save_oauth_sessions(data: dict) -> None:
     # token, et contient des jetons Discord vivants : écriture atomique, lisible par le seul
     # propriétaire.
     _atomic_write_json(OAUTH_SESSIONS_PATH, data, private=True)
+
+
+def purge_idle_sessions(sessions: dict, max_idle_days: float, now: Optional[float] = None) -> list[str]:
+    """Retire de `sessions` celles qui n'ont servi depuis plus de `max_idle_days` jours (0 = jamais) et renvoie leurs
+    jetons. Une session sans `last_used_at` (ancienne) est datée de sa création, à défaut de maintenant."""
+    if max_idle_days <= 0:
+        return []
+    now = time.time() if now is None else now
+    limit = now - max_idle_days * 86400
+    expired = [token for token, session in sessions.items()
+               if (session.get("last_used_at") or session.get("created_at") or now) < limit]
+    for token in expired:
+        del sessions[token]
+    return expired
 
 
 # ---------- Réglages par guilde, journal d'actions, corbeille ----------
@@ -594,321 +654,6 @@ def purge_expired_trash(now: Optional[float] = None) -> list[dict]:
     return expired
 
 
-PCM_BYTES_PER_MS = RTP_CLOCK_HZ * 2 * 2 // 1000  # s16le, 48 kHz, stéréo : 192 octets par milliseconde
-
-
-def decode_to_pcm(path: str, limit_bytes: int) -> Optional[bytes]:
-    """Décode tout un fichier audio en PCM s16le 48 kHz stéréo (exactement ce que produit FFmpegPCMAudio), avec la
-    priorité la plus basse. None si le son dépasse `limit_bytes` une fois décodé ou si ffmpeg échoue : l'appelant le
-    lira alors en flux, comme avant. Bloquant : à appeler depuis un fil, jamais depuis la boucle d'évènements."""
-    cmd = ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", path, "-f", "s16le", "-ar", "48000", "-ac", "2", "pipe:1"]
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                            preexec_fn=(lambda: os.nice(10)) if hasattr(os, "nice") else None)
-    try:
-        data = proc.stdout.read(limit_bytes + 1)
-        if len(data) > limit_bytes or not data:
-            return None
-        return data if proc.wait(timeout=30) == 0 else None
-    except Exception:
-        return None
-    finally:
-        proc.kill()
-        proc.wait()
-        proc.stdout.close()
-
-
-class PCMCache:
-    """Sons décodés gardés en mémoire (au plus `max_bytes`, les moins récemment joués étant évincés en premier).
-    Clé = (id du son, date de modification, taille) : remplacer le fichier d'un son change la clé, l'ancienne version
-    n'est donc jamais rejouée. Un son trop long pour tenir (plus du quart du cache) n'est pas gardé et reste lu en
-    flux. Sûr à utiliser depuis plusieurs fils."""
-
-    def __init__(self, max_bytes: int) -> None:
-        self.max_bytes = max(0, int(max_bytes))
-        self._items: "OrderedDict[tuple, bytes]" = OrderedDict()
-        self._size = 0
-        self._loading: set = set()
-        self._uncacheable: set = set()
-        self._lock = threading.Lock()
-
-    @property
-    def enabled(self) -> bool:
-        return self.max_bytes > 0
-
-    @property
-    def max_item_bytes(self) -> int:
-        return self.max_bytes // 4
-
-    @property
-    def used_bytes(self) -> int:
-        return self._size
-
-    def get(self, key: tuple) -> Optional[bytes]:
-        with self._lock:
-            data = self._items.get(key)
-            if data is not None:
-                self._items.move_to_end(key)
-            return data
-
-    def put(self, key: tuple, data: bytes) -> bool:
-        with self._lock:
-            if len(data) > self.max_item_bytes:
-                self._uncacheable.add(key)
-                return False
-            previous = self._items.pop(key, None)
-            if previous is not None:
-                self._size -= len(previous)
-            self._items[key] = data
-            self._size += len(data)
-            while self._size > self.max_bytes and len(self._items) > 1:
-                _, evicted = self._items.popitem(last=False)
-                self._size -= len(evicted)
-            return True
-
-    def begin_load(self, key: tuple) -> bool:
-        """True si ce son doit être décodé maintenant (ni en mémoire, ni déjà en cours, ni connu comme trop gros)."""
-        with self._lock:
-            if not self.enabled or key in self._items or key in self._loading or key in self._uncacheable:
-                return False
-            self._loading.add(key)
-            return True
-
-    def end_load(self, key: tuple, data: Optional[bytes]) -> None:
-        if data is None:
-            with self._lock:
-                self._uncacheable.add(key)
-        else:
-            self.put(key, data)
-        with self._lock:
-            self._loading.discard(key)
-            if len(self._uncacheable) > 2000:  # garde-fou : l'ensemble ne doit pas grossir sans fin
-                self._uncacheable.clear()
-
-
-class PCMBufferSource(discord.AudioSource):
-    """Lit un son déjà décodé (voir PCMCache) par trames de 20 ms, sans aucun processus ni attente : le premier échantillon
-    part immédiatement. `start_ms`/`end_ms` = la portion gardée d'un son découpé (le tampon contient le fichier entier)."""
-
-    def __init__(self, buffer: bytes, start_ms: Optional[int] = None, end_ms: Optional[int] = None) -> None:
-        begin = 0 if start_ms is None else min(len(buffer), start_ms * PCM_BYTES_PER_MS // 4 * 4)
-        end = len(buffer) if end_ms is None else min(len(buffer), end_ms * PCM_BYTES_PER_MS // 4 * 4)
-        self._view = memoryview(buffer)[begin:max(begin, end)]
-        self._pos = 0
-
-    def read(self) -> bytes:
-        chunk = self._view[self._pos:self._pos + FRAME_BYTES]
-        self._pos += FRAME_BYTES
-        return bytes(chunk)
-
-    def is_opus(self) -> bool:
-        return False
-
-    def cleanup(self) -> None:
-        self._view = memoryview(b"")
-
-
-class MixingAudioSource(discord.AudioSource):
-    """
-    Source audio persistante d'un salon : mixe plusieurs sons différents (ajoutés via add(),
-    indexés par sound_id) à chaque frame de 20ms au lieu de se remplacer. Rejouer le MÊME son
-    coupe et relance l'instance précédente plutôt que de la superposer. Renvoie du silence
-    quand rien ne joue (le voice_client ne doit jamais voir de fin de flux).
-
-    Le callback "on_finish" optionnel se déclenche à la fin réelle du son (ou à son remplacement),
-    utilisé pour effacer le highlight partagé au bon moment.
-
-    Voyant « en train de parler » (facultatif, voice_idle_sleep_s) : par défaut le lecteur ne s'arrête jamais — le
-    flux reste continu et le premier son part sans la moindre latence, mais le voyant du bot reste allumé. Si
-    voice_idle_sleep_s > 0, le lecteur est mis en PAUSE (le voyant s'éteint, plus aucun paquet audio n'est envoyé) après
-    ce délai sans son, et relancé par add() dès qu'un son arrive — voir attach().
-
-    Piège de la pause : discord.py n'avance pas l'horodatage RTP pendant qu'il se tait. Au réveil, le récepteur voit
-    donc des paquets « en retard » de toute la durée de la pause et les rejette/retarde (latence au premier son, c'est
-    ce qui rendait chaque clic lent). On avance l'horodatage de la durée écoulée au réveil, comme le fait tout émetteur
-    RTP après un silence (voir _sync_rtp_timestamp).
-    """
-
-    def __init__(self, idle_sleep_frames: Optional[int] = None) -> None:
-        self._entries: dict[str, tuple[discord.AudioSource, Optional[callable]]] = {}
-        self._lock = threading.Lock()
-        self._voice_client = None
-        # Trames de 20 ms sans aucun son avant la pause ; 0 = jamais de pause.
-        self._sleep_after = round(VOICE_IDLE_SLEEP_S * 50) if idle_sleep_frames is None else idle_sleep_frames
-        self._idle_frames = 0
-        self._asleep = False
-        self._slept_at = 0.0
-        self._slept_ts: Optional[int] = None
-        self._sync_pending = False
-
-    def attach(self, voice_client) -> None:
-        """Lie ce mixeur au client vocal qui le lit : permet de mettre le lecteur en pause quand rien ne joue."""
-        self._voice_client = voice_client
-
-    def _wake_locked(self) -> None:
-        """Un son arrive : sort le lecteur de sa pause (rallume le voyant). Appelé verrou pris, comme la mise en pause,
-        pour qu'un add() ne puisse jamais s'intercaler entre « plus rien » et « pause » et laisser un son bloqué."""
-        self._idle_frames = 0
-        if self._asleep:
-            self._asleep = False
-            self._sync_pending = True  # horodatage RTP à rattraper juste avant le premier paquet (voir read())
-            if self._voice_client is not None:
-                try:
-                    self._voice_client.resume()
-                except Exception:
-                    log.exception("Reprise du lecteur vocal impossible")
-
-    def _maybe_sleep_locked(self) -> None:
-        if self._sleep_after <= 0 or self._asleep or self._idle_frames < self._sleep_after or self._voice_client is None:
-            return
-        self._asleep = True
-        # Repère de l'horloge au moment de la pause : appelé depuis read(), donc depuis le fil du lecteur, juste avant
-        # l'envoi de la trame que lit ce read() — vc.timestamp est exactement l'horodatage de ce paquet.
-        self._slept_at = time.monotonic()
-        self._slept_ts = getattr(self._voice_client, "timestamp", None)
-        try:
-            self._voice_client.pause()
-        except Exception:
-            self._asleep = False
-            self._idle_frames = 0  # on réessaiera dans 200 ms plutôt qu'à chaque frame
-            log.exception("Pause du lecteur vocal impossible")
-
-    def add(self, key: str, source: discord.AudioSource, on_finish: Optional[callable] = None) -> None:
-        with self._lock:
-            previous = self._entries.get(key)
-            self._entries[key] = (source, on_finish)
-            self._wake_locked()
-        # Coupe l'ancienne instance après avoir publié la nouvelle (jamais de trou pour cette
-        # clé), hors du verrou (cleanup/on_finish peuvent être lents).
-        if previous is not None:
-            old_source, old_on_finish = previous
-            try:
-                old_source.cleanup()
-            except Exception:
-                pass
-            if old_on_finish is not None:
-                try:
-                    old_on_finish()
-                except Exception:
-                    log.exception("Erreur dans un callback on_finish (relance)")
-
-    def count(self) -> int:
-        """Nombre de sons actuellement en lecture sur ce mixeur (un processus ffmpeg chacun)."""
-        with self._lock:
-            return len(self._entries)
-
-    def has(self, key: str) -> bool:
-        with self._lock:
-            return key in self._entries
-
-    def clear(self) -> None:
-        """Coupe immédiatement tous les sons en cours sur ce mixeur (bouton "Stop tout")."""
-        with self._lock:
-            entries, self._entries = self._entries, {}
-        self._finish_entries(entries.values())
-
-    def read(self) -> bytes:
-        frame = self._read_frame()
-        with self._lock:
-            sync, self._sync_pending = self._sync_pending, False
-        if sync:
-            # Après la lecture (qui peut avoir bloqué le temps que ffmpeg sorte sa première trame) et juste avant l'envoi
-            # du paquet par le lecteur : l'horodatage doit refléter l'instant réel d'émission.
-            self._sync_rtp_timestamp()
-        return frame
-
-    def _sync_rtp_timestamp(self) -> None:
-        """Au réveil d'une pause : avance l'horodatage RTP du client vocal de la durée réellement écoulée (moins ce
-        que les paquets de la pause ont déjà fait avancer), pour que le flux reprenne à l'heure — voir la docstring.
-        Appelé depuis le fil du lecteur, entre deux paquets : rien d'autre n'écrit l'horodatage à cet instant."""
-        vc, start_ts = self._voice_client, self._slept_ts
-        if vc is None or start_ts is None:
-            return
-        try:
-            elapsed = int((time.monotonic() - self._slept_at) * RTP_CLOCK_HZ)
-            already = (vc.timestamp - start_ts) & 0xFFFFFFFF
-            gap = elapsed - already
-            if gap > 0:
-                vc.timestamp = (vc.timestamp + gap) & 0xFFFFFFFF
-        except Exception:
-            log.exception("Resynchronisation de l'horodatage RTP impossible")
-
-    def _read_frame(self) -> bytes:
-        with self._lock:
-            snapshot = list(self._entries.items())
-            if snapshot:
-                self._idle_frames = 0
-            else:
-                self._idle_frames += 1
-                self._maybe_sleep_locked()
-
-        if not snapshot:
-            return SILENCE
-
-        frames, finished = [], []
-        for key, (source, _) in snapshot:
-            try:
-                data = source.read()
-            except Exception:
-                data = b""
-            if data:
-                frames.append(data)
-            else:
-                finished.append(key)
-
-        if finished:
-            finished_entries = []
-            with self._lock:
-                for key in finished:
-                    current = self._entries.get(key)
-                    # Ne retire QUE si c'est toujours la même instance qu'au moment du snapshot :
-                    # entre-temps, un nouvel appui a pu déjà remplacer cette clé par une relance
-                    # (voir add()) — dans ce cas, il ne faut surtout pas effacer la nouvelle entrée.
-                    if current is not None and current[0] is source:
-                        del self._entries[key]
-                        finished_entries.append(current)
-            self._finish_entries(finished_entries)
-
-        if not frames:
-            return SILENCE
-
-        if len(frames) == 1:
-            data = frames[0]
-            return data if len(data) == FRAME_BYTES else data.ljust(FRAME_BYTES, b"\x00")
-
-        # Saturation appliquée après chaque son ajouté (pas une somme brute clampée une seule
-        # fois à la fin) : reproduit exactement le comportement de l'ancienne boucle scalaire,
-        # où l'ordre d'empilement des sons peut influencer un résultat déjà saturé.
-        mixed = np.zeros(1920, dtype=np.int32)
-        for data in frames:
-            if len(data) < FRAME_BYTES:
-                data = data.ljust(FRAME_BYTES, b"\x00")
-            samples = np.frombuffer(data[:FRAME_BYTES], dtype=np.int16).astype(np.int32)
-            mixed = np.clip(mixed + samples, -32768, 32767)
-
-        return mixed.astype(np.int16).tobytes()
-
-    @staticmethod
-    def _finish_entries(entries) -> None:
-        for source, on_finish in entries:
-            try:
-                source.cleanup()
-            except Exception:
-                pass
-            if on_finish is not None:
-                try:
-                    on_finish()
-                except Exception:
-                    log.exception("Erreur dans un callback on_finish")
-
-    def is_opus(self) -> bool:
-        return False
-
-    def cleanup(self) -> None:
-        with self._lock:
-            entries, self._entries = self._entries, {}
-        self._finish_entries(entries.values())
-
-
 intents = discord.Intents.default()
 intents.voice_states = True
 intents.guilds = True
@@ -917,6 +662,22 @@ intents.members = True  # requis pour résoudre un membre par id ; à activer au
 
 
 # ---------- Limitation de débit des routes publiques ----------
+
+class PlayRefused(Exception):
+    """Lecture refusée (plafond de ressources, anti-spam, son impossible à préparer) : un message lisible, rendu soit en
+    réponse HTTP (route /play), soit en message Discord (commande /play)."""
+
+    def __init__(self, message: str, status: int = 429, retry_after: Optional[int] = None, retry_header: bool = False) -> None:
+        super().__init__(message)
+        self.message, self.status, self.retry_after, self.retry_header = message, status, retry_after, retry_header
+
+    def response(self) -> web.Response:
+        body: dict = {"error": self.message}
+        if self.retry_after is not None:
+            body["retry_after"] = self.retry_after
+        headers = {"Retry-After": str(self.retry_after)} if self.retry_header and self.retry_after is not None else None
+        return web.json_response(body, status=self.status, headers=headers)
+
 
 class CapacityError(Exception):
     """L'instance a atteint un de ses plafonds de ressources (message destiné à l'utilisateur)."""
@@ -983,6 +744,26 @@ def rate_limit_bucket(request: web.Request) -> Optional[str]:
 
 
 @web.middleware
+async def language_middleware(request: web.Request, handler):
+    """Rédige les messages d'erreur dans la langue du client (en-tête Accept-Language, voir messages.py). Le code du serveur écrit ses
+    messages en français : un appelant sans l'en-tête, ou qui demande le français, les reçoit tels quels."""
+    response = await handler(request)
+    language = messages.pick_language(request.headers.get("Accept-Language"))
+    if (language != messages.DEFAULT_LANGUAGE and isinstance(response, web.Response) and response.status >= 400
+            and response.content_type == "application/json" and response.body):
+        try:
+            data = json.loads(response.body)
+        except ValueError:
+            return response
+        if isinstance(data, dict) and isinstance(data.get("error"), str):
+            translated = messages.translate(data["error"], language)
+            if translated != data["error"]:
+                data["error"] = translated
+                response.body = json.dumps(data).encode("utf-8")
+    return response
+
+
+@web.middleware
 async def rate_limit_middleware(request: web.Request, handler):
     bucket = rate_limit_bucket(request)
     if bucket is not None:
@@ -1036,30 +817,53 @@ _CONNECT_PAGE_STYLE = (
 )
 
 
-def render_connect_page(link: Optional[str], nonce: str = "") -> str:
-    """Page d'invitation (français). link=None : code inconnu ou expiré."""
+# Textes de la page d'invitation, par langue (la langue vient de l'en-tête Accept-Language du navigateur, voir messages.py).
+_CONNECT_TEXTS = {
+    "fr": {
+        "gone_title": "Ce lien n'est plus valide",
+        "gone_text": "Il a expiré (ou n'a jamais existé). Retournez sur Discord et cliquez de nouveau sur « Recevoir mon lien WaseBoard » pour en obtenir un nouveau.",
+        "title": "Ouvrir WaseBoard",
+        "text": "WaseBoard va s'ouvrir et se connecter tout seul à ce serveur. Si votre navigateur demande l'autorisation d'ouvrir l'application, acceptez.",
+        "button": "Ouvrir WaseBoard",
+        "download_lead": "WaseBoard n'est pas encore installé ?",
+        "download_link": "Téléchargez-le ici",
+        "download_tail": "puis revenez cliquer sur le bouton.",
+        "copy_hint": "Rien ne se passe ? Copiez ce lien, puis collez-le dans la fenêtre Exécuter de Windows (touches Windows + R).",
+    },
+    "en": {
+        "gone_title": "This link is no longer valid",
+        "gone_text": "It has expired (or never existed). Go back to Discord and click “Get my WaseBoard link” again to get a new one.",
+        "title": "Open WaseBoard",
+        "text": "WaseBoard will open and connect to this server by itself. If your browser asks for permission to open the app, accept.",
+        "button": "Open WaseBoard",
+        "download_lead": "WaseBoard isn't installed yet?",
+        "download_link": "Download it here",
+        "download_tail": "then come back and click the button.",
+        "copy_hint": "Nothing happens? Copy this link, then paste it into the Windows Run window (Windows + R keys).",
+    },
+}
+
+
+def render_connect_page(link: Optional[str], nonce: str = "", language: str = "fr") -> str:
+    """Page d'invitation, dans la langue demandée (français par défaut). link=None : code inconnu ou expiré."""
+    text = _CONNECT_TEXTS.get(language, _CONNECT_TEXTS["fr"])
     if link is None:
-        body = (
-            "<h1>Ce lien n'est plus valide</h1>"
-            "<p>Il a expiré (ou n'a jamais existé). Retournez sur Discord et cliquez de nouveau sur "
-            "« Recevoir mon lien WaseBoard » pour en obtenir un nouveau.</p>"
-        )
+        body = f"<h1>{text['gone_title']}</h1><p>{text['gone_text']}</p>"
         script = ""
     else:
         body = (
-            "<h1>Ouvrir WaseBoard</h1>"
-            "<p>WaseBoard va s'ouvrir et se connecter tout seul à ce serveur. Si votre navigateur demande "
-            "l'autorisation d'ouvrir l'application, acceptez.</p>"
-            f'<a class="btn" href="{html.escape(link)}">Ouvrir WaseBoard</a>'
-            f'<p>WaseBoard n\'est pas encore installé ? <a class="dl" href="{html.escape(DOWNLOAD_URL)}">Téléchargez-le ici</a>, '
-            "puis revenez cliquer sur le bouton.</p>"
-            "<p><small>Rien ne se passe ? Copiez ce lien, puis collez-le dans la fenêtre Exécuter de Windows "
-            "(touches Windows + R).</small></p>"
+            f"<h1>{text['title']}</h1>"
+            f"<p>{text['text']}</p>"
+            f'<a class="btn" href="{html.escape(link)}">{text["button"]}</a>'
+            f'<p>{text["download_lead"]} <a class="dl" href="{html.escape(DOWNLOAD_URL)}">{text["download_link"]}</a>, '
+            f"{text['download_tail']}</p>"
+            f"<p><small>{text['copy_hint']}</small></p>"
             f'<textarea readonly onclick="this.select()">{html.escape(link)}</textarea>'
         )
         script = f'<script nonce="{nonce}">setTimeout(function(){{location.href={json.dumps(link)}}},400)</script>'
+    lang_code = language if language in _CONNECT_TEXTS else "fr"
     return (
-        '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>WaseBoard</title>'
+        f'<!doctype html><html lang="{lang_code}"><head><meta charset="utf-8"><title>WaseBoard</title>'
         '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">'
         f"<style>{_CONNECT_PAGE_STYLE}</style></head><body><main>{body}</main>{script}</body></html>"
     )
@@ -1293,10 +1097,21 @@ class WaseBoardServer(commands.Bot):
         self._trash_purge_task: Optional[asyncio.Task] = None
         # Anti-spam à la lecture : (guild_id, user_id) -> horodatages (monotonic) des lectures récentes
         self._play_history: dict[tuple[int, str], deque] = {}
+        # Étapes d'enchaînement programmées mais pas encore parties : guild_id -> {TimerHandle: id du son}.
+        self._pending_steps: dict[int, dict] = {}
+        # Alertes d'exploitation (voir alerts.py) : gestionnaire, tâche périodique, état de la connexion à Discord.
+        self.alerts: Optional[alerts.AlertManager] = None
+        self._alerts_task: Optional[asyncio.Task] = None
+        self._ready_seen = False
+        self._gateway_down_since: Optional[float] = None
+        self.web_app: Optional[webapp.WebApp] = None  # application web (PWA) sous /app, si activée et complète
 
     async def setup_hook(self) -> None:
         self.http_session = aiohttp.ClientSession()
         self._trash_purge_task = asyncio.create_task(self._trash_purge_loop())
+        if ALERTS_ENABLED:
+            self.alerts = alerts.AlertManager(alerts.AlertState(ALERTS_STATE_PATH), self._send_owner_dm)
+            self._alerts_task = asyncio.create_task(self._alerts_loop())
 
         # Enregistrement persistant (custom_id fixe) : le bouton reste fonctionnel sur le
         # message déjà posté par /configurer-invitation après un redémarrage, sans avoir à
@@ -1310,6 +1125,7 @@ class WaseBoardServer(commands.Bot):
             log.info("Commandes slash synchronisées globalement (peut prendre jusqu'à 1h à apparaître).")
         # Avec guild_id configuré : synchronisation instantanée PAR serveur, faite dans on_ready /
         # on_guild_join (self.guilds n'est pas encore rempli à ce stade).
+        await self._ensure_activity_entry_point()
 
         await self._start_http_server()
 
@@ -1321,6 +1137,26 @@ class WaseBoardServer(commands.Bot):
         application_id = self.application_id or (self.user.id if self.user else None)
         return str(application_id) if application_id else ""
 
+    async def _ensure_activity_entry_point(self) -> None:
+        """Crée la commande qui lance l'Activité si l'application n'en a pas (sans elle, le lanceur d'activités de Discord affiche
+        « aucune commande enregistrée pour les lancer »). Jamais bloquant : un échec (Activités pas encore activées au portail,
+        réseau) est journalisé et le serveur démarre quand même ; l'essai est refait au prochain démarrage."""
+        application_id = self.application_id or (self.user.id if self.user else None)
+        if not (WEB_APP_ENABLED and WEB_ACTIVITY_ENABLED and application_id):
+            return
+        try:
+            existing = await self.http.get_global_commands(application_id)
+            present = [c for c in existing if c.get("type") == ACTIVITY_ENTRY_POINT_TYPE]
+            if present:
+                log.info("Activité Discord : commande de lancement déjà présente (« %s », mode %s).", present[0].get("name"), present[0].get("handler"))
+                return
+            await self.http.upsert_global_command(application_id, dict(ACTIVITY_ENTRY_POINT))
+            log.info("Activité Discord : commande de lancement « %s » créée (à choisir dans le lanceur d'activités d'un salon vocal).",
+                     ACTIVITY_ENTRY_POINT["name"])
+        except Exception as exc:  # noqa: BLE001 — jamais bloquant au démarrage
+            log.warning("Activité Discord : commande de lancement non créée (%s). Vérifiez que les Activités sont activées au portail "
+                        "Discord (voir « Activité Discord » dans le README).", str(exc)[:200])
+
     async def _sync_commands_to_guild(self, guild: discord.abc.Snowflake) -> None:
         """Rend les commandes slash disponibles immédiatement sur ce serveur (la synchro globale
         met jusqu'à 1h à se propager). Sans ça, seul le serveur de guild_id aurait /join & co —
@@ -1329,6 +1165,7 @@ class WaseBoardServer(commands.Bot):
         await self.tree.sync(guild=guild)
 
     async def on_ready(self) -> None:
+        await self._alerts_on_ready()
         if not GUILD_ID or self._commands_synced:
             return
         self._commands_synced = True
@@ -1391,7 +1228,99 @@ class WaseBoardServer(commands.Bot):
         except Exception:
             log.exception("Échec de la synchronisation des commandes sur %s", guild.id)
 
+    # ---------- Alertes d'exploitation ----------
+
+    def _instance_footer(self) -> str:
+        """Ligne discrète ajoutée à chaque alerte : de quelle instance elle vient (test, production…) et sa version."""
+        where = urlparse(PUBLIC_URL).netloc if PUBLIC_URL else f"port {HTTP_PORT}"
+        return f"\n-# Instance : {where} · v{SERVER_VERSION}"
+
+    async def _send_owner_dm(self, text: str) -> bool:
+        """Remet une alerte à la personne qui héberge (alerts_user_id, sinon le propriétaire de l'application Discord).
+        False si les messages privés sont fermés ou que Discord est injoignable : l'appelant réessaiera plus tard."""
+        try:
+            if ALERTS_USER_ID:
+                recipient_id = int(ALERTS_USER_ID)
+            else:
+                info = await self.application_info()
+                recipient_id = info.team.owner_id if info.team else info.owner.id
+            user = await self.fetch_user(recipient_id)
+            await user.send(text + self._instance_footer())
+            return True
+        except Exception as ex:
+            log.warning("Alerte non remise (messages privés fermés ou Discord injoignable) : %s", ex)
+            return False
+
+    async def _alerts_on_ready(self) -> None:
+        """Premier démarrage : signale un arrêt non propre de la fois précédente. Démarrages suivants (nouvelle session
+        après une coupure) : signale la reconnexion."""
+        if self.alerts is None:
+            return
+        if self._ready_seen:
+            await self._alerts_reconnected()
+            return
+        self._ready_seen = True
+        state = self.alerts.state
+        unexpected = state.clean_shutdown is False
+        state.clean_shutdown = False  # remis à True par close() ; resté False = le processus n'a pas pu s'arrêter proprement
+        state.save()
+        if unexpected:
+            await self.alerts.notify("restart", alerts.restart_alert(SERVER_VERSION))
+
+    async def _alerts_reconnected(self) -> None:
+        since, self._gateway_down_since = self._gateway_down_since, None
+        if self.alerts is None or since is None:
+            return
+        down = time.monotonic() - since
+        if down >= ALERTS_RECONNECT_MIN_S:
+            await self.alerts.notify("reconnect", alerts.reconnect_alert(down))
+
+    async def on_disconnect(self) -> None:
+        if self._gateway_down_since is None:
+            self._gateway_down_since = time.monotonic()
+
+    async def on_resumed(self) -> None:
+        await self._alerts_reconnected()
+
+    async def _alerts_loop(self) -> None:
+        """Contrôles périodiques (voir _alerts_tick) : un tour par minute, après un délai laissant le démarrage se terminer."""
+        await asyncio.sleep(90)
+        due = {"disk": 0.0, "cert": 0.0}
+        while True:
+            try:
+                await self._alerts_tick(due)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.warning("Échec d'un contrôle d'alerte", exc_info=True)  # WARNING : ne doit pas compter dans la rafale d'erreurs
+            await asyncio.sleep(60)
+
+    async def _alerts_tick(self, due: dict) -> None:
+        """Un tour de contrôles : rafale d'erreurs (à chaque tour), disque (toutes les 10 min), certificat HTTPS (toutes les
+        6 h). `due` : prochaines échéances (horloge monotone) du disque et du certificat, mises à jour ici."""
+        if self.alerts is None:
+            return
+        burst = ERROR_BURST.burst()
+        if burst is not None:
+            await self.alerts.notify("errors", alerts.error_burst_alert(burst[0], ERROR_BURST.window_s, burst[1]))
+        now = time.monotonic()
+        if now >= due["disk"]:
+            due["disk"] = now + 600
+            message = alerts.disk_alert(DATA_DIR, ALERTS_DISK_PERCENT)
+            if message:
+                await self.alerts.notify("disk", message)
+        if now >= due["cert"]:
+            due["cert"] = now + 6 * 3600
+            message = await asyncio.to_thread(alerts.certificate_alert, PUBLIC_URL, ALERTS_CERT_DAYS)
+            if message:
+                await self.alerts.notify("cert", message)
+
     async def close(self) -> None:
+        if self._alerts_task is not None:
+            self._alerts_task.cancel()
+        if self.alerts is not None:
+            self.alerts.state.clean_shutdown = True  # arrêt voulu (systemctl stop/restart, Ctrl+C) : pas d'alerte au prochain démarrage
+            self.alerts.state.save()
         if self._trash_purge_task is not None:
             self._trash_purge_task.cancel()
         if self.http_session is not None:
@@ -1409,6 +1338,13 @@ class WaseBoardServer(commands.Bot):
                     log.info("Corbeille : « %s » purgé définitivement (%s).", record.get("name"), record["id"])
             except Exception:
                 log.exception("Échec de la purge de la corbeille")
+            try:
+                expired = purge_idle_sessions(self.oauth_sessions, SESSION_MAX_IDLE_DAYS)
+                if expired:
+                    save_oauth_sessions(self.oauth_sessions)
+                    log.info("Sessions inactives depuis plus de %g jours supprimées : %d.", SESSION_MAX_IDLE_DAYS, len(expired))
+            except Exception:
+                log.exception("Échec de la purge des sessions inactives")
             await asyncio.sleep(6 * 3600)
 
     # ---------- Salons vocaux ----------
@@ -1753,12 +1689,13 @@ class WaseBoardServer(commands.Bot):
 
     # ---------- Activité (highlight + avatars partagés) & présence ----------
 
-    def record_activity(self, sound_id: str, user_id: str, username: Optional[str], avatar_url: Optional[str], guild_id: int) -> None:
+    def record_activity(self, sound_id: str, user_id: str, username: Optional[str], avatar_url: Optional[str], guild_id: int,
+                        ttl: Optional[float] = None) -> None:
         with self._activity_lock:
             self.active_plays.setdefault(sound_id, {})[user_id] = {
                 "username": username or "?",
                 "avatar_url": avatar_url or "",
-                "expires_at": time.time() + ACTIVITY_TTL_SECONDS,
+                "expires_at": time.time() + (ACTIVITY_TTL_SECONDS if ttl is None else ttl),
                 "guild_id": guild_id,
             }
 
@@ -1810,7 +1747,7 @@ class WaseBoardServer(commands.Bot):
 
     async def _start_http_server(self) -> None:
         app = web.Application(client_max_size=64 * 1024 * 1024,  # 64 Mo max par upload
-                              middlewares=[rate_limit_middleware] if RATE_LIMITER.limit > 0 else [])
+                              middlewares=[language_middleware] + ([rate_limit_middleware] if RATE_LIMITER.limit > 0 else []))
         app.router.add_get("/sounds", self._handle_list_sounds)
         app.router.add_get("/sounds/{id}/file", self._handle_get_file)
         app.router.add_post("/sounds", self._handle_upload_sound)
@@ -1819,6 +1756,7 @@ class WaseBoardServer(commands.Bot):
         app.router.add_delete("/sounds/{id}", self._handle_delete_sound)
         app.router.add_post("/play", self._handle_play)
         app.router.add_post("/stop", self._handle_stop_all)
+        app.router.add_post("/play-sequence", self._handle_play_sequence)
         app.router.add_post("/join-my-channel", self._handle_join_my_channel)
         app.router.add_get("/status", self._handle_status)
         app.router.add_get("/health", self._handle_health)  # publique et minimale : sonde Docker/Caddy/supervision
@@ -1837,12 +1775,23 @@ class WaseBoardServer(commands.Bot):
         app.router.add_post("/admin/guilds/{guild_id}/blocked", self._handle_admin_blocked)
         app.router.add_get("/oauth/client-id", self._handle_oauth_client_id)
         app.router.add_post("/oauth/exchange", self._handle_oauth_exchange)
+        app.router.add_post("/oauth/logout", self._handle_oauth_logout)
+
+        if WEB_APP_ENABLED:
+            web_app = webapp.WebApp(WEB_DIR, PUBLIC_URL, WEB_REDIRECT_URIS, self.oauth_client_id, SERVER_VERSION, SERVER_FEATURES,
+                                    activity=WEB_ACTIVITY_ENABLED)
+            if web_app.load():
+                self.web_app = web_app
+                web_app.add_routes(app.router)
 
         self._web_runner = web.AppRunner(app)
         await self._web_runner.setup()
         site = web.TCPSite(self._web_runner, HTTP_HOST, HTTP_PORT)
         await site.start()
         log.info("Serveur HTTP prêt sur %s:%s (catalogue + ordres de lecture WaseBoard).", HTTP_HOST, HTTP_PORT)
+        if not SHARED_SECRET:
+            log.warning("Aucun shared_secret configuré : les routes de l'API ne sont PAS protégées par le jeton partagé. "
+                        "Renseignez-en un (32 caractères aléatoires ou plus) avant d'exposer ce serveur.")
         if self.pcm_cache.enabled:
             asyncio.create_task(self._prewarm_pcm_cache())
 
@@ -1912,6 +1861,51 @@ class WaseBoardServer(commands.Bot):
                 self._schedule_pcm_load(key, file_path)
         return discord.PCMVolumeTransformer(source, volume=min(max(volume, 0.0), 2.0)), kind
 
+    @staticmethod
+    def _effect_stream_options(entry: dict, audio_filter: str):
+        """(before_options, options) de FFmpegPCMAudio pour un son AVEC effets : la portion gardée est découpée à l'ENTRÉE
+        (-ss/-t avant -i), de sorte que les filtres — dont la vitesse, qui change la durée — s'appliquent à la bonne portion."""
+        start, end = entry.get("trim_start_ms"), entry.get("trim_end_ms")
+        trimmed = isinstance(start, int) and isinstance(end, int) and end > start
+        before = f"-ss {start / 1000:.3f} -t {(end - start) / 1000:.3f}" if trimmed else None
+        return before, f'-af "{audio_filter}"'
+
+    async def _build_play_source(self, sound_id: str, entry: dict, file_path: Path, volume: float, *,
+                                 loop: bool = False, effects_: Optional[dict] = None):
+        """La source audio d'une lecture : le chemin rapide d'un clic simple (_make_play_source : mémoire, sinon ffmpeg),
+        avec effets (ffmpeg et filtres, sans passer par le cache), ou en boucle (son décodé en mémoire qui recommence sans
+        coupure, durée plafonnée par loop_max_minutes). Lève ValueError, avec un message lisible, si la boucle est impossible."""
+        audio_filter = effects.build_audio_filter(effects_)
+        if loop:
+            return await self._build_loop_source(sound_id, entry, file_path, volume, audio_filter)
+        if audio_filter:
+            before, options = self._effect_stream_options(entry, audio_filter)
+            source = discord.FFmpegPCMAudio(str(file_path), before_options=before, options=options)
+            return discord.PCMVolumeTransformer(source, volume=volume), "effets"
+        return self._make_play_source(sound_id, entry, file_path, volume)
+
+    async def _build_loop_source(self, sound_id: str, entry: dict, file_path: Path, volume: float, audio_filter: Optional[str]):
+        start, end = entry.get("trim_start_ms"), entry.get("trim_end_ms")
+        trimmed = isinstance(start, int) and isinstance(end, int) and end > start
+
+        buffer, slice_start, slice_end = None, None, None
+        if not audio_filter:
+            key = self._pcm_key(sound_id, file_path) if self.pcm_cache.enabled else None
+            buffer = self.pcm_cache.get(key) if key is not None else None
+            if buffer is not None and trimmed:
+                slice_start, slice_end = start, end
+        if buffer is None:
+            # Pas en mémoire (ou avec effets) : décodage maintenant, dans le fil d'arrière-plan, plafonné à LOOP_MAX_BYTES.
+            buffer = await asyncio.get_running_loop().run_in_executor(
+                self._pcm_executor,
+                lambda: decode_to_pcm(str(file_path), LOOP_MAX_BYTES, start_ms=start if trimmed else None,
+                                      end_ms=end if trimmed else None, audio_filter=audio_filter))
+            if buffer is None:
+                raise ValueError("Ce son est trop long (ou illisible) pour tourner en boucle.")
+
+        source = PCMBufferSource(buffer, slice_start, slice_end, loop=True, max_frames=round(LOOP_MAX_MINUTES * 60 * 50))
+        return discord.PCMVolumeTransformer(source, volume=volume), "boucle"
+
     async def _handle_health(self, request: web.Request) -> web.Response:
         """GET /health : 200 quand le bot est connecté à Discord, 503 tant qu'il démarre (ou s'il est déconnecté).
         Volontairement sans authentification et sans aucun détail (ni nom de serveur ni compteur) : elle sert à
@@ -1920,10 +1914,29 @@ class WaseBoardServer(commands.Bot):
         return web.json_response({"status": "ok" if ready else "starting"}, status=200 if ready else 503,
                                  headers={"Cache-Control": "no-store"})
 
-    def _check_auth(self, request: web.Request) -> bool:
+    def _check_secret(self, request: web.Request) -> bool:
+        """Le secret partagé de l'instance (application Windows) : vrai s'il est présenté, ou si l'instance n'en a pas."""
         if not SHARED_SECRET:
             return True
-        return request.headers.get("X-WaseBoard-Token") == SHARED_SECRET
+        sent = request.headers.get("X-WaseBoard-Token", "")
+        # Comparaison à temps constant (pas de fuite du secret par mesure de durée) ; en octets pour accepter tout texte.
+        return hmac.compare_digest(sent.encode("utf-8"), SHARED_SECRET.encode("utf-8"))
+
+    def _check_auth(self, request: web.Request) -> bool:
+        """Première barrière de chaque route : le secret partagé, OU un appel de la page web (/app). Une page publique ne peut
+        pas garder de secret : elle s'authentifie par la session Discord obtenue par OAuth2, présentée en `Authorization:
+        Bearer` (la route vérifie ensuite que cette session est valide). On exige ici qu'elle existe et que l'origine
+        éventuelle de l'appel soit celle du site."""
+        if self._check_secret(request):
+            return True
+        if self.web_app is None:
+            return False
+        origin = request.headers.get("Origin")
+        if not self.web_app.origin_allowed(origin):
+            self.web_app.note_refused_origin(origin)
+            return False
+        auth = request.headers.get("Authorization", "")
+        return auth.startswith("Bearer ") and auth[len("Bearer "):].strip() in self.oauth_sessions
 
     async def _handle_connect_page(self, request: web.Request) -> web.Response:
         """GET /connect/{code} : page ouverte depuis le bouton Discord (donc SANS en-tête d'authentification, par
@@ -1931,14 +1944,15 @@ class WaseBoardServer(commands.Bot):
         à un membre qui a cliqué sur le bouton ; sans code valide, elle ne révèle rien."""
         headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex"}
         code = request.match_info["code"]
+        language = messages.pick_language(request.headers.get("Accept-Language"))
         if not (PUBLIC_URL and SHARED_SECRET and invite_code_is_valid(code)):
-            return web.Response(text=render_connect_page(None), content_type="text/html", status=404, headers=headers)
+            return web.Response(text=render_connect_page(None, language=language), content_type="text/html", status=404, headers=headers)
 
         nonce = secrets.token_urlsafe(12)
         headers["Content-Security-Policy"] = (
             f"default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-{nonce}'; base-uri 'none'; form-action 'none'"
         )
-        return web.Response(text=render_connect_page(build_connect_link(), nonce), content_type="text/html", headers=headers)
+        return web.Response(text=render_connect_page(build_connect_link(), nonce, language), content_type="text/html", headers=headers)
 
     # ---------- Catalogue de sons ----------
 
@@ -2331,10 +2345,35 @@ class WaseBoardServer(commands.Bot):
             return web.json_response({"error": "identifiant client OAuth2 indisponible côté serveur"}, status=500)
         return web.json_response({"client_id": client_id})
 
+    async def _handle_oauth_logout(self, request: web.Request) -> web.Response:
+        """POST /oauth/logout : supprime la session de l'appelant (jetons Discord compris) du serveur. Idempotent :
+        une session déjà absente répond aussi « ok »."""
+        if not self._check_auth(request):
+            return web.json_response({"error": "unauthorized"}, status=401)
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[len("Bearer "):].strip()
+            session = self.oauth_sessions.pop(token, None)
+            if session is not None:
+                save_oauth_sessions(self.oauth_sessions)
+                log.info("Session OAuth2 fermée par %s (%s).", session.get("user_id"), session.get("username"))
+        return web.json_response({"status": "ok"})
+
     async def _handle_oauth_exchange(self, request: web.Request) -> web.Response:
         """Échange un code d'autorisation Discord contre une session WaseBoard. Le
-        client_secret Discord reste ici, jamais transmis au client."""
-        if not self._check_auth(request):
+        client_secret Discord reste ici, jamais transmis au client. Deux appelants : l'application Windows (secret partagé,
+        retour en boucle locale) et la page web /app (origine du site, retour sur /app/callback) — la page n'a pas encore de
+        session, c'est justement ce qu'elle vient chercher."""
+        secret_ok = self._check_secret(request)
+        origin = request.headers.get("Origin")
+        web_ok = self.web_app is not None and origin is not None and self.web_app.origin_allowed(origin)
+        # Activité Discord : le code est obtenu DANS Discord (SDK) et échangé sans adresse de retour. Le proxy de Discord peut
+        # réécrire ou retirer l'en-tête Origin : ce mode est donc reconnu à l'absence d'adresse de retour, pas à l'origine
+        # (celle-ci n'est de toute façon qu'une barrière légère : ce qui compte, c'est un code Discord valide pour CETTE application).
+        activity_ok = self.web_app is not None and self.web_app.enabled and self.web_app.activity
+        if not (secret_ok or web_ok or activity_ok):
+            if self.web_app is not None:
+                self.web_app.note_refused_origin(origin)
             return web.json_response({"error": "unauthorized"}, status=401)
         if not self.oauth_client_id() or not OAUTH2_CLIENT_SECRET:
             return web.json_response({"error": "OAuth2 non configuré côté serveur"}, status=500)
@@ -2344,24 +2383,37 @@ class WaseBoardServer(commands.Bot):
         except Exception:
             return web.json_response({"error": "corps JSON invalide"}, status=400)
 
+        if not isinstance(data, dict):
+            return web.json_response({"error": "corps JSON invalide"}, status=400)
         code = data.get("code")
-        redirect_uri = data.get("redirect_uri")
-        if not code or not redirect_uri:
+        redirect_uri = data.get("redirect_uri") or None
+        activity_exchange = redirect_uri is None and activity_ok     # code obtenu dans Discord (Activité)
+        if redirect_uri is not None and not (secret_ok or web_ok):
+            # Avec une adresse de retour (application Windows ou page web), l'appelant doit toujours être reconnu.
+            if self.web_app is not None:
+                self.web_app.note_refused_origin(origin)
+            return web.json_response({"error": "unauthorized"}, status=401)
+        if not code or (redirect_uri is None and not activity_exchange):
             return web.json_response({"error": "'code' et 'redirect_uri' requis"}, status=400)
-        # Défense en profondeur : n'accepte que des redirections en boucle locale, cohérent
-        # avec la restriction que Discord impose déjà côté autorisation — évite d'utiliser cet
-        # endpoint comme proxy générique d'échange de code vers un redirect_uri arbitraire.
-        if not (redirect_uri.startswith("http://127.0.0.1:") or redirect_uri.startswith("http://localhost:")):
-            return web.json_response({"error": "redirect_uri non autorisé"}, status=400)
+        # Défense en profondeur : n'accepte que les adresses de retour prévues — la boucle locale de l'application Windows,
+        # ou celle de la page web de CE serveur — pour ne pas servir de proxy générique d'échange de code vers un
+        # redirect_uri arbitraire. Sans le secret partagé, seule la page web est acceptée.
+        if redirect_uri is not None:
+            loopback = isinstance(redirect_uri, str) and redirect_uri.startswith(("http://127.0.0.1:", "http://localhost:"))
+            web_callback = self.web_app is not None and redirect_uri in self.web_app.redirect_uris()
+            if not (web_callback or (secret_ok and loopback)):
+                return web.json_response({"error": "redirect_uri non autorisé"}, status=400)
 
+        token_request = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": self.oauth_client_id(),
+            "client_secret": OAUTH2_CLIENT_SECRET,
+        }
+        if redirect_uri is not None:
+            token_request["redirect_uri"] = redirect_uri
         try:
-            token_data = await self._discord_token_request({
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-                "client_id": self.oauth_client_id(),
-                "client_secret": OAUTH2_CLIENT_SECRET,
-            })
+            token_data = await self._discord_token_request(token_request)
         except Exception as ex:
             log.exception("Échec de l'échange de code OAuth2 Discord")
             return web.json_response({"error": f"Échange avec Discord échoué : {ex}"}, status=502)
@@ -2384,12 +2436,17 @@ class WaseBoardServer(commands.Bot):
         save_oauth_sessions(self.oauth_sessions)
         log.info("Nouvelle session OAuth2 pour %s (%s)", session["user_id"], session["username"])
 
-        return web.json_response({
+        response = {
             "session_token": session_token,
             "user_id": session["user_id"],
             "username": session["username"],
             "avatar_url": session["avatar_url"],
-        })
+        }
+        if activity_exchange:
+            # Le SDK de Discord demande ce jeton (portée « identify » seulement, celui de la personne elle-même) pour
+            # « authenticate ». Il n'est renvoyé qu'à ce mode d'échange ; le serveur garde le sien de son côté.
+            response["discord_access_token"] = token_data["access_token"]
+        return web.json_response(response)
 
     async def _handle_status(self, request: web.Request) -> web.Response:
         if not self._check_auth(request):
@@ -2425,6 +2482,8 @@ class WaseBoardServer(commands.Bot):
             "connected_guild_count": len(self.voice_clients_map),
             "channel_members": channel_members,
             "features": SERVER_FEATURES,
+            "server_version": SERVER_VERSION,
+            "uptime_s": int(time.time() - STARTED_AT),
         })
 
     # ---------- Activité en temps réel & présence ----------
@@ -2750,23 +2809,26 @@ class WaseBoardServer(commands.Bot):
 
     # ---------- Lecture / arrêt ----------
 
-    async def _handle_play(self, request: web.Request) -> web.Response:
-        started = time.perf_counter()
+    async def _play_context(self, request: web.Request):
+        """Ce que /play et /play-sequence ont en commun : authentification, session, corps JSON, serveur Discord ciblé,
+        appartenance de l'appelant à ce serveur, salon vocal connecté. Renvoie (contexte, None) ou (None, réponse d'erreur)."""
         if not self._check_auth(request):
-            return web.json_response({"error": "unauthorized"}, status=401)
+            return None, web.json_response({"error": "unauthorized"}, status=401)
         session, err = await self._require_session(request)
         if err is not None:
-            return err
+            return None, err
 
         try:
             data = await request.json()
         except Exception:
-            return web.json_response({"error": "corps JSON invalide"}, status=400)
+            return None, web.json_response({"error": "corps JSON invalide"}, status=400)
+        if not isinstance(data, dict):
+            return None, web.json_response({"error": "corps JSON invalide"}, status=400)
 
         user_id = session["user_id"]
         guild_id = self.resolve_guild_id(data.get("guild_id"), user_id)
         if guild_id is None:
-            return web.json_response({
+            return None, web.json_response({
                 "error": "Impossible de déterminer le salon Discord cible : rejoignez un salon "
                          "vocal où le bot est présent (/join), puis réessayez."
             }, status=400)
@@ -2776,7 +2838,7 @@ class WaseBoardServer(commands.Bot):
         # resolve_guild_id) permettrait de faire jouer des sons dans le vocal d'une guilde étrangère.
         visible = await self.resolve_visible_guild_ids(int(user_id))
         if str(guild_id) not in visible:
-            return web.json_response(
+            return None, web.json_response(
                 {"error": "Vous n'êtes pas membre du serveur Discord ciblé."},
                 status=403,
             )
@@ -2784,65 +2846,226 @@ class WaseBoardServer(commands.Bot):
         vc = self.voice_clients_map.get(guild_id)
         mixer = self.mixers.get(guild_id)
         if vc is None or not vc.is_connected() or mixer is None:
-            return web.json_response({"error": "Le bot n'est connecté à aucun salon vocal sur ce serveur (utilisez /join)."}, status=409)
+            return None, web.json_response({"error": "Le bot n'est connecté à aucun salon vocal sur ce serveur (utilisez /join)."}, status=409)
 
-        sound_id = data.get("id")
-        volume = float(data.get("volume", 1.0))
+        return SimpleNamespace(data=data, user_id=user_id, guild_id=guild_id, visible=visible, mixer=mixer), None
 
+    def _locate_sound(self, sound_id, visible: set):
+        """(entrée du catalogue, chemin du fichier, None) ou (None, None, réponse d'erreur) pour un son demandé à la lecture."""
         entry = next((s for s in load_catalog() if s["id"] == sound_id), None)
         if entry is None:
-            return web.json_response({"error": f"son introuvable : {sound_id}"}, status=404)
+            return None, None, web.json_response({"error": f"son introuvable : {sound_id}"}, status=404)
 
         # Visibilité du son sur TOUTES les guildes de l'utilisateur (`visible`, calculé plus haut),
         # pas seulement celle où il se trouve en vocal : un membre de plusieurs guildes peut jouer
         # n'importe lequel de ses sons dans le salon où il est, sans partage explicite préalable.
         if not self.sound_visible_to(entry, visible):
-            return web.json_response(
+            return None, None, web.json_response(
                 {"error": "Ce son n'appartient à aucune de vos guildes Discord connues."},
                 status=403,
             )
 
         file_path = SOUNDS_DIR / f"{sound_id}{entry['extension']}"
         if not file_path.exists():
-            return web.json_response({"error": "fichier manquant sur le serveur"}, status=404)
+            return None, None, web.json_response({"error": "fichier manquant sur le serveur"}, status=404)
+        return entry, file_path, None
+
+    @staticmethod
+    def _parse_volume(raw) -> float:
+        try:
+            volume = float(1.0 if raw is None else raw)
+        except (TypeError, ValueError):
+            raise ValueError("« volume » doit être un nombre.")
+        if not math.isfinite(volume):
+            raise ValueError("« volume » doit être un nombre.")
+        return min(max(volume, 0.0), 2.0)
+
+    async def _start_playback(self, guild_id: int, user_id, entry: dict, file_path: Path, volume: float,
+                              mixer: "MixingAudioSource", *, loop: bool = False, effects_: Optional[dict] = None) -> str:
+        """Lance un son dans le salon vocal de cette guilde. Tout ce qui précède — qui a le droit, quel serveur, quel son —
+        est déjà vérifié par l'appelant (route HTTP /play ou commande Discord /play) ; ici : plafonds de ressources,
+        anti-spam, préparation de la source, ajout au mixeur, activité partagée et statistiques. Lève PlayRefused ;
+        renvoie le mode de lecture (« flux », « mémoire »…), pour le journal."""
+        sound_id = entry["id"]
 
         # Plafonds de ressources de l'hébergeur : vérifiés AVANT l'anti-spam (un refus ne doit pas compter dans le quota).
         capacity_error = self._play_capacity_error(sound_id, guild_id, mixer)
         if capacity_error is not None:
-            return web.json_response({"error": capacity_error, "retry_after": 2}, status=429, headers={"Retry-After": "2"})
+            raise PlayRefused(capacity_error, 429, retry_after=2, retry_header=True)
 
         # Anti-spam réglé par l'admin de la guilde ciblée (où le son sera réellement joué) ;
         # les admins en sont exemptés. Vérifié en dernier : une requête refusée plus haut ne compte pas.
         retry_after = self._check_play_rate(guild_id, str(user_id))
         if retry_after is not None:
-            return web.json_response({
-                "error": f"Trop de sons envoyés : réessayez dans {retry_after} s.",
-                "retry_after": retry_after,
-            }, status=429)
+            raise PlayRefused(f"Trop de sons envoyés : réessayez dans {retry_after} s.", 429, retry_after=retry_after)
 
         # On AJOUTE au mixeur plutôt que de remplacer la lecture en cours : plusieurs sons
         # (déclenchés par le même utilisateur ou des utilisateurs différents) se superposent
         # au lieu de s'annuler mutuellement.
-        source, kind = self._make_play_source(sound_id, entry, file_path, volume)
+        try:
+            source, kind = await self._build_play_source(sound_id, entry, file_path, volume, loop=loop, effects_=effects_)
+        except ValueError as ex:
+            raise PlayRefused(str(ex), 400)
 
         # Le son part D'ABORD ; la résolution du membre Discord (highlight/avatar) — un appel
         # réseau si non déjà en cache — se fait ENSUITE en tâche de fond, pour ne jamais
         # retarder la lecture elle-même.
         str_user_id = str(user_id) if user_id else None
         on_finish = (lambda: self.clear_activity(sound_id, str_user_id)) if str_user_id else None
-
         mixer.add(sound_id, source, on_finish=on_finish)
-        log.info("Lecture « %s » (%s) : %.0f ms de traitement.", entry.get("name", sound_id), kind,
-                 (time.perf_counter() - started) * 1000)
 
         if str_user_id:
-            asyncio.create_task(self._record_play_activity(sound_id, str_user_id, guild_id))
+            # Une boucle dure jusqu'à son arrêt : son highlight aussi (le filet de 30 s habituel l'éteindrait trop tôt).
+            ttl = LOOP_MAX_MINUTES * 60 + 5 if loop else None
+            asyncio.create_task(self._record_play_activity(sound_id, str_user_id, guild_id, ttl))
+        return kind
 
-        return web.json_response({"status": "ok"})
+    async def _handle_play(self, request: web.Request) -> web.Response:
+        started = time.perf_counter()
+        ctx, err = await self._play_context(request)
+        if err is not None:
+            return err
+        data, user_id, guild_id, mixer = ctx.data, ctx.user_id, ctx.guild_id, ctx.mixer
 
-    def _check_play_rate(self, guild_id: int, user_id: str) -> Optional[int]:
-        """Anti-spam à la lecture : None si ce son peut partir (et le comptabilise), sinon le
-        nombre de secondes à attendre. Fenêtre glissante de 60 s par (guilde, utilisateur) ;
+        sound_id = data.get("id")
+        entry, file_path, err = self._locate_sound(sound_id, ctx.visible)
+        if err is not None:
+            return err
+
+        # Options facultatives (voir SERVER_FEATURES) : volume, boucle, effets.
+        try:
+            volume = self._parse_volume(data.get("volume"))
+            effects_ = effects.parse_effects(data.get("effects"))
+        except ValueError as ex:
+            return web.json_response({"error": str(ex)}, status=400)
+        loop_requested = bool(data.get("loop"))
+        if loop_requested and LOOP_MAX_MINUTES <= 0:
+            return web.json_response({"error": "Les boucles sont désactivées sur ce serveur."}, status=400)
+
+        try:
+            kind = await self._start_playback(guild_id, user_id, entry, file_path, volume, mixer,
+                                              loop=loop_requested, effects_=effects_)
+        except PlayRefused as refused:
+            return refused.response()
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        log.info("Lecture « %s » (%s) : %d ms de traitement.", entry.get("name", sound_id), kind, elapsed_ms)
+
+        # « ms » : temps passé côté serveur entre la réception de la requête et l'ajout au mixeur (le client le
+        # compare à sa propre mesure pour séparer réseau et traitement, voir la page Diagnostic).
+        return web.json_response({"status": "ok", "ms": elapsed_ms})
+
+    async def _handle_play_sequence(self, request: web.Request) -> web.Response:
+        """POST /play-sequence : une suite de sons lancée d'un seul appel (« enchaînement »). Corps :
+        {"steps": [{"id", "delay_ms"?, "after_end"?, "volume"?, "effects"?}, ...]}. delay_ms : attente avant ce son, comptée
+        depuis le DÉBUT du son précédent (ou depuis sa FIN si after_end est vrai) ; pour le premier, depuis maintenant.
+        Chaque étape est soumise aux mêmes contrôles (visibilité, quotas) qu'un /play isolé, le tout validé AVANT que
+        quoi que ce soit ne parte : une séquence est acceptée en entier ou refusée en entier."""
+        started = time.perf_counter()
+        ctx, err = await self._play_context(request)
+        if err is not None:
+            return err
+        data, user_id, guild_id, mixer = ctx.data, ctx.user_id, ctx.guild_id, ctx.mixer
+
+        raw_steps = data.get("steps")
+        if not isinstance(raw_steps, list) or not 1 <= len(raw_steps) <= SEQUENCE_MAX_STEPS:
+            return web.json_response({"error": f"« steps » doit contenir de 1 à {SEQUENCE_MAX_STEPS} sons."}, status=400)
+
+        steps = []
+        offset_ms = 0
+        previous_duration_ms = 0
+        for index, raw in enumerate(raw_steps, start=1):
+            if not isinstance(raw, dict):
+                return web.json_response({"error": f"Étape {index} : un objet est attendu."}, status=400)
+            entry, file_path, err = self._locate_sound(raw.get("id"), ctx.visible)
+            if err is not None:
+                return err
+            try:
+                delay_ms = raw.get("delay_ms", 0)
+                if isinstance(delay_ms, bool) or not isinstance(delay_ms, (int, float)) or not 0 <= delay_ms <= SEQUENCE_MAX_DELAY_MS:
+                    raise ValueError(f"« delay_ms » doit être un nombre de 0 à {SEQUENCE_MAX_DELAY_MS}.")
+                volume = self._parse_volume(raw.get("volume"))
+                effects_ = effects.parse_effects(raw.get("effects"))
+            except ValueError as ex:
+                return web.json_response({"error": f"Étape {index} : {ex}"}, status=400)
+
+            if index > 1:
+                offset_ms += previous_duration_ms if raw.get("after_end") else 0
+            offset_ms += int(delay_ms)
+            if offset_ms > SEQUENCE_MAX_SPAN_MS:
+                return web.json_response({"error": f"Séquence trop longue (plus de {SEQUENCE_MAX_SPAN_MS // 1000} s avant la dernière étape)."}, status=400)
+
+            next_raw = raw_steps[index] if index < len(raw_steps) else None
+            needs_end = isinstance(next_raw, dict) and bool(next_raw.get("after_end"))
+            previous_duration_ms = await self._played_duration_ms(entry, file_path, effects_) if needs_end else 0
+            steps.append((offset_ms, entry, file_path, volume, effects_))
+
+        retry_after = self._check_play_rate(guild_id, str(user_id), count=len(steps))
+        if retry_after is not None:
+            return web.json_response({
+                "error": f"Trop de sons envoyés : réessayez dans {retry_after} s.",
+                "retry_after": retry_after,
+            }, status=429)
+
+        loop = asyncio.get_running_loop()
+        pending = self._pending_steps.setdefault(guild_id, {})
+        for step_offset, entry, file_path, volume, effects_ in steps:
+            if step_offset <= 0:
+                await self._play_step(guild_id, str(user_id), entry, file_path, volume, effects_)
+                continue
+            handle_box: list = []
+
+            def fire(step=(entry, file_path, volume, effects_), box=handle_box):
+                pending.pop(box[0], None)
+                asyncio.ensure_future(self._play_step(guild_id, str(user_id), *step))
+
+            handle = loop.call_later(step_offset / 1000, fire)
+            handle_box.append(handle)
+            pending[handle] = entry["id"]
+
+        return web.json_response({"status": "ok", "steps": len(steps), "ms": round((time.perf_counter() - started) * 1000)})
+
+    async def _played_duration_ms(self, entry: dict, file_path: Path, effects_: Optional[dict]) -> int:
+        """Durée jouée d'un son (portion gardée, vitesse comprise), pour enchaîner « après la fin » : le catalogue ne
+        garde pas la durée, on la lit avec ffprobe quand une étape suivante en a besoin."""
+        start, end = entry.get("trim_start_ms"), entry.get("trim_end_ms")
+        if isinstance(start, int) and isinstance(end, int) and end > start:
+            duration_ms = end - start
+        else:
+            seconds = await probe_duration_seconds(file_path)
+            duration_ms = round((seconds or 0) * 1000)
+        speed = (effects_ or {}).get("speed") or 1.0
+        return round(duration_ms / speed)
+
+    async def _play_step(self, guild_id: int, user_id: str, entry: dict, file_path: Path, volume: float, effects_: Optional[dict]) -> None:
+        """Lance une étape d'enchaînement (tout a déjà été validé) : le salon peut avoir changé depuis, donc on revérifie."""
+        try:
+            mixer, vc = self.mixers.get(guild_id), self.voice_clients_map.get(guild_id)
+            if mixer is None or vc is None or not vc.is_connected():
+                return
+            sound_id = entry["id"]
+            if self._play_capacity_error(sound_id, guild_id, mixer) is not None:
+                return
+            source, kind = await self._build_play_source(sound_id, entry, file_path, volume, effects_=effects_)
+            mixer.add(sound_id, source, on_finish=lambda: self.clear_activity(sound_id, user_id))
+            log.info("Enchaînement : « %s » (%s).", entry.get("name", sound_id), kind)
+            asyncio.create_task(self._record_play_activity(sound_id, user_id, guild_id))
+        except Exception:
+            log.exception("Échec d'une étape d'enchaînement")
+
+    def _cancel_pending_steps(self, guild_id: int, sound_id: Optional[str] = None) -> int:
+        """Annule les étapes d'enchaînement pas encore parties (toutes, ou celles d'un son) ; renvoie leur nombre."""
+        pending = self._pending_steps.get(guild_id, {})
+        cancelled = 0
+        for handle, step_sound in list(pending.items()):
+            if sound_id is None or step_sound == sound_id:
+                handle.cancel()
+                del pending[handle]
+                cancelled += 1
+        return cancelled
+
+    def _check_play_rate(self, guild_id: int, user_id: str, count: int = 1) -> Optional[int]:
+        """Anti-spam à la lecture : None si ce son (ou ces `count` sons d'un enchaînement) peut partir (et le
+        comptabilise), sinon le nombre de secondes à attendre. Fenêtre glissante de 60 s par (guilde, utilisateur) ;
         limite à 0 = désactivé ; admins de la guilde exemptés."""
         settings = get_guild_settings(guild_id)
         limit = settings["play_rate_per_min"]
@@ -2858,25 +3081,27 @@ class WaseBoardServer(commands.Bot):
         history = self._play_history.setdefault((guild_id, user_id), deque())
         while history and now - history[0] >= 60:
             history.popleft()
-        if len(history) >= limit:
-            return max(1, int(60 - (now - history[0]) + 0.999))
-        history.append(now)
+        if len(history) + count > limit:
+            return max(1, int(60 - (now - history[0]) + 0.999)) if history else 60
+        history.extend([now] * count)
         return None
 
-    async def _record_play_activity(self, sound_id: str, user_id: str, guild_id: int) -> None:
+    async def _record_play_activity(self, sound_id: str, user_id: str, guild_id: int, ttl: Optional[float] = None) -> None:
         """Résout le membre et enregistre l'activité partagée (highlight/avatar) en arrière-plan,
-        après que le son a déjà été lancé — voir _handle_play."""
+        après que le son a déjà été lancé — voir _handle_play. `ttl` : durée du highlight (boucle)."""
         try:
             member = await self.find_member_async(int(user_id)) if user_id.isdigit() else None
             username = member.display_name if member else None
             avatar_url = str(member.display_avatar.url) if member else None
-            self.record_activity(sound_id, user_id, username, avatar_url, guild_id)
+            self.record_activity(sound_id, user_id, username, avatar_url, guild_id, ttl)
             guild = self.get_guild(guild_id)
             record_play_stat(sound_id, user_id, username, avatar_url, guild_id, guild.name if guild else None)
         except Exception:
             log.exception("Échec de l'enregistrement d'activité en arrière-plan")
 
     async def _handle_stop_all(self, request: web.Request) -> web.Response:
+        """POST /stop : coupe tous les sons du salon ; avec {"sound_id": ...} dans le corps, coupe seulement ce son
+        (typiquement une boucle) — les autres continuent. Annule aussi les étapes d'enchaînement pas encore parties."""
         if not self._check_auth(request):
             return web.json_response({"error": "unauthorized"}, status=401)
         session, err = await self._require_session(request)
@@ -2886,6 +3111,8 @@ class WaseBoardServer(commands.Bot):
         try:
             data = await request.json()
         except Exception:
+            data = {}
+        if not isinstance(data, dict):
             data = {}
 
         guild_id = self.resolve_guild_id(data.get("guild_id"), session["user_id"])
@@ -2901,8 +3128,25 @@ class WaseBoardServer(commands.Bot):
         if mixer is None:
             return web.json_response({"error": "Le bot n'est connecté à aucun salon vocal sur ce serveur."}, status=409)
 
-        mixer.clear()  # déclenche aussi les callbacks on_finish : l'activité est effacée immédiatement
+        sound_id = data.get("sound_id")
+        if isinstance(sound_id, str) and sound_id:
+            return web.json_response({"status": "ok", "stopped": self._stop_guild_sounds(guild_id, sound_id)})
+
+        self._stop_guild_sounds(guild_id)
         return web.json_response({"status": "ok"})
+
+    def _stop_guild_sounds(self, guild_id: int, sound_id: Optional[str] = None) -> Optional[bool]:
+        """Coupe tous les sons du salon de cette guilde (et les étapes d'enchaînement pas encore parties), ou un seul son.
+        Renvoie True/False selon qu'un son précis jouait (True pour « tout »), ou None si le bot n'est connecté nulle part."""
+        mixer = self.mixers.get(guild_id)
+        if mixer is None:
+            return None
+        if sound_id:
+            self._cancel_pending_steps(guild_id, sound_id)
+            return mixer.stop(sound_id)
+        self._cancel_pending_steps(guild_id)
+        mixer.clear()  # déclenche aussi les callbacks on_finish : l'activité est effacée immédiatement
+        return True
 
     async def _handle_join_my_channel(self, request: web.Request) -> web.Response:
         """Fait rejoindre le bot au salon vocal où l'utilisateur se trouve actuellement,
@@ -3122,6 +3366,171 @@ async def instance_command(interaction: discord.Interaction) -> None:
         log.exception("Échec de /instance")
         text = "❌ Impossible de calculer les statistiques (voir les journaux du serveur)."
     await interaction.followup.send(text[:1990], ephemeral=True)
+
+
+# ---------- Commandes Discord : jouer, arrêter, classements ----------
+
+def _choice_label(entry: dict) -> str:
+    return f"{entry['emoji'] + ' ' if entry.get('emoji') else ''}{entry['name']}"[:100]
+
+
+async def _catalog_for_user(user_id: int) -> list[dict]:
+    """Sons que cette personne a le droit de jouer (ceux de ses serveurs + les partagés) : même règle que l'API HTTP."""
+    visible = await bot.resolve_visible_guild_ids(user_id)
+    return bot.catalog_visible_to(load_catalog(), visible)
+
+
+def find_sound_for_command(raw: str, catalog: list[dict]) -> tuple[Optional[dict], Optional[str]]:
+    """(son, None) ou (None, message) : `raw` est l'identifiant choisi dans la liste proposée, ou un nom tapé à la main
+    (accepté s'il est sans ambiguïté, un simple morceau de nom à partir de 3 lettres). `catalog` ne contient déjà que les sons visibles par la personne."""
+    raw = (raw or "").strip()
+    by_id = next((e for e in catalog if e["id"] == raw), None)
+    if by_id is not None:
+        return by_id, None
+    needle = raw.casefold()
+    exact = [e for e in catalog if e["name"].casefold() == needle]
+    if len(exact) == 1:
+        return exact[0], None
+    # Un morceau de nom n'est accepté qu'à partir de 3 lettres : « d » ne doit pas jouer le premier son qui contient un d.
+    partial = [e for e in catalog if needle in e["name"].casefold()] if len(needle) >= 3 else []
+    if len(exact) > 1 or len(partial) > 1:
+        return None, f"Plusieurs sons correspondent à « {raw[:60]} » : choisissez-en un dans la liste proposée."
+    if len(partial) == 1:
+        return partial[0], None
+    return None, f"Aucun son ne correspond à « {raw[:60]} »."
+
+
+async def sound_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    """Liste de sons proposée pendant la frappe (25 au plus, limite de Discord) : ceux qui commencent par ce qui est
+    tapé d'abord, puis ceux du serveur courant, puis par ordre alphabétique."""
+    try:
+        catalog = await _catalog_for_user(interaction.user.id)
+    except Exception:
+        log.warning("Autocomplétion impossible", exc_info=True)
+        return []
+    needle = (current or "").strip().casefold()
+    here = str(interaction.guild_id) if interaction.guild_id else None
+    matches = [e for e in catalog if needle in e["name"].casefold()]
+    matches.sort(key=lambda e: (not e["name"].casefold().startswith(needle), e.get("guild_id") != here, e["name"].casefold()))
+    return [app_commands.Choice(name=_choice_label(e), value=e["id"]) for e in matches[:25]]
+
+
+def _embed_from(view: dict) -> discord.Embed:
+    embed = discord.Embed(title=view["title"][:256], description=view["description"], color=discord.Color(0x38BDF8))
+    for name, value in view["fields"]:
+        embed.add_field(name=name, value=value[:1024], inline=False)
+    return embed
+
+
+@bot.tree.command(name="play", description="Joue un son dans votre salon vocal, sans ouvrir l'application")
+@app_commands.guild_only()
+@app_commands.describe(son="Le son à jouer (tapez quelques lettres pour chercher)")
+@app_commands.autocomplete(son=sound_autocomplete)
+async def play_command(interaction: discord.Interaction, son: str) -> None:
+    member = interaction.user
+    if not isinstance(member, discord.Member) or member.voice is None or member.voice.channel is None:
+        await interaction.response.send_message("Vous devez d'abord être connecté à un salon vocal.", ephemeral=True)
+        return
+    channel, guild_id = member.voice.channel, interaction.guild_id
+    await interaction.response.defer(ephemeral=True, thinking=True)  # rejoindre le salon peut prendre un instant
+
+    entry, problem = find_sound_for_command(son, await _catalog_for_user(member.id))
+    if entry is None:
+        await interaction.followup.send(f"❌ {problem}", ephemeral=True)
+        return
+    file_path = SOUNDS_DIR / f"{entry['id']}{entry['extension']}"
+    if not file_path.exists():
+        await interaction.followup.send("❌ Le fichier de ce son est introuvable sur le serveur.", ephemeral=True)
+        return
+
+    vc = bot.voice_clients_map.get(guild_id)
+    if vc is not None and vc.is_connected():
+        if vc.channel.id != channel.id:
+            await interaction.followup.send(
+                f"Le bot est dans « {vc.channel.name} ». Rejoignez ce salon, ou utilisez /join pour l'amener dans le vôtre.",
+                ephemeral=True)
+            return
+    else:
+        try:
+            await bot.join_guild_voice(guild_id, channel)
+        except CapacityError as ex:
+            await interaction.followup.send(f"⚠️ {ex}", ephemeral=True)
+            return
+        except Exception:
+            log.exception("/play : impossible de rejoindre le salon vocal")
+            await interaction.followup.send("❌ Impossible de rejoindre votre salon vocal (le bot a-t-il la permission « Se connecter » ?).", ephemeral=True)
+            return
+
+    try:
+        await bot._start_playback(guild_id, member.id, entry, file_path, 1.0, bot.mixers[guild_id])
+    except PlayRefused as refused:
+        await interaction.followup.send(f"⚠️ {refused.message}", ephemeral=True)
+        return
+    await interaction.followup.send(f"▶️ {_choice_label(entry)}", ephemeral=True)
+
+
+@bot.tree.command(name="stop", description="Coupe les sons en cours dans le salon vocal")
+@app_commands.guild_only()
+@app_commands.describe(son="Couper seulement ce son (une boucle, par exemple) ; sans lui, tous les sons sont coupés")
+@app_commands.autocomplete(son=sound_autocomplete)
+async def stop_command(interaction: discord.Interaction, son: Optional[str] = None) -> None:
+    guild_id = interaction.guild_id
+    if bot.mixers.get(guild_id) is None:
+        await interaction.response.send_message("Je ne suis connecté à aucun salon vocal ici.", ephemeral=True)
+        return
+    if not son:
+        bot._stop_guild_sounds(guild_id)
+        await interaction.response.send_message("⏹️ Sons coupés.", ephemeral=True)
+        return
+
+    entry, problem = find_sound_for_command(son, await _catalog_for_user(interaction.user.id))
+    if entry is None:
+        await interaction.response.send_message(f"❌ {problem}", ephemeral=True)
+        return
+    stopped = bot._stop_guild_sounds(guild_id, entry["id"])
+    await interaction.response.send_message(
+        f"⏹️ {_choice_label(entry)} coupé." if stopped else f"{_choice_label(entry)} ne jouait pas.", ephemeral=True)
+
+
+@bot.tree.command(name="top", description="Les sons les plus joués et les membres les plus actifs du serveur")
+@app_commands.guild_only()
+@app_commands.describe(periode="Période étudiée (30 jours par défaut)",
+                       partager="Poster le classement dans le salon (sinon, vous seul le voyez)")
+@app_commands.choices(periode=[app_commands.Choice(name="7 derniers jours", value=7),
+                               app_commands.Choice(name="30 derniers jours", value=30),
+                               app_commands.Choice(name="90 derniers jours", value=90),
+                               app_commands.Choice(name="12 derniers mois", value=365)])
+async def top_command(interaction: discord.Interaction, periode: int = 30, partager: bool = False) -> None:
+    await interaction.response.defer(ephemeral=not partager, thinking=True)
+    try:
+        names = {e["id"]: e for e in load_catalog()}
+        stats = await asyncio.to_thread(aggregate_play_stats, str(interaction.guild_id), periode, names)
+        view = reports.render_top(stats, interaction.guild.name if interaction.guild else "ce serveur", periode)
+    except Exception:
+        log.exception("Échec de /top")
+        await interaction.followup.send("❌ Impossible de calculer le classement (voir les journaux du serveur).", ephemeral=True)
+        return
+    await interaction.followup.send(embed=_embed_from(view))
+
+
+@bot.tree.command(name="bilan", description="Le bilan de l'année : sons les plus joués, membres les plus actifs, vos chiffres")
+@app_commands.guild_only()
+@app_commands.describe(annee="Année du bilan (l'année en cours par défaut)",
+                       partager="Poster le bilan dans le salon (sinon, vous seul le voyez)")
+async def bilan_command(interaction: discord.Interaction, annee: Optional[app_commands.Range[int, 2020, 2100]] = None,
+                        partager: bool = False) -> None:
+    year = annee or datetime.now().year
+    await interaction.response.defer(ephemeral=not partager, thinking=True)
+    try:
+        names = {e["id"]: e for e in load_catalog()}
+        guild_key, user_key = str(interaction.guild_id), str(interaction.user.id)
+        report = await asyncio.to_thread(lambda: reports.year_report(_read_jsonl(STATS_PATH), guild_key, year, user_key, names))
+        view = reports.render_bilan(report, interaction.guild.name if interaction.guild else "ce serveur")
+    except Exception:
+        log.exception("Échec de /bilan")
+        await interaction.followup.send("❌ Impossible de calculer le bilan (voir les journaux du serveur).", ephemeral=True)
+        return
+    await interaction.followup.send(embed=_embed_from(view))
 
 
 @bot.event

@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading.Tasks;
+using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Services
 {
@@ -34,7 +35,7 @@ namespace WaseBoard.Services
             {
                 using var response = await Http.GetAsync(ReleasesApiUrl);
                 if (!response.IsSuccessStatusCode)
-                    return new UpdateCheckResult(false, null, null, $"Le serveur a répondu {(int)response.StatusCode}.");
+                    return new UpdateCheckResult(false, null, null, Loc.T("api.server_replied", (int)response.StatusCode));
 
                 var json = await response.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
@@ -42,11 +43,11 @@ namespace WaseBoard.Services
                 var tagName = doc.RootElement.TryGetProperty("tag_name", out var tag) ? tag.GetString() : null;
                 var releaseUrl = doc.RootElement.TryGetProperty("html_url", out var url) ? url.GetString() : null;
                 if (string.IsNullOrWhiteSpace(tagName))
-                    return new UpdateCheckResult(false, null, null, "Réponse inattendue de GitHub.");
+                    return new UpdateCheckResult(false, null, null, Loc.T("update.unexpected_response"));
 
                 var versionText = tagName.StartsWith('v') ? tagName[1..] : tagName;
                 if (!Version.TryParse(versionText, out var latestVersion))
-                    return new UpdateCheckResult(false, null, null, $"Numéro de version illisible : {tagName}.");
+                    return new UpdateCheckResult(false, null, null, Loc.T("update.unreadable_version", tagName));
 
                 var available = latestVersion > currentVersion;
                 return new UpdateCheckResult(available, versionText, releaseUrl, null);

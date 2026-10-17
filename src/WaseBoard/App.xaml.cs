@@ -3,6 +3,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
+using WaseBoard.Services.Localization;
 using WaseBoard.Services.MicFx;
 using WaseBoard.Windows;
 
@@ -49,6 +50,9 @@ namespace WaseBoard
 
             PendingDeepLink = deepLink;
 
+            // La langue doit être connue avant la création de la première fenêtre (les textes du XAML sont résolus à ce moment).
+            Loc.InitializeFromSettingsFile();
+
             base.OnStartup(e);
 
             // Capture les exceptions non gérées : AlertDialog bloquante plutôt qu'un toast, l'app
@@ -56,8 +60,8 @@ namespace WaseBoard
             DispatcherUnhandledException += (s, ex) =>
             {
                 AlertDialog.Show(MainWindow,
-                    "Une erreur est survenue :\n" + ex.Exception.Message,
-                    "WaseBoard - Erreur", AlertKind.Error);
+                    Loc.T("app.error.message", ex.Exception.Message),
+                    Loc.T("app.error.title"), AlertKind.Error);
                 ex.Handled = true;
             };
         }

@@ -338,6 +338,20 @@ Discord » ci-dessous.
 3. Les sons ajoutés/joués depuis n'importe quel client sont partagés entre tous les
    utilisateurs connectés au même serveur.
 
+### Commandes Discord pour les membres
+
+| Commande | Effet |
+|---|---|
+| `/play son:…` | joue un son dans votre salon vocal **sans ouvrir l'application** (utile sur téléphone). Tapez quelques lettres : Discord propose les sons que vous avez le droit de jouer (ceux de vos serveurs et les partagés). Le bot rejoint votre salon s'il n'est nulle part ; s'il est déjà dans un autre salon du serveur, il ne bouge pas (utilisez `/join`). Mêmes contrôles que l'application : anti-spam et plafonds du serveur. |
+| `/stop` · `/stop son:…` | coupe tous les sons en cours, ou seulement celui-là (une boucle, par exemple). |
+| `/top periode:…` | les sons les plus joués et les membres les plus actifs du serveur (7 jours, 30 jours, 90 jours ou 12 mois). Réponse visible de vous seul ; `partager:True` la poste dans le salon. |
+| `/bilan annee:…` | le bilan de l'année du serveur : totaux, sons et membres les plus actifs, jour et heure de pointe, et **vos** chiffres (rang, sons préférés). Visible de vous seul par défaut, `partager:True` pour le poster. |
+
+Les lectures lancées par `/play` comptent dans les statistiques et allument le bouton chez les utilisateurs de l'application,
+comme un clic. Les classements viennent de `stats.jsonl`, qui n'est jamais purgé : `/bilan` couvre donc toute l'histoire du serveur.
+Les administrateurs d'un serveur peuvent limiter ces commandes à certains rôles ou salons dans Paramètres du serveur ›
+Intégrations › WaseBoard.
+
 ## Rôles et administration
 
 Les droits sont décidés **par le serveur** (le client ne fait que masquer ce qui est interdit),
@@ -390,6 +404,32 @@ et sous forme de variable d'environnement (`WASEBOARD_` + le nom en majuscules, 
 | `max_ffmpeg_processes` | sons joués en même temps, tous serveurs confondus (un processus ffmpeg chacun). |
 | `http_rate_limit_per_min` | requêtes par minute et par adresse IP sur les seules routes publiques ou coûteuses : `/connect/…`, `/oauth/…` (compteur commun) et l'envoi de sons. Les routes utilisées en continu par l'appli (`/activity`, `/status`, `/play`…) ne sont **jamais** freinées. Derrière nginx/Caddy, l'adresse du client est lue dans `X-Forwarded-For` (dernière entrée, celle vue par votre proxy). |
 
+### Boucles, effets et enchaînements (API de lecture)
+
+Ces options sont annoncées par `/status` dans `features` (`loop`, `stop_sound`, `sequence`, `play_effects`) :
+un client ne les propose que si le serveur les gère, et un ancien client les ignore.
+
+| Réglage | Effet |
+|---|---|
+| `loop_max_minutes` | durée maximale d'une boucle avant arrêt automatique. **30 par défaut**, 0 = boucles désactivées. Le son doit tenir en mémoire une fois décodé (~170 s). |
+
+`POST /play` accepte en plus de `id`, `volume` et `guild_id` : `"loop": true` (le son recommence sans coupure jusqu'à un
+arrêt) et `"effects": {"pitch": -12..12 (demi-tons), "speed": 0.5..2, "bass": 0..15 (dB), "echo": true | 0..1}`. Un effet inconnu ou une
+valeur hors limites est refusé (400) sans rien lancer. `POST /stop` avec `{"sound_id": "…"}` coupe ce seul son (la
+réponse indique `stopped`) ; sans `sound_id` il coupe tout, y compris les étapes d'enchaînement pas encore parties.
+`POST /play-sequence` lance jusqu'à 8 sons d'un seul appel : `{"steps": [{"id", "delay_ms"?, "after_end"?, "volume"?,
+"effects"?}]}` ; `delay_ms` compte depuis le début du son précédent, ou depuis sa fin avec `after_end`. La séquence est
+validée en entier avant de partir (tout ou rien) et compte pour autant de lectures que d'étapes dans l'anti-spam.
+
+Le mélange passe dans un **limiteur doux** : un son seul n'est jamais modifié, plusieurs sons forts sont comprimés en
+douceur au lieu d'être écrêtés.
+
+### Sessions de connexion Discord
+
+| Réglage | Effet |
+|---|---|
+| `session_max_idle_days` | jours sans utilisation au bout desquels la session d'une personne (et les jetons Discord qu'elle contient) est supprimée du serveur. **90 par défaut**, 0 = jamais. Une personne peut aussi se déconnecter à tout moment (`POST /oauth/logout`). |
+
 ### Démarrage instantané des sons
 
 | Réglage | Effet |
@@ -427,12 +467,134 @@ son déjà en cours le remplace : jamais refusé). Vous pouvez, en tant qu'hébe
 - Réglages concernés : `max_sounds`, `max_file_mb`, `max_duration_s`, `max_total_mb`, `play_rate_per_min`,
   `max_sources_per_guild`.
 
+### Langues
+
+Les messages d'erreur de l'API sont rédigés dans la langue de l'application qui les demande : le client envoie `Accept-Language: fr` ou `en`, et le serveur
+répond dans cette langue (page d'invitation `/connect/…` comprise, d'après la langue du navigateur). Sans cet en-tête (ancien client, script), les messages restent
+en français, comme avant. Le catalogue est `messages.py` : `tests/test_messages.py` échoue si un message d'erreur ajouté au code n'y a pas sa traduction.
+Les réponses des commandes Discord (`/play`, `/top`…) et des panneaux restent en français pour l'instant.
+
 ### Voir l'état de l'instance : `/instance`
 
 Commande Discord réservée à la personne propriétaire de l'application (réponse visible d'elle seule) : durée de
 fonctionnement, serveurs / salons vocaux / sons en lecture face aux plafonds, applications ouvertes, taille du catalogue,
 espace disque libre, serveurs les plus lourds et plafonds actifs. Pour une sonde externe (UptimeRobot, Kuma…), utilisez
 `GET /health` : `200` quand le bot est connecté à Discord, `503` sinon, sans aucun détail.
+
+### Application web (PWA)
+
+Le serveur sert aussi une **page web** sous `/app/` : la même liste de sons, le même bot, depuis un navigateur ou un téléphone
+(« Ajouter à l'écran d'accueil » l'installe comme une application), sans rien installer. On s'y connecte avec Discord ; on
+y joue un son, on coupe tout, on fait rejoindre le bot à son salon vocal, on cherche, on garde des favoris et des couleurs
+(enregistrés dans le navigateur) et on peut écouter un son sur l'appareil. On peut aussi **gérer les sons** : en ajouter (bouton « + » ou glisser-déposer de
+fichiers, formats mp3, wav, ogg, flac, m4a, wma, jusqu'à 64 Mo), les modifier (nom, emoji, **découpe avec forme d'onde** — le son complet reste conservé —, nouveau
+fichier audio, catégories des serveurs où il apparaît) et les supprimer (ils vont à la corbeille du serveur), avec exactement les droits de l'application
+Windows : le serveur refait chaque vérification. La découpe demande que le navigateur sache décoder le format ; sinon le son s'ajoute en entier.
+Elle est en français et en anglais (langue du navigateur).
+
+Pour l'activer, il faut **`public_url`** (l'adresse HTTPS publique du serveur : Discord ramène la personne sur
+`<public_url>/app/callback`) et l'identifiant/secret OAuth2 déjà utilisés par l'application Windows. Puis, **une fois**, dans le
+[portail Discord](https://discord.com/developers/applications) › votre application › OAuth2 › Redirects, ajoutez :
+
+```
+https://votre-domaine.exemple/app/callback
+```
+
+| Réglage | Effet |
+|---|---|
+| `web_app_enabled` | **true** par défaut : la page est servie si `public_url` est valide. `false` la désactive (`/app` répond 404 ; `/status` n'annonce plus `web_app`). |
+| `web_redirect_uris` | liste d'adresses de retour supplémentaires acceptées (autre nom de domaine, accès par adresse IP du réseau local…). Chacune doit aussi figurer dans le portail Discord ; l'adresse d'origine du site doit être celle de `public_url` ou de l'une d'elles. |
+
+Sécurité : la page est publique mais **ne contient aucun secret**. Une page ne peut pas garder le « secret partagé » de l'instance :
+ses appels s'authentifient par la **session Discord** (en-tête `Authorization: Bearer`, pas de cookie, donc pas de CSRF) et doivent venir
+de l'origine du site. Conséquence à connaître : avec la page web activée, toute personne membre d'un serveur Discord où le bot est présent peut
+se connecter **sans** le secret partagé (elle ne voit que les sons de ses serveurs, comme dans l'application) ; `web_app_enabled: false` rétablit
+l'ancien fonctionnement. La page applique une politique de sécurité de contenu stricte (aucun script ni style en ligne, une seule origine,
+aucun cadre), et seuls les fichiers du dossier `web/` présents au démarrage sont servis. Hors connexion, la coquille de la page reste
+disponible (service worker) ; rien de personnel n'est mis en cache.
+
+Derrière nginx ou Caddy, rien à ajouter : `/app/` passe comme le reste. Le service worker et l'installation exigent **HTTPS**
+(ou `http://localhost`). Pour essayer sans bot ni compte : `python tests/preview_web.py` (fausses données, voir l'en-tête du fichier).
+
+### Activité Discord (WaseBoard dans un salon vocal)
+
+La même page peut s'ouvrir **dans Discord** : dans un salon vocal, le lanceur d'activités (la fusée) propose WaseBoard, et la liste des sons s'affiche
+dans un panneau de l'application Discord (ordinateur, navigateur ou téléphone), sans lien ni installation. La connexion est automatique (Discord
+connaît déjà la personne) et l'Activité sait dans quel serveur elle a été lancée : les sons partent dans le vocal de ce serveur. Le bot doit
+rejoindre le salon (bouton « 🔊 Rejoindre mon vocal », ou `/join`). Aucun son ne passe par la page elle-même : c'est le bot qui joue.
+
+Discord charge la page par son propre proxy (`https://<identifiant client>.discordsays.com`), qui relaie vers **votre** serveur : celui-ci doit donc être
+joignable **depuis Internet en HTTPS** (une adresse du réseau local ne convient pas). Réglages, dans le
+[portail Discord](https://discord.com/developers/applications) › votre application :
+
+1. **Activities › Settings** : activer « Enable Activities ». Discord crée alors la commande d'entrée « launch » ; si elle manque (application qui avait déjà des
+   commandes, ou synchro globale des commandes slash qui l'efface), le serveur la recrée tout seul à chaque démarrage. Si le lanceur d'activités affiche encore
+   « aucune commande enregistrée », recharger Discord (Ctrl+R).
+2. **Activities › URL Mappings** : `/` → le nom de domaine public de votre serveur, sans `https://` (ex. `waseboard.exemple.org`). Facultatif mais recommandé :
+   `/discord-cdn` → `cdn.discordapp.com` (les avatars et icônes de serveurs passent par là si Discord n'autorise pas l'accès direct à son CDN ; sans cela, la page
+   retire simplement les images qui ne se chargent pas).
+3. **OAuth2 › Redirects** : ajouter l'adresse factice `https://127.0.0.1` (exigée par Discord ; elle ne sert pas, le kit gère la redirection).
+4. Dans Discord : *Paramètres › Avancés › Mode développeur*, puis, dans un salon vocal, le lanceur d'activités (ou le champ de recherche si WaseBoard n'y figure pas encore).
+
+Tant que l'application n'est pas distribuée, **seuls son propriétaire et les membres de son équipe de développeurs** peuvent lancer l'Activité (pour d'autres
+testeurs : créer une équipe dans le portail et la définir comme propriétaire de l'application). La « découverte » publique par Discord exige une application
+vérifiée, ce qui n'est pas nécessaire pour l'usage entre amis.
+
+| Réglage | Effet |
+|---|---|
+| `web_activity_enabled` | **true** par défaut (avec la page web) : accepte l'origine `https://<identifiant client>.discordsays.com`, la page chargée avec `frame_id` (racine du domaine comprise) et l'échange du code sans adresse de retour. `false` désactive l'Activité sans toucher à la page web. |
+
+Si le site sert une **page d'accueil statique à la racine** (comme `deploy/landing-page/nginx-waseboard-salsi-bid.conf`), Discord, qui charge `/?frame_id=…`, la recevrait au lieu
+de WaseBoard : ajoutez dans le bloc `location = /` de nginx
+
+```nginx
+    if ($arg_frame_id) { rewrite ^ /app/ last; }   # Activité Discord : la racine du domaine est chargée avec ?frame_id=…
+```
+
+Sécurité : le kit officiel de Discord (`web/vendor/`, MIT, empreinte vérifiée par les tests) n'est chargé que dans Discord. L'échange du code d'une Activité n'a pas
+d'adresse de retour ; le serveur le reconnaît à cela, car le proxy de Discord peut réécrire ou retirer l'en-tête `Origin` — seul compte un code Discord valide pour
+votre application. Il renvoie alors le jeton Discord de la personne elle-même (portée « identify ») pour l'appel « authenticate » du kit, jamais dans les autres
+connexions. Une origine inattendue est journalisée une fois (« appel refusé, origine … non autorisée ») : ajoutez-la à `web_redirect_uris` si elle est légitime.
+
+### Alertes d'exploitation
+
+Le bot prévient la personne qui héberge (message privé Discord : le propriétaire de l'application, ou `alerts_user_id`) quand
+quelque chose déraille. Chaque message précise de quelle instance il vient (adresse et version) ; chaque type d'alerte a un
+délai avant répétition, mémorisé dans `alerts_state.json` (donc valable aussi après un redémarrage).
+
+| Alerte | Quand | Réglage |
+|---|---|---|
+| 💾 Disque presque plein | le disque des données est rempli à `alerts_disk_percent` % ou plus (contrôle toutes les 10 min, message au plus toutes les 12 h) | `alerts_disk_percent` (**90**, 0 = désactivée) |
+| 🔒 Certificat HTTPS | il expire dans moins de `alerts_cert_days` jours, ou est expiré (contrôle toutes les 6 h, message au plus par jour). Lu sur le serveur web **de la machine** (127.0.0.1, avec le nom de `public_url`) : aucun besoin que la machine se joigne elle-même par Internet. Sans `public_url` en https, jamais d'alerte. | `alerts_cert_days` (**14**, 0 = désactivée) |
+| ⚠️ Rafale d'erreurs | au moins `alerts_error_burst` erreurs journalisées en 5 minutes (message au plus toutes les 30 min, avec la dernière erreur) | `alerts_error_burst` (**20**, 0 = désactivée) |
+| 🔌 Connexion à Discord rétablie | la connexion à Discord a été coupée plus d'une minute | — |
+| 🔁 Redémarrage inattendu | le serveur démarre alors que le précédent ne s'était pas arrêté proprement (plantage, coupure de courant, `kill -9`). Un `systemctl restart`, une mise à jour ou un redémarrage de la machine n'en déclenchent pas. | — |
+
+`alerts_enabled` (**true** par défaut) coupe tout. Si vos messages privés sont fermés ou que Discord est injoignable, le
+serveur réessaie dix minutes plus tard et le note dans le journal (« Alerte non remise »).
+
+**Un serveur complètement tombé ne peut pas se signaler lui-même** : voir la surveillance indépendante ci-dessous.
+
+### Surveillance indépendante (watchdog)
+
+`deploy/watchdog.sh`, lancé chaque minute par un minuteur systemd, vérifie que le service tourne **et** que `GET /health`
+répond (`200` seulement quand le bot est connecté à Discord). Il poste sur un **webhook Discord** (salon privé de votre
+choix) quand ça ne va plus — après 3 contrôles ratés d'affilée, pour qu'un redémarrage ne déclenche rien —, rappelle toutes
+les heures tant que ça dure, puis annonce le retour avec la durée de la panne.
+
+1. Dans Discord : Paramètres du salon › Intégrations › Webhooks › Nouveau webhook, copiez l'adresse (**un secret** : qui l'a peut
+   écrire dans ce salon).
+2. Sur la machine, créez `/etc/waseboard/watchdog.env` (propriétaire root, droits `600`) :
+   ```
+   WEBHOOK_URL=https://discord.com/api/webhooks/…
+   # instance de test ou autre port : NAME=WaseBoard-test  UNIT=waseboard-test.service  HEALTH_URL=http://127.0.0.1:5007/health
+   ```
+3. Copiez `deploy/waseboard-watchdog.service` et `deploy/waseboard-watchdog.timer` dans `/etc/systemd/system/`, remplacez
+   `VOTRE_USER`, puis `sudo systemctl daemon-reload && sudo systemctl enable --now waseboard-watchdog.timer`
+   (`journalctl -u waseboard-watchdog` pour les passages, `systemctl list-timers` pour vérifier).
+
+Sans `WEBHOOK_URL`, le script se contente de journaliser. Réglages facultatifs : `FAILS_BEFORE_ALERT` (3), `REMINDER_EVERY`
+(3600 s), `STATE_DIR`. Les messages n'ouvrent aucune mention (`@everyone` neutralisé).
 
 ### Quelle capacité ? (mesures)
 
@@ -469,6 +631,10 @@ Sauvegarde quotidienne automatique (systemd) : copiez `deploy/waseboard-backup.s
 dans `/etc/systemd/system/`, remplacez `VOTRE_USER`, puis `sudo systemctl daemon-reload && sudo systemctl enable --now waseboard-backup.timer`
 (`systemctl list-timers` pour vérifier, `journalctl -u waseboard-backup` pour le résultat).
 
+**Les secrets, à part (`-c`)** : `./deploy/backup.sh -c` écrit en plus `waseboard-config-AAAAMMJJ-HHMMSS.tgz` (droits 600), avec `config.json` (jeton
+du bot, secret partagé) et `oauth_sessions.json`. Sans elle, une machine perdue oblige à recréer le jeton du bot et à reconnecter tout le monde. L'archive des
+données, elle, reste sans secret. `deploy/waseboard-backup.service` l'active déjà. À ne jamais mettre dans un dépôt ni sur un service en ligne.
+
 **Restaurer** (serveur arrêté ; l'existant est mis de côté, pas écrasé) :
 
 ```bash
@@ -482,6 +648,43 @@ sudo systemctl start waseboard
 Avec Docker : la sauvegarde et la restauration du volume sont décrites plus haut (« Données et sauvegarde ») ;
 restaurer = `docker compose stop waseboard`, puis `tar xzf` de l'archive dans le volume avec la même commande
 `docker run … alpine`, puis `docker compose start waseboard`. Pour l'automatiser, une ligne de `crontab` suffit.
+
+### Sauvegarde hors de la machine (depuis un PC Windows)
+
+Les archives ci-dessus sont sur la **même machine** que le serveur : si elle tombe en panne, elles partent avec elle. `tools/pull-backup.ps1` (à lancer sur un PC
+Windows 10 ou plus, qui a une clé SSH pour la machine) copie la dernière archive des données **et** celle des secrets, vérifie qu'elles se relisent
+(`tar -tzf`) et contiennent le catalogue / `config.json`, puis supprime en local les plus anciennes. Rien n'est modifié sur le serveur.
+
+```powershell
+# une fois, à la main (SSH demande de confirmer l'empreinte du serveur : « yes ») :
+.\tools\pull-backup.ps1 -Server 192.168.1.10 -Port 22 -User moi -KeyFile $HOME\.ssh\ma_cle
+# puis tous les jours automatiquement (tâche planifiée Windows, 12 h ou dès que le PC est allumé) :
+.\tools\pull-backup.ps1 -Server 192.168.1.10 -Port 22 -User moi -KeyFile $HOME\.ssh\ma_cle -Install
+```
+
+Destination par défaut : `%USERPROFILE%\WaseBoard-sauvegardes` (14 archives de chaque sorte gardées, `-Keep` pour changer ; journal `pull-backup.log`).
+`-NoSecrets` laisse l'archive des secrets sur le serveur. `-Uninstall` retire la tâche. Pour tester sans risque, pointez `-RemoteDir ~/waseboard-backups-test`.
+
+### Redémarrage hebdomadaire de la machine
+
+`deploy/waseboard-weekly-reboot.service` et `.timer` redémarrent la machine **le dimanche à 5 h** (mémoire propre, mises à jour du noyau appliquées ; le serveur repart
+tout seul, le bot quitte le vocal ~1 minute). Un redémarrage par semaine suffit, un par jour coupe le bot du vocal pour rien. Installation : copier les deux fichiers dans
+`/etc/systemd/system/`, `sudo systemctl daemon-reload && sudo systemctl enable --now waseboard-weekly-reboot.timer` (et `sudo systemctl disable --now daily-reboot.timer` si
+vous aviez un redémarrage quotidien). `systemctl list-timers` donne la prochaine échéance.
+
+### nginx : limitation de débit et scanners
+
+Un site WaseBoard derrière nginx reçoit, comme n'importe quel site public, des scanners qui demandent `/.env`, `/wp-login.php`, `/phpmyadmin`… et parfois des rafales de requêtes.
+`deploy/nginx/` contient deux fichiers à installer une fois :
+
+| Fichier | Où | Effet |
+|---|---|---|
+| `waseboard-limits.conf` | `/etc/nginx/conf.d/` | définit la zone de limitation : **30 requêtes par seconde et par adresse IP** (le client en fait ~3 en usage normal) |
+| `waseboard-hardening.conf` | `/etc/nginx/snippets/`, puis `include /etc/nginx/snippets/waseboard-hardening.conf;` dans le bloc `server { }` | **ferme la connexion sans répondre** (444) aux chemins de scanners, laisse passer `/.well-known/` ; au-delà de 30 req/s (rafale de 60 tolérée) répond **429** |
+
+`sudo nginx -t && sudo systemctl reload nginx` pour appliquer. Ceci complète `http_rate_limit_per_min` (le limiteur interne du serveur, voir « Capacité et exploitation »),
+qui ne freine que les routes publiques et l'envoi de sons : nginx arrête la rafale **avant** qu'elle atteigne le serveur. Vérification : `curl -i https://votre-site/.env`
+doit se terminer par « connection reset » / une réponse vide.
 
 ### Service systemd durci
 

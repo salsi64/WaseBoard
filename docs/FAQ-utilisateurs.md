@@ -94,6 +94,10 @@ dépannage est dans le [guide Micro en jeu](micro-en-jeu.md#ça-ne-marche-pas-).
 Le client est pour l'instant Windows uniquement. Le bot Discord, lui, joue dans le vocal quel que soit
 l'appareil des autres membres : eux n'ont besoin de rien installer pour *entendre*.
 
+**L'application existe-t-elle en anglais ?**
+Oui : WaseBoard suit la langue de Windows (français, sinon anglais). Pour la changer à la main : Paramètres › Apparence › Langue, puis relancez
+l'application. Les messages du serveur (erreurs, par exemple) suivent la langue de l'application.
+
 **Mes données sont-elles partagées avec un tiers ?**
 Non : votre serveur WaseBoard est hébergé par un membre de votre groupe (pas par les auteurs du
 logiciel), et votre connexion Discord ne sert qu'à vérifier votre identité et afficher votre avatar —
@@ -123,6 +127,21 @@ Si votre serveur a un panneau WaseBoard posté dans un salon (commande **/bot-se
 | ❓ **Aide** | rappelle l'essentiel de ce guide, en message privé (visible de vous seul) |
 
 Commandes équivalentes à taper dans Discord : `/join`, `/leave` (déconnecte complètement le bot).
+
+Et, pour jouer **sans ouvrir l'application** (sur téléphone, par exemple) : `/play son:…` (tapez quelques lettres, Discord propose les sons que vous pouvez jouer),
+`/stop` pour tout couper, `/top` et `/bilan` pour les classements du serveur (sons les plus joués, membres les plus actifs, bilan de l'année).
+
+**Depuis un navigateur ou un téléphone** : si votre serveur l'a activée, la page `https://<adresse du serveur>/app/` offre la même chose
+sans rien installer — connexion avec Discord, liste des sons de vos serveurs, un toucher pour jouer, « Rejoindre mon vocal », « Stop ».
+Sur téléphone, le menu du navigateur propose « Ajouter à l'écran d'accueil » : elle s'ouvre alors comme une application. Vos favoris et vos
+couleurs y sont enregistrés dans le navigateur (ils ne sont pas ceux de l'application Windows). Vous pouvez aussi y **ajouter** des sons (bouton « + », ou en
+glissant des fichiers audio ; sur téléphone, le sélecteur de fichiers permet d'envoyer un enregistrement vocal), puis les **modifier** (menu ⋯ › Modifier…) :
+nom, emoji, découpe avec forme d'onde, nouveau fichier, serveurs où il apparaît, suppression — avec les mêmes droits que dans l'application Windows.
+
+**Dans Discord (Activité)** : si l'hébergeur l'a activée, WaseBoard apparaît dans le lanceur d'activités d'un salon vocal (la fusée) : la liste des sons s'ouvre dans Discord,
+connexion automatique, et les sons partent dans le vocal du serveur où l'Activité a été lancée. Pensez à faire rejoindre le bot (🔊 Rejoindre mon vocal).
+
+Sans ouvrir l'application (sur téléphone, par exemple) : `/play son:…` joue un son dans votre salon vocal (tapez quelques lettres, Discord vous propose les sons disponibles), `/stop` les coupe. `/top` montre les sons et les membres les plus actifs du serveur, `/bilan` le bilan de l'année avec vos propres chiffres ; les deux ne s'affichent que pour vous, sauf avec `partager:True`.
 
 ## Besoin d'aide ?
 

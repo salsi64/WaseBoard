@@ -16,6 +16,16 @@
   "http_rate_limit_per_min": 0,
   "voice_idle_sleep_s": 0,
   "pcm_cache_mb": 0,
+  "session_max_idle_days": 90,
+  "loop_max_minutes": 30,
+  "web_app_enabled": true,
+  "web_redirect_uris": [],
+  "web_activity_enabled": true,
+  "alerts_enabled": true,
+  "alerts_user_id": "",
+  "alerts_disk_percent": 90,
+  "alerts_cert_days": 14,
+  "alerts_error_burst": 20,
   "default_guild_limits": {},
   "guild_limit_ceilings": {}
 }

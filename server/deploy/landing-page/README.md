@@ -15,6 +15,9 @@ scp index.html VOTRE_USER@VOTRE_SERVEUR:/tmp/index.html.new
 ssh VOTRE_USER@VOTRE_SERVEUR 'sudo install -m 664 -o www-data -g www-data /tmp/index.html.new /var/www/waseboard-landing/index.html && rm /tmp/index.html.new'
 ```
 
+La version anglaise est `index.en.html` (servie sur `/en`, règle `location = /en` du même fichier de configuration) : elle se déduit de `index.html`
+(textes traduits, mêmes styles et images) — modifier l'une, refaire l'autre. Captures : `tools/Screenshots` (voir son README).
+
 Pages annexes servies de la même façon (`privacy.html`, `terms.html`, `micro-en-jeu.html`) : chacune a
 sa règle `location = /….html` dans le site nginx. Pour en ajouter une, copier le fichier dans
 `/var/www/waseboard-landing/` **et** ajouter sa règle (voir `nginx-waseboard-salsi-bid.conf`), puis

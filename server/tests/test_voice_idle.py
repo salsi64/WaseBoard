@@ -302,6 +302,8 @@ async def main():
     resp = await S.bot._handle_status(Req())
     payload = json.loads(resp.text)
     check("/status : features contient replace_file", resp.status == 200 and "replace_file" in payload.get("features", []), payload)
+    check("/status : version du serveur et durée de fonctionnement", payload.get("server_version") == S.SERVER_VERSION
+          and isinstance(payload.get("uptime_s"), int) and payload["uptime_s"] >= 0, payload)
     legacy = {"connected", "channel", "guild_id", "guild_name", "connected_guild_count", "channel_members"}
     check("/status : tous les champs historiques sont toujours là (anciens clients)", legacy <= set(payload), set(payload))
 

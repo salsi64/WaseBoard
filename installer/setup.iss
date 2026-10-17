@@ -4,7 +4,7 @@
 ;   dotnet publish src/WaseBoard/WaseBoard.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
 
 #define MyAppName "WaseBoard"
-#define MyAppVersion "3.3.0"
+#define MyAppVersion "3.4.0"
 ; ↑ Pensez à incrémenter ce numéro à chaque nouvelle version distribuée à vos utilisateurs
 ; (pas obligatoire pour que la mise à jour fonctionne — c'est l'AppId ci-dessous qui compte —
 ; mais ça permet de distinguer les versions dans le nom du fichier et dans Windows).
@@ -44,10 +44,20 @@ RestartApplications=yes
 ; SignTool=signtool /f $qmoncert.pfx$q /p motdepasse /fd sha256 /tr http://timestamp.digicert.com /td sha256 $f
 
 [Languages]
+; L'assistant suit la langue de Windows (français, sinon anglais) ; l'application fait de même (réglage « Langue »).
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[CustomMessages]
+french.DesktopIcon=Créer un raccourci sur le Bureau
+french.ShortcutsGroup=Raccourcis :
+french.LaunchApp=Lancer %1
+english.DesktopIcon=Create a desktop shortcut
+english.ShortcutsGroup=Shortcuts:
+english.LaunchApp=Launch %1
 
 [Tasks]
-Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; GroupDescription: "Raccourcis :"
+Name: "desktopicon"; Description: "{cm:DesktopIcon}"; GroupDescription: "{cm:ShortcutsGroup}"
 
 [Files]
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -67,7 +77,7 @@ Root: HKCU; Subkey: "Software\Classes\waseboard"; ValueType: string; ValueName: 
 Root: HKCU; Subkey: "Software\Classes\waseboard\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Lancer {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchApp,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
 // Micro en jeu : l'effet audio est greffé sur les micros dans HKLM (droits administrateur, voir

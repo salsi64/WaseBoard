@@ -1,0 +1,41 @@
+name: Serveur — image Docker (construction)
+
+# Vérifie que l'image du serveur se construit, sans la publier (la publication reste dans docker-publish.yml,
+# sur master). Évite de découvrir un Dockerfile cassé (module Python non copié, dépendance manquante) au merge.
+on:
+  pull_request:
+    paths:
+      - "server/**"
+      - ".github/workflows/docker-build.yml"
+  push:
+    branches-ignore:
+      - master
+    paths:
+      - "server/Dockerfile"
+      - "server/requirements.txt"
+      - "server/*.py"
+      - ".github/workflows/docker-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Construire l'image (sans la publier)
+        uses: docker/build-push-action@v6
+        with:
+          context: server
+          push: false
+          load: true
+          tags: waseboard-server:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: L'image démarre-t-elle ? (import des modules, ffmpeg présent)
+        run: |
+          docker run --rm --entrypoint python waseboard-server:ci -c "import ast,sys; [ast.parse(open(f, encoding='utf-8').read()) for f in ('server.py','audio.py','effects.py','diagnostics.py','wb_config.py','alerts.py','reports.py','webapp.py','messages.py')]; assert open('web/index.html', encoding='utf-8').read(); print('modules et page web présents et valides')"
+          docker run --rm --entrypoint ffmpeg waseboard-server:ci -version | head -1

@@ -9,3 +9,5 @@ server/deploy/* text eol=lf
 server/Dockerfile.* text eol=lf
 server/Caddyfile.* text eol=lf
 server/tests/*.sh text eol=lf
+server/web/** text eol=lf
+server/web/icons/* binary
