@@ -50,7 +50,7 @@ Full guide and FAQ (in French): [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateu
   non-destructive **waveform trimming** (the full sound is kept, so you can re-trim any time) and
   **audio file replacement** without losing the rest (name, categories, settings).
 - **🌐 Web version (PWA)**: the same sound list from a browser or a phone (“Add to home screen”), Discord sign-in,
-  adding and editing sounds (waveform trimming included), nothing to install — at `https://<your server>/app/`, and even **inside Discord** as a voice channel
+  adding and editing sounds (waveform trimming included), **favorites, colors and personal categories kept in sync** with the Windows app, nothing to install — at `https://<your server>/app/`, and even **inside Discord** as a voice channel
   Activity (see [`server/README.md`](server/README.md#activité-discord-waseboard-dans-un-salon-vocal), in French). Details: [`server/README.md`](server/README.md#application-web-pwa).
 - **🎞 Last-seconds clip**: a shortcut keeps what just played in a game, a video or Discord
   and opens the add window to turn it into a sound (off by default; everything stays in memory, nothing is written to

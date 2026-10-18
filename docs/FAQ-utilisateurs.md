@@ -57,7 +57,8 @@ Clic droit sur un son › **Éditer…** ouvre une seule fenêtre pour tout rég
 - **Nom, emoji, découpe** et **remplacement du fichier audio** (« Remplacer… ») : réservés à l'auteur du son et
   aux admins du serveur, car ces réglages sont partagés. Remplacer le fichier garde le nom, l'emoji, les catégories
   et vos réglages ; la découpe repart du fichier entier.
-- **Couleur, favori, catégories, volume** : à vous seul, pour tous les sons. Le volume va de 0 à 200 %.
+- **Couleur, favori, catégories** : à vous seul, pour tous les sons, et **les mêmes partout** : dans l'application Windows, la version web et l'Activité
+  (ils suivent votre compte Discord). **Volume** : propre à l'application sur ce PC, de 0 à 200 %.
 
 Sur un son qui n'est pas le vôtre, la fenêtre s'appelle « Personnaliser le son » et ne propose que ces réglages locaux.
 Les catégories personnelles se renomment ou se suppriment par clic droit sur leur titre.
@@ -133,8 +134,10 @@ Et, pour jouer **sans ouvrir l'application** (sur téléphone, par exemple) : `/
 
 **Depuis un navigateur ou un téléphone** : si votre serveur l'a activée, la page `https://<adresse du serveur>/app/` offre la même chose
 sans rien installer — connexion avec Discord, liste des sons de vos serveurs, un toucher pour jouer, « Rejoindre mon vocal », « Stop ».
-Sur téléphone, le menu du navigateur propose « Ajouter à l'écran d'accueil » : elle s'ouvre alors comme une application. Vos favoris et vos
-couleurs y sont enregistrés dans le navigateur (ils ne sont pas ceux de l'application Windows). Vous pouvez aussi y **ajouter** des sons (bouton « + », ou en
+Sur téléphone, le menu du navigateur propose « Ajouter à l'écran d'accueil » : elle s'ouvre alors comme une application. Vos favoris, vos
+couleurs et vos catégories personnelles sont **les mêmes que dans l'application Windows**, et vous les gérez depuis la page (menu ⋯ d'un son : favori, couleur,
+« Catégories… » ; bouton 📁＋ pour créer une catégorie ; menu ⋯ du titre d'une catégorie pour la renommer, la déplacer ou la supprimer). Un changement fait d'un côté
+apparaît de l'autre en moins d'une minute. Un clic sur le titre d'une section la replie (choix propre à l'appareil). Vous pouvez aussi y **ajouter** des sons (bouton « + », ou en
 glissant des fichiers audio ; sur téléphone, le sélecteur de fichiers permet d'envoyer un enregistrement vocal), puis les **modifier** (menu ⋯ › Modifier…) :
 nom, emoji, découpe avec forme d'onde, nouveau fichier, serveurs où il apparaît, suppression — avec les mêmes droits que dans l'application Windows.
 
