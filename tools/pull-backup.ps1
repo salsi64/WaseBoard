@@ -63,7 +63,7 @@ if ($Uninstall) {
     return
 }
 if ($Install) {
-    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Server `"$Server`" -Port $Port -User `"$User`" " +
+    $arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Server `"$Server`" -Port $Port -User `"$User`" " +
         "-KeyFile `"$KeyFile`" -RemoteDir `"$RemoteDir`" -LocalDir `"$LocalDir`" -Keep $Keep"
     if ($NoSecrets) { $arguments += ' -NoSecrets' }
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
@@ -89,10 +89,14 @@ function Log([string]$message, [string]$level = 'INFO') {
 try { & icacls $LocalDir /inheritance:r /grant:r "$($env:USERNAME):(OI)(CI)F" | Out-Null } catch { }
 
 if (-not (Test-Path $KeyFile)) { Log "clé SSH introuvable : $KeyFile" 'ERREUR'; exit 2 }
-$sshOptions = @('-i', $KeyFile, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=15')
+# ServerAlive : une connexion qui ne répond plus est abandonnée au bout d'une minute environ (sans cela un serveur muet bloquerait le script).
+$sshOptions = @('-i', $KeyFile, '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=15',
+    '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4')
 
 function Invoke-Remote([string]$command) {
-    $output = & ssh.exe @sshOptions -p $Port "$User@$Server" $command 2>&1
+    # -n : ssh ne lit pas l'entrée standard. Sans cela, dans la fenêtre de la tâche planifiée, le 2e appel ssh d'un même lancement attendait
+    # indéfiniment la console (la commande distante était finie, la fenêtre restait ouverte jusqu'à l'arrêt forcé au bout d'une heure).
+    $output = & ssh.exe -n @sshOptions -p $Port "$User@$Server" $command 2>&1
     if ($LASTEXITCODE -ne 0) { throw "ssh a échoué (code $LASTEXITCODE) : $output" }
     return ($output | Out-String).Trim()
 }
