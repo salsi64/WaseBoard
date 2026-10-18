@@ -23,6 +23,9 @@ PAGE = r"""<!DOCTYPE html>
 <title>WaseBoard</title>
 <meta name="description" content="[[Soundboard partagé pour Discord : cliquez un son, il joue sur vos enceintes et dans le vocal, pour tout le monde. Application Windows, version web et téléphone.||A shared soundboard for Discord: click a sound and it plays on your speakers and in voice chat, for everyone. Windows app, web version and phone.]]">
 <meta name="theme-color" content="#0b1220">
+<link rel="icon" type="image/png" href="/app/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/app/icons/apple-touch-icon.png">
+<link rel="canonical" href="URL_SITE/[[||en]]">
 <link rel="alternate" hreflang="fr" href="/">
 <link rel="alternate" hreflang="en" href="/en">
 <meta property="og:title" content="WaseBoard">
@@ -349,7 +352,7 @@ PAGE = r"""<!DOCTYPE html>
         <a href="/privacy.html">[[Confidentialité||Privacy (in French)]]</a>
         <a href="/terms.html">[[Conditions d'utilisation||Terms of use (in French)]]</a>
         <a href="URL_GITHUB/blob/master/docs/FAQ-utilisateurs.md">FAQ</a>
-        <a href="URL_GITHUB/releases/tag/v3.4.0">[[Nouveautés de la 3.4||What's new in 3.4]]</a>
+        <a href="URL_RELEASE">[[Nouveautés de la dernière version||What's new in the latest version]]</a>
         <a href="[[/en||/]]" hreflang="[[en||fr]]">[[English||Français]]</a>
       </div>
     </div>

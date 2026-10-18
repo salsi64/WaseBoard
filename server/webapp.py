@@ -18,7 +18,6 @@ Principes de sécurité :
 """
 
 import hashlib
-import json
 import logging
 import mimetypes
 from dataclasses import dataclass
