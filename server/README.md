@@ -701,6 +701,16 @@ Un site WaseBoard derrière nginx reçoit, comme n'importe quel site public, des
 qui ne freine que les routes publiques et l'envoi de sons : nginx arrête la rafale **avant** qu'elle atteigne le serveur. Vérification : `curl -i https://votre-site/.env`
 doit se terminer par « connection reset » / une réponse vide.
 
+### nginx : en-têtes de sécurité du site
+
+Les pages servies directement par nginx (accueil, confidentialité, conditions, guide micro, images) n'ont ni script ni ressource externe. `deploy/nginx/waseboard-security-headers.conf`
+leur ajoute **HSTS**, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, une **politique de contenu fermée** et l'interdiction d'être affichées dans un cadre.
+À installer dans `/etc/nginx/snippets/`, puis `include` **à l'intérieur de chaque `location` qui sert un fichier** (voir `deploy/landing-page/nginx-waseboard-salsi-bid.conf`).
+Au niveau `server`, ajoutez seulement `add_header Strict-Transport-Security "max-age=15552000" always;` : il couvre les réponses de WaseBoard (`/app`, l'API).
+**Ne l'incluez pas dans la `location /` qui renvoie vers WaseBoard** : l'application web et l'Activité Discord posent leurs propres en-têtes, dont `frame-ancestors`,
+qui autorise Discord à les afficher. Vérification : `curl -sI https://votre-site/ | grep -iE 'strict|content-security|x-frame'` (présents) et
+`curl -sI 'https://votre-site/?frame_id=1' | grep -i frame-ancestors` (celui de l'application, avec Discord).
+
 ### Service systemd durci
 
 `deploy/waseboard.service` remplace le service de l'étape 5 : le serveur ne peut écrire que dans son propre dossier
