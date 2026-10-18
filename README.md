@@ -52,7 +52,7 @@ Guide complet et FAQ : [`docs/FAQ-utilisateurs.md`](docs/FAQ-utilisateurs.md).
   à chaque son, favori, **découpe waveform** non destructive (le son complet est conservé, on recoupe quand on
   veut) et **remplacement du fichier audio** sans perdre le reste (nom, catégories, réglages).
 - **🌐 Version web (PWA)** : la même liste de sons depuis un navigateur ou un téléphone (« Ajouter à l'écran d'accueil »), connexion
-  avec Discord, ajout et édition de sons (découpe avec forme d'onde comprise), sans rien installer — sur `https://<votre serveur>/app/`, et même **dans Discord** comme Activité
+  avec Discord, ajout et édition de sons (découpe avec forme d'onde comprise), **favoris, couleurs et catégories personnelles synchronisés** avec l'application Windows, sans rien installer — sur `https://<votre serveur>/app/`, et même **dans Discord** comme Activité
   de salon vocal (voir [`server/README.md`](server/README.md#activité-discord-waseboard-dans-un-salon-vocal)). Détails : [`server/README.md`](server/README.md#application-web-pwa).
 - **🎞 Clip des dernières secondes** : un raccourci garde le moment qui vient de passer dans un jeu, une vidéo ou Discord
   et ouvre la fenêtre d'ajout pour en faire un son (désactivé par défaut ; tout reste en mémoire, rien n'est écrit sur le

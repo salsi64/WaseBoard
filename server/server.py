@@ -3188,7 +3188,7 @@ class WaseBoardServer(commands.Bot):
         ctx, err = await self._play_context(request)
         if err is not None:
             return err
-        data, user_id, guild_id, mixer = ctx.data, ctx.user_id, ctx.guild_id, ctx.mixer
+        data, user_id, guild_id = ctx.data, ctx.user_id, ctx.guild_id
 
         raw_steps = data.get("steps")
         if not isinstance(raw_steps, list) or not 1 <= len(raw_steps) <= SEQUENCE_MAX_STEPS:
