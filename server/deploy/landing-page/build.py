@@ -23,8 +23,9 @@ PAGE = r"""<!DOCTYPE html>
 <title>WaseBoard</title>
 <meta name="description" content="[[Soundboard partagé pour Discord : cliquez un son, il joue sur vos enceintes et dans le vocal, pour tout le monde. Application Windows, version web et téléphone.||A shared soundboard for Discord: click a sound and it plays on your speakers and in voice chat, for everyone. Windows app, web version and phone.]]">
 <meta name="theme-color" content="#0b1220">
-<link rel="icon" type="image/png" href="/app/icons/icon-192.png">
-<link rel="apple-touch-icon" href="/app/icons/apple-touch-icon.png">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="192x192" href="/img/icon-192.png">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
 <link rel="canonical" href="URL_SITE/[[||en]]">
 <link rel="alternate" hreflang="fr" href="/">
 <link rel="alternate" hreflang="en" href="/en">
