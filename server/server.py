@@ -153,6 +153,12 @@ ACTIVITY_ENTRY_POINT_TYPE = 4
 ACTIVITY_ENTRY_POINT = {"name": "launch", "description": "Ouvre WaseBoard (la planche de sons) dans le salon vocal",
                         "type": ACTIVITY_ENTRY_POINT_TYPE, "handler": 2}
 ALERTS_RECONNECT_MIN_S = 60  # une coupure de Discord plus courte n'est pas signalée
+
+# Arrêt (systemctl stop/restart, docker stop) : le bot quitte ses salons vocaux puis ferme sa connexion à Discord, avec des délais bornés. Sans cela,
+# un départ de salon vocal qui n'aboutissait pas retardait l'arrêt de 30 s, puis systemd tuait le processus (constaté à chaque arrêt pendant
+# qu'un salon vocal était occupé : « The voice handshake is being terminated » puis « State 'stop-sigterm' timed out »).
+SHUTDOWN_VOICE_TIMEOUT_S = 5.0   # départ d'un salon vocal
+SHUTDOWN_CLOSE_TIMEOUT_S = 10.0  # fermeture de la connexion à Discord, une fois les salons quittés
 ERROR_BURST = alerts.ErrorBurstDetector(ALERTS_ERROR_BURST)
 logging.getLogger().addHandler(ERROR_BURST)
 SEQUENCE_MAX_STEPS = 8           # sons dans un enchaînement
@@ -1177,6 +1183,9 @@ class WaseBoardServer(commands.Bot):
         self._membership_cache: dict[int, tuple[float, list]] = {}
         self._activity_lock = threading.Lock()
         self._web_runner: Optional[web.AppRunner] = None
+        self._shutdown_started = False                 # un seul arrêt à la fois (signal, puis fin de bot.run)
+        self._shutdown_done = asyncio.Event()
+        self._signal_close_task: Optional[asyncio.Task] = None
         # Sons décodés en mémoire (voir PCMCache) ; un seul fil pour les décoder en arrière-plan.
         self.pcm_cache = PCMCache(int(PCM_CACHE_MB * 1024 * 1024))
         self._pcm_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pcm-decode")
@@ -1199,7 +1208,34 @@ class WaseBoardServer(commands.Bot):
         self._gateway_down_since: Optional[float] = None
         self.web_app: Optional[webapp.WebApp] = None  # application web (PWA) sous /app, si activée et complète
 
+    def _install_signal_handlers(self) -> None:
+        """SIGTERM (systemctl stop/restart, docker stop) : arrêt propre PENDANT que la connexion à Discord est encore ouverte. Avec le
+        gestionnaire de main() (qui lève KeyboardInterrupt), les tâches de la passerelle étaient annulées avant que les salons vocaux ne soient
+        quittés : le départ attendait en vain une réponse de Discord, jusqu'à 30 s. Windows (développement) ne gère pas ce mode : main() garde
+        alors son gestionnaire de repli."""
+        def request_close() -> None:
+            self._signal_close_task = asyncio.ensure_future(self.close())
+        try:
+            asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, request_close)
+        except (NotImplementedError, RuntimeError, ValueError):
+            pass
+
+    async def _leave_voice_channels(self) -> None:
+        """Quitte tous les salons vocaux en parallèle ; un salon qui ne répond pas ne retarde pas les autres ni l'arrêt."""
+        async def leave(client) -> None:
+            try:
+                await asyncio.wait_for(client.disconnect(force=True), SHUTDOWN_VOICE_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                log.warning("Salon vocal %s : le départ prend trop de temps (%s s), on passe à la suite.", getattr(getattr(client, "channel", None), "id", "?"),
+                            SHUTDOWN_VOICE_TIMEOUT_S)
+            except Exception:
+                log.exception("Échec du départ d'un salon vocal à l'arrêt")
+        clients = list(self.voice_clients)
+        if clients:
+            await asyncio.gather(*(leave(client) for client in clients))
+
     async def setup_hook(self) -> None:
+        self._install_signal_handlers()
         self.http_session = aiohttp.ClientSession()
         self._trash_purge_task = asyncio.create_task(self._trash_purge_loop())
         if ALERTS_ENABLED:
@@ -1410,16 +1446,27 @@ class WaseBoardServer(commands.Bot):
                 await self.alerts.notify("cert", message)
 
     async def close(self) -> None:
-        if self._alerts_task is not None:
-            self._alerts_task.cancel()
-        if self.alerts is not None:
-            self.alerts.state.clean_shutdown = True  # arrêt voulu (systemctl stop/restart, Ctrl+C) : pas d'alerte au prochain démarrage
-            self.alerts.state.save()
-        if self._trash_purge_task is not None:
-            self._trash_purge_task.cancel()
-        if self.http_session is not None:
-            await self.http_session.close()
-        await super().close()
+        if self._shutdown_started:   # déjà en cours (signal reçu, puis fin de bot.run) : on attend la fin du premier arrêt
+            await self._shutdown_done.wait()
+            return
+        self._shutdown_started = True
+        try:
+            if self._alerts_task is not None:
+                self._alerts_task.cancel()
+            if self.alerts is not None:
+                self.alerts.state.clean_shutdown = True  # arrêt voulu (systemctl stop/restart, Ctrl+C) : pas d'alerte au prochain démarrage
+                self.alerts.state.save()
+            if self._trash_purge_task is not None:
+                self._trash_purge_task.cancel()
+            await self._leave_voice_channels()
+            if self.http_session is not None:
+                await self.http_session.close()
+            try:
+                await asyncio.wait_for(super().close(), SHUTDOWN_CLOSE_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                log.warning("Fermeture de la connexion à Discord trop longue (%s s) : arrêt forcé du reste.", SHUTDOWN_CLOSE_TIMEOUT_S)
+        finally:
+            self._shutdown_done.set()
 
     async def _trash_purge_loop(self) -> None:
         """Purge périodique de la corbeille (voir TRASH_RETENTION_DAYS) : au démarrage, puis toutes les 6 h."""
