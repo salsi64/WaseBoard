@@ -254,7 +254,7 @@ PAGE = r"""<!DOCTYPE html>
           </ul>
           <a class="btn web big" href="/app/">🌐 [[Ouvrir la version web||Open the web version]]</a>
         </div>
-        <div class="phone"><img src="img/[[web-phone.png||web-phone-en.png]]" width="780" height="1520" loading="lazy"
+        <div class="phone"><img src="img/[[web-phone-3.7.png||web-phone-3.7-en.png]]" width="780" height="1520" loading="lazy"
           alt="[[La version web sur téléphone : recherche, serveurs, sons en pilules colorées, bouton Rejoindre mon vocal||The web version on a phone: search, servers, sounds as colored pills, the Join my voice channel button]]"></div>
       </div>
     </div>

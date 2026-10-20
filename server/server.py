@@ -178,7 +178,7 @@ ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma"}
 
 
 #: Version du serveur, annoncée par /status (page Diagnostic du client, rapports de support).
-SERVER_VERSION = "3.6.0"
+SERVER_VERSION = "3.7.0"
 
 #: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
 #: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).
