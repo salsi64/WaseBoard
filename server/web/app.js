@@ -9,7 +9,7 @@ import { LANGUAGES, makeTranslator, pickLanguage } from './i18n.js';
 import { createPrefsStore } from './prefs.js';
 import {
   PALETTE, PALETTES, activeUserIds, buildAuthorizeUrl, buildSections, categoryTabs, colorFor, dedupeById, emptyPrefs, errorText, favoriteSounds, filterSounds,
-  isActivityLocation, loadJson, makeState, nowPlayingEntries, parseCallback, personalKey, playingMap, sanitizeColors, sanitizeIds, sanitizePalette, sanitizeSession,
+  isActivityLocation, isInviteUrl, loadJson, makeState, nowPlayingEntries, parseCallback, personalKey, playingMap, sanitizeColors, sanitizeIds, sanitizePalette, sanitizeSession,
   saveJson, setColor as setPrefsColor, sortByName, toggleFavorite as toggleFavoritePrefs, toggleInSet, trimRange, voiceSummary,
 } from './logic.js';
 
@@ -777,8 +777,20 @@ function choosePalette(id, row) {
   for (const button of row.querySelectorAll('.palette')) button.setAttribute('aria-pressed', String(button.dataset.palette === palette));
 }
 
+/** Ouvre la page d'ajout du bot de Discord (dans l'Activité, par le kit : une Activité ne peut pas ouvrir d'onglet elle-même). */
+async function openInvite(url) {
+  closeOverlay();
+  if (!isInviteUrl(url)) return;
+  if (state.activity) {
+    try { await state.activity.connection.sdk.commands.openExternalLink({ url }); } catch { toast(t('settings.invite.fail'), 'error'); }
+    return;
+  }
+  window.open(url, '_blank', 'noopener');
+}
+
 function openSettings() {
   const session = state.session;
+  const inviteUrl = state.config && isInviteUrl(state.config.invite_url) ? state.config.invite_url : null;
   const row = h('div', { class: 'palettes', role: 'group', 'aria-label': t('settings.palette') });
   row.append(...PALETTES.map((entry) => h('button', {
     type: 'button', class: 'palette', 'data-palette': entry.id, 'aria-pressed': String(palette === entry.id), onclick: () => choosePalette(entry.id, row),
@@ -789,6 +801,8 @@ function openSettings() {
     h('div', { class: 'label', text: t('settings.palette') }),
     row,
     h('p', { class: 'hint', text: t('settings.palette.note') }),
+    inviteUrl ? h('button', { class: 'btn row', id: 'invite-bot', onclick: () => openInvite(inviteUrl), text: `➕ ${t('settings.invite')}` }) : null,
+    inviteUrl ? h('p', { class: 'hint', text: t('settings.invite.hint') }) : null,
     h('button', { class: 'btn row', onclick: () => { closeOverlay(); toggleLanguage(); }, text: `🌐 ${t('menu.language')}` }),
     state.installPrompt && !state.activity ? h('button', { class: 'btn row', onclick: installApp, text: `⬇️ ${t('menu.install')}` }) : null,
     state.activity ? null : h('button', { class: 'btn row', onclick: () => { closeOverlay(); logout(); }, text: `🚪 ${t('menu.logout')}` }),

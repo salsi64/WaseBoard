@@ -406,3 +406,4 @@ html.activity .section-title { margin-top: 8px; font-size: 0.8rem; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.sheet.settings .hint { margin: 4px 2px 14px; }

@@ -394,6 +394,12 @@ export function activeUserIds(playing) {
   return ids;
 }
 
+/** Adresse d'ajout du bot reçue du serveur : seule une page d'autorisation de Discord est ouverte (jamais une adresse quelconque). */
+export function isInviteUrl(value) {
+  if (typeof value !== 'string' || !value.startsWith('https://discord.com/oauth2/authorize?')) return false;
+  try { return /^\d+$/.test(new URL(value).searchParams.get('client_id') || ''); } catch { return false; }
+}
+
 // ---------- Palettes (les mêmes que « Paramètres > Apparence » de l'application Windows ; les couleurs sont dans app.css) ----------
 export const PALETTES = [
   { id: 'nightblue', labelKey: 'palette.nightblue', swatch: ['#0f1624', '#38bdf8'] },

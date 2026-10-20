@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_PALETTE, PALETTE, PALETTES, activeUserIds, addCategory, nowPlayingEntries, sanitizePalette, voiceMembers, autoColor, buildAuthorizeUrl, buildSections, categoryPosition, categoryTabs, checkCategoryName, colorFor, dedupeById, emptyPrefs, errorText,
+  DEFAULT_PALETTE, PALETTE, PALETTES, activeUserIds, addCategory, isInviteUrl, nowPlayingEntries, sanitizePalette, voiceMembers, autoColor, buildAuthorizeUrl, buildSections, categoryPosition, categoryTabs, checkCategoryName, colorFor, dedupeById, emptyPrefs, errorText,
   favoriteSounds, filterSounds, isHexColor, loadJson, makeState, moveCategory, normalizeText, orderedEntries, parseCallback, personalKey, playingMap, prefsEqual,
   prefsToWire, removeCategory, renameCategory, sanitizeColors, sanitizeIds, sanitizePrefs, sanitizeSession, saveJson, setColor, setMembership, sortByName,
   toggleFavorite, toggleInSet, trimRange, voiceSummary,
@@ -320,4 +320,12 @@ test('Activité Discord : reconnaissance du contexte et repli du CDN', async () 
   assert.equal(cdnFallbackUrl('https://cdn.discordapp.com.evil.example/x.png'), null);
   assert.equal(cdnFallbackUrl(null), null);
   assert.equal(cdnFallbackUrl('/app/icons/icon-192.png'), null);
+});
+
+test('adresse d\'ajout du bot : seulement une page d\'autorisation de Discord, avec un identifiant d\'application', () => {
+  assert.ok(isInviteUrl('https://discord.com/oauth2/authorize?client_id=555&permissions=3146752&scope=bot%20applications.commands'));
+  for (const bad of ['', null, undefined, 3, 'http://discord.com/oauth2/authorize?client_id=555', 'https://discord.com.evil.example/oauth2/authorize?client_id=555',
+    'https://discord.com/oauth2/authorize?client_id=abc', 'https://discord.com/oauth2/authorize', 'javascript:alert(1)', 'https://evil.example/?https://discord.com/oauth2/authorize?client_id=1']) {
+    assert.ok(!isInviteUrl(bad), String(bad));
+  }
 });

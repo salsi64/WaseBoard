@@ -359,6 +359,14 @@ async def main():
                   and "capacité maximale" not in owner3.dms[0], owner3.dms)
             check("le DM de bienvenue n'embarque pas de lien de connexion direct (expirerait avant lecture)",
                   "/connect/" not in owner3.dms[0], owner3.dms)
+        with Limits(MAX_GUILDS=3, OAUTH2_CLIENT_ID="555"):
+            fake_list = [G1, G2]
+            check("page web : adresse d'ajout du bot tant qu'il reste de la place", bot.web_invite_url() == D.build_invite_url("555"), bot.web_invite_url())
+            fake_list = [G1, G2, G3]
+            check("page web : instance pleine, pas d'adresse d'ajout (le bot refuserait le serveur)", bot.web_invite_url() == "")
+        with Limits(MAX_GUILDS=0, OAUTH2_CLIENT_ID="555"):
+            fake_list = [G1, G2, G3]
+            check("page web : sans plafond, l'adresse d'ajout est toujours proposée", bot.web_invite_url() == D.build_invite_url("555"))
         with Limits(MAX_GUILDS=0):
             owner4 = FakeOwner(); g4 = JoinGuild(9004, owner4)
             fake_list = [G1, G2, G3, g4]
