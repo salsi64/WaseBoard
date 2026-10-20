@@ -15,6 +15,7 @@ import json
 import logging
 import math
 import os
+import re
 import secrets
 import shutil
 import signal
@@ -57,13 +58,48 @@ class QuietPollingFilter(logging.Filter):
     """Retire du journal d'accès les sondages réguliers quand ils réussissent : /activity (toutes les 300 ms dans l'application, toutes les
     secondes dans la page web et l'Activité, avec ou sans « ?guild_id=… »), /status (toutes les 3 à 4 s) et la synchronisation des préférences
     (toutes les 30 à 60 s par page ou application ouverte) : des dizaines de milliers de lignes par jour et par personne, qui noyaient tout le
-    reste. Les échecs (401, 5xx…) et toutes les autres requêtes restent journalisés."""
+    reste.
+
+    Leurs ÉCHECS (401, 5xx…) restent visibles mais ne sont plus écrits un par un : un client mal configuré (clé du serveur refusée…) réessaie
+    toutes les 300 ms, et a déjà rempli le journal de dizaines de milliers de lignes identiques en une après-midi. La première ligne de chaque
+    type d'échec (route + code) est écrite ; les suivantes sont comptées ; la prochaine ligne écrite, une minute plus tard au plus tôt, dit
+    combien ont été passées sous silence. Toutes les autres requêtes (lectures, envois, /health…) sont journalisées une à une, comme avant.
+    L'adresse affichée dans ce journal est celle du proxy (nginx) : celle du client est dans le journal de nginx."""
 
     _POLLS = ('"GET /activity ', '"GET /activity?', '"GET /status ', '"GET /status?', '"POST /me/preferences/sync ')
+    FAILURE_WINDOW_S = 60.0
+    _MAX_KEYS = 200                                # routes × codes observés : borné par construction, ce plafond n'est qu'un filet
+    _STATUS = re.compile(r'" (\d{3}) ')              # code de la réponse dans « "GET /activity HTTP/1.1" 401 213 … »
+
+    def __init__(self, clock=time.monotonic) -> None:
+        super().__init__()
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._failures: dict[str, list] = {}       # « "GET /activity 401 » -> [début de la fenêtre, lignes passées sous silence]
 
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.getMessage()
-        return not (" 200 " in message and any(poll in message for poll in self._POLLS))
+        poll = next((p for p in self._POLLS if p in message), None)
+        if poll is None:
+            return True                            # pas un sondage : toujours journalisé
+        if " 200 " in message:
+            return False                           # sondage réussi : jamais journalisé
+        found = self._STATUS.search(message)
+        key = poll + (found.group(1) if found else "?")
+        now = self._clock()
+        with self._lock:
+            entry = self._failures.get(key)
+            if entry is not None and now - entry[0] < self.FAILURE_WINDOW_S:
+                entry[1] += 1
+                return False
+            skipped = entry[1] if entry else 0
+            if entry is None and len(self._failures) >= self._MAX_KEYS:
+                self._failures.clear()
+            self._failures[key] = [now, 0]
+        if skipped:
+            record.msg = f"{message} [+{skipped} identiques non journalisées depuis la dernière ligne]"
+            record.args = None
+        return True
 
 
 logging.getLogger("aiohttp.access").addFilter(QuietPollingFilter())
@@ -178,7 +214,7 @@ ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma"}
 
 
 #: Version du serveur, annoncée par /status (page Diagnostic du client, rapports de support).
-SERVER_VERSION = "3.7.0"
+SERVER_VERSION = "3.7.1"
 
 #: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
 #: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).

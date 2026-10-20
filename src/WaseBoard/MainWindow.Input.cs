@@ -40,6 +40,7 @@ namespace WaseBoard
             if (saved)
             {
                 _library.SaveSettings();
+                ResetActivityBackoff();   // adresse ou clé du serveur peut-être corrigée : on réessaie tout de suite au rythme normal
                 ApplyColorScheme();
                 ApplyTheme();
                 ApplyMicModeButton();

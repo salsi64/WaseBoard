@@ -134,6 +134,7 @@
   "main.joined_voice": "🔊 Connecté à « {0} » sur {1}.",
   "main.join_failed": "Échec de la connexion au salon vocal.",
   "main.server.connected": "Connecté — {0} son(s)",
+  "main.key_refused": "Le serveur refuse la clé de cette application : vérifiez l'adresse et la clé du serveur dans Paramètres › Serveur.",
   "main.server.unreachable": "Serveur injoignable",
   "main.mic_mode.game_tooltip": "Mode jeu : les sons passent dans votre micro (chat vocal du jeu). Cliquer pour passer en mode Discord.",
   "main.mic_mode.discord_tooltip": "Mode Discord : les sons sont joués par le bot dans votre salon vocal. Cliquer pour passer en mode jeu.",

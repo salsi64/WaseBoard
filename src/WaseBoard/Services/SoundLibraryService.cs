@@ -13,6 +13,9 @@ using WaseBoard.Services.Localization;
 
 namespace WaseBoard.Services
 {
+    /// <summary>Issue d'un sondage d'activité : réponse reçue, refus d'authentification (clé du serveur), ou autre échec (réseau, 5xx…).</summary>
+    public enum ActivityPollStatus { Ok, Unauthorized, Failed }
+
     /// <summary>Client HTTP du serveur WaseBoard (catalogue, upload, lecture, activité partagée)
     /// et gestion des préférences locales (favoris, catégories, ordre, raccourcis, volumes).</summary>
     public partial class SoundLibraryService
@@ -1119,13 +1122,14 @@ namespace WaseBoard.Services
         /// en ligne (application ouverte), pour le highlight/avatars et la barre "en ligne" des
         /// catégories partagées. Signale au passage notre propre présence au serveur.
         /// </summary>
-        public async Task<(Dictionary<string, List<UserActivity>> Activity, List<UserActivity> Online)> GetActivityAsync()
+        public async Task<(Dictionary<string, List<UserActivity>> Activity, List<UserActivity> Online, ActivityPollStatus Status)> GetActivityAsync()
         {
             try
             {
                 using var request = CreateRequest(HttpMethod.Get, "/activity");
                 using var response = await SendAsync(request);
-                if (!response.IsSuccessStatusCode) return (new(), new());
+                if (response.StatusCode == HttpStatusCode.Unauthorized) return (new(), new(), ActivityPollStatus.Unauthorized);
+                if (!response.IsSuccessStatusCode) return (new(), new(), ActivityPollStatus.Failed);
 
                 var json = await response.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
@@ -1144,11 +1148,11 @@ namespace WaseBoard.Services
                     foreach (var u in onlineArray.EnumerateArray())
                         online.Add(ParseUserActivity(u));
 
-                return (activity, online);
+                return (activity, online, ActivityPollStatus.Ok);
             }
             catch
             {
-                return (new(), new()); // le sondage échoue silencieusement : effet visuel, pas une fonction critique
+                return (new(), new(), ActivityPollStatus.Failed); // effet visuel, pas une fonction critique : l'appelant ralentit le sondage, sans bruit
             }
         }
 
