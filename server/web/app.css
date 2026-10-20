@@ -1,42 +1,58 @@
-/* WaseBoard web — thème sombre par défaut (comme l'interface Flat de l'application Windows), clair si l'appareil le demande.
+/* WaseBoard web : même apparence que l'application Windows (thème « Flat », palette « Bleu nuit » par défaut).
+   Grands écrans : barre latérale + barre d'outils + boutons de son en gélules, comme la fenêtre principale. Petits écrans (téléphone, panneau
+   de l'Activité Discord) : la même apparence en version compacte (barre du haut, onglets, barre du bas).
    Aucun style en ligne : la politique de sécurité de contenu l'interdit (les couleurs de sons passent par --c, posée en JS). */
 :root {
   color-scheme: dark light;
-  --bg: #0b1220;
-  --surface: #131c2e;
-  --surface-2: #1a2640;
-  --text: #e8edf7;
-  --muted: #93a0b8;
-  --outline: #263250;
+  /* Palette « Bleu nuit » : mêmes valeurs que PalettePresets de l'application (fond, panneau, piste, texte, accent). */
+  --bg: #0f1624;
+  --panel: #182236;
+  --track: #26324a;
+  --text: #eaf0fa;
   --accent: #38bdf8;
-  --accent-2: #34d399;
-  --on-accent: #06202e;
+  --accent-2: #38f8d9;      /* accent décalé de -28° de teinte : fin des dégradés (boutons principaux) */
+  --on-accent: #0b1220;
+  --muted: color-mix(in srgb, var(--text) 62%, transparent);
   --danger: #f87171;
   --on-danger: #2a0a0a;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --radius: 18px;
+  /* noms historiques de cette feuille de style */
+  --surface: var(--panel);
+  --surface-2: color-mix(in srgb, var(--panel) 65%, var(--track));
+  --outline: var(--track);
   --dock-h: 64px;
+  --sidebar-w: 236px;
+  --pill-h: 38px;
   font-family: 'Segoe UI', system-ui, -apple-system, 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
 }
 
+/* Les autres palettes de l'application (Paramètres) : l'accent vaut pour les thèmes sombre et clair, les surfaces seulement pour le sombre. */
+:root[data-palette='violet'] { --accent: #7c5cff; --accent-2: #5c88ff; --on-accent: #ffffff; }
+:root[data-palette='mint'] { --accent: #34d399; --accent-2: #34d34f; }
+:root[data-palette='rose'] { --accent: #fb7185; --accent-2: #fb71c5; }
+:root[data-palette='amber'] { --accent: #f59e0b; --accent-2: #f5310b; }
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='violet'] { --bg: #1e1e2e; --panel: #2a2a3c; --track: #3a3a50; --text: #f2f2f7; }
+  :root[data-palette='mint'] { --bg: #101714; --panel: #1a2420; --track: #2a3a33; --text: #ebf5f0; }
+  :root[data-palette='rose'] { --bg: #1a1419; --panel: #261d25; --track: #3a2b38; --text: #f7eef3; }
+  :root[data-palette='amber'] { --bg: #17140f; --panel: #241f16; --track: #3a3326; --text: #f7f2e8; }
+}
+
+/* Thème clair de l'appareil : palette claire commune de l'application (seul l'accent change d'une palette à l'autre). */
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f3f6fb;
-    --surface: #ffffff;
-    --surface-2: #e9eff9;
-    --text: #101828;
-    --muted: #5b6780;
-    --outline: #d3dcec;
-    --accent: #0284c7;
-    --accent-2: #059669;
-    --on-accent: #ffffff;
+    --bg: #f5f7fb;
+    --panel: #ffffff;
+    --track: #e0e4ec;
+    --text: #16202f;
     --danger: #dc2626;
     --on-danger: #ffffff;
     --shadow: 0 8px 24px rgba(16, 24, 40, 0.14);
   }
+  :root:not([data-palette]), :root[data-palette='nightblue'] { --accent: #0284c7; --accent-2: #0ab39a; --on-accent: #ffffff; }
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--track) transparent; }
 html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
 body { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
 button, input { font: inherit; color: inherit; }
@@ -44,178 +60,279 @@ button { cursor: pointer; }
 img { display: block; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+svg.icon { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 
 .noscript { padding: 24px; text-align: center; }
 
 /* ---------- Connexion ---------- */
 .login { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 24px; }
 .login-card {
-  width: min(420px, 100%); text-align: center; padding: 36px 28px; border-radius: 28px;
-  background: var(--surface); border: 1px solid var(--outline); box-shadow: var(--shadow);
+  width: min(420px, 100%); text-align: center; padding: 36px 28px; border-radius: 22px;
+  background: var(--panel); border: 1px solid var(--track); box-shadow: var(--shadow);
 }
 .login-logo { width: 96px; height: 96px; margin: 0 auto 18px; border-radius: 24px; box-shadow: var(--shadow); }
 .login h1 { font-size: 1.5rem; margin: 0 0 10px; }
 .login p { margin: 0 0 22px; color: var(--muted); line-height: 1.5; }
-.login .notice { color: var(--text); background: var(--surface-2); border-radius: 12px; padding: 10px 14px; margin-bottom: 18px; }
+.login .notice { color: var(--text); background: var(--bg); border-radius: 12px; padding: 10px 14px; margin-bottom: 18px; }
 .login .notice.error { color: var(--danger); }
 
+/* Boutons : coins arrondis à 10 px, bordure fine, bouton principal en dégradé d'accent (thème Flat de l'application). */
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 0 18px; font-size: 0.9rem;
-  border: 1px solid var(--outline); border-radius: 14px; background: var(--surface-2); font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 0 18px; font-size: 0.88rem;
+  border: 1px solid var(--track); border-radius: 10px; background: var(--bg); font-weight: 600;
   transition: transform 0.08s ease, filter 0.15s ease;
 }
-.btn:hover { filter: brightness(1.08); }
+.btn:hover { filter: brightness(1.12); }
 .btn:active { transform: scale(0.97); }
 .btn:disabled { opacity: 0.55; cursor: default; }
 .btn.primary { border: 0; color: var(--on-accent); background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
 .btn.danger { border: 0; color: var(--on-danger); background: var(--danger); }
 .login .btn { width: 100%; }
 
-/* ---------- Application ---------- */
-.app { min-height: 100vh; min-height: 100dvh; padding-bottom: calc(var(--dock-h) + env(safe-area-inset-bottom) + 12px); }
+/* Bouton de la barre d'outils : fond du thème, contour de piste, icône (celle de « Vocal » en accent, celle de « Stop » en rouge). */
+.tool {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 34px; padding: 0 12px; font-size: 0.8rem; font-weight: 600;
+  border: 1px solid var(--track); border-radius: 10px; background: var(--bg); white-space: nowrap; transition: background 0.15s ease, transform 0.08s ease;
+}
+.tool:hover { background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+.tool:active { transform: scale(0.97); }
+.tool-join .icon { color: var(--accent); }
+.tool-stop .icon { color: #f87171; }
+.tool.solid { border: 0; color: var(--on-danger); background: var(--danger); }
+.tool.solid .icon { color: inherit; }
+.wide-only { display: none; }
 
-.topbar {
-  position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px;
+/* ---------- Application : petits écrans d'abord (barre du haut, onglets, barre du bas) ---------- */
+.app { min-height: 100vh; min-height: 100dvh; padding-bottom: calc(var(--dock-h) + env(safe-area-inset-bottom) + 12px); }
+.sidebar { display: none; }
+
+.toolbar {
+  position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 10px;
   padding: calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
   background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1rem; }
 .brand img { width: 30px; height: 30px; border-radius: 8px; }
-.search { position: relative; flex: 1; min-width: 0; }
+.search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.search .icon { color: var(--muted); }
 .search input {
-  width: 100%; height: 38px; padding: 0 12px 0 36px; border-radius: 12px; font-size: 0.9rem; border: 1px solid var(--outline);
-  background: var(--surface); outline-offset: 0;
+  flex: 1; min-width: 0; height: 34px; padding: 0 12px; border-radius: 10px; font-size: 0.88rem; border: 1px solid var(--track);
+  background: var(--bg); outline-offset: 0;
 }
 .search input::placeholder { color: var(--muted); }
-.search .icon { position: absolute; left: 11px; font-size: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-.avatar-btn { width: 38px; height: 38px; padding: 0; border-radius: 50%; border: 2px solid var(--outline); background: var(--surface-2); overflow: hidden; flex: none; }
+.tool-actions { display: flex; align-items: center; gap: 8px; }
+.avatar-btn { width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 2px solid var(--track); background: var(--panel); overflow: hidden; flex: none; }
 .avatar-btn img { width: 100%; height: 100%; object-fit: cover; }
 .avatar-btn .initial { font-weight: 700; }
+.add-btn { flex: none; min-height: 34px; padding: 0 14px; font-size: 0.8rem; }
 
+/* Onglets (petits écrans) : serveurs et catégories ; la barre latérale les remplace sur grand écran. */
 .tabs {
   display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
   padding: 2px max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left));
 }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
-  display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 34px; padding: 0 13px; font-size: 0.85rem;
-  border-radius: 999px; border: 1px solid var(--outline); background: var(--surface); font-weight: 600; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 32px; padding: 0 13px; font-size: 0.82rem;
+  border-radius: 999px; border: 1px solid var(--track); background: var(--panel); font-weight: 600; white-space: nowrap;
 }
 .tab img { width: 18px; height: 18px; border-radius: 50%; }
 .tab.add-category { padding: 0 12px; border-style: dashed; color: var(--muted); }
 .tab[aria-selected='true'] { color: var(--on-accent); border-color: transparent; background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
 
 .content { padding: 2px max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); max-width: 1200px; margin: 0 auto; }
-.section-title { display: flex; align-items: center; gap: 6px; margin: 10px 2px 5px; font-size: 0.82rem; font-weight: 700; color: var(--muted); text-transform: none; }
-.section-title img { width: 20px; height: 20px; border-radius: 50%; }
+
+/* En-tête de section : une pastille de la couleur des panneaux (flèche, icône, nom en gras), comme dans l'application. */
+.section-title { display: flex; align-items: center; gap: 6px; margin: 12px 0 6px; font-size: 0.85rem; font-weight: 700; }
+.section-title img { width: 18px; height: 18px; border-radius: 50%; }
 .section-toggle {
-  flex: 1; min-width: 0; min-height: 30px; display: flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent;
-  color: inherit; font: inherit; text-align: left; border-radius: 8px;
+  min-width: 0; max-width: 100%; min-height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px 4px 8px; border: 0; border-radius: 10px;
+  background: var(--panel); color: var(--text); font: inherit; text-align: left;
 }
 .section-toggle.static { cursor: default; }
-.section-toggle:hover:not(.static) { color: var(--text); }
-.chevron { flex: none; width: 14px; text-align: center; font-size: 0.8rem; transition: transform 0.15s ease; }
+.section-toggle:hover:not(.static) { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+.chevron { flex: none; width: 14px; text-align: center; font-size: 0.78rem; opacity: 0.85; transition: transform 0.15s ease; }
 .folded .chevron { transform: rotate(-90deg); }
-.section-count { flex: none; min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); font-size: 0.72rem; font-weight: 700; text-align: center; }
+.section-count { flex: none; min-width: 20px; padding: 1px 7px; border-radius: 999px; background: var(--bg); font-size: 0.72rem; font-weight: 700; text-align: center; }
 .section-title .section-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.section-title .section-more { margin-left: auto; flex: none; width: 28px; height: 28px; font-size: 0.85rem; color: var(--muted); }
+.section-title .section-more { flex: none; width: 28px; height: 28px; font-size: 0.85rem; color: var(--muted); background: transparent; }
 .empty-category { margin: 4px 6px 8px; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
-.grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.grid { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 4px; }
 
 .empty, .state-msg { margin: 48px auto; max-width: 420px; text-align: center; color: var(--muted); line-height: 1.55; }
 .state-msg .btn { margin-top: 14px; }
 
-/* ---------- Boutons de son : des « pills » comme dans l'application Windows (largeur selon le nom) ---------- */
-/* Compactes : on veut en voir beaucoup d'un coup, surtout dans le panneau étroit de l'Activité Discord. */
-.card { position: relative; --c: #8b5cf6; flex: 0 1 auto; min-width: 96px; max-width: 100%; }
+/* ---------- Boutons de son : gélules (sans onde sonore), teinte de la couleur du son sur le panneau, pastille d'emoji pleine couleur ---------- */
+.card { position: relative; isolation: isolate; --c: #8b5cf6; flex: 0 1 auto; min-width: 96px; max-width: min(210px, 100%); }
 .card-main {
-  width: 100%; min-height: 36px; display: flex; align-items: center; gap: 7px; padding: 4px 30px 4px 4px; text-align: left; font-size: 0.8rem;
-  border-radius: 14px; border: 1px solid color-mix(in srgb, var(--c) 45%, var(--outline));
-  background: color-mix(in srgb, var(--c) 14%, var(--surface));
-  transition: transform 0.08s ease, box-shadow 0.2s ease, background 0.2s ease;
+  width: 100%; height: var(--pill-h); display: flex; align-items: center; gap: 8px; padding: 0 12px 0 4px; text-align: left; font-size: 0.78rem; font-weight: 600;
+  border-radius: 999px; border: 2px solid var(--track); background: color-mix(in srgb, var(--c) 15%, var(--panel));
+  transition: transform 0.08s ease, opacity 0.15s ease;
 }
-.card-main:hover { background: color-mix(in srgb, var(--c) 22%, var(--surface)); }
+.card-main:hover { opacity: 0.85; }
 .card-main:active, .card.bump .card-main { transform: scale(0.96); }
 .emoji {
-  flex: none; width: 26px; height: 26px; display: grid; place-items: center; font-size: 0.92rem; line-height: 1;
-  border-radius: 50%; background: color-mix(in srgb, var(--c) 32%, var(--surface));
+  flex: none; width: calc(var(--pill-h) - 10px); height: calc(var(--pill-h) - 10px); display: grid; place-items: center; font-size: 0.95rem; line-height: 1;
+  border-radius: 50%; background: var(--c);
 }
-.name { min-width: 0; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fav-badge { flex: none; margin-left: -4px; font-size: 0.65rem; color: #facc15; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+.name { min-width: 0; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fav-badge { flex: none; margin-left: -2px; font-size: 0.7rem; color: #facc15; }
 .card-more {
-  position: absolute; top: 50%; right: 3px; transform: translateY(-50%); width: 24px; height: 24px; padding: 0; border: 0;
+  position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 24px; height: 24px; padding: 0; border: 0;
   border-radius: 50%; background: transparent; color: var(--muted); font-size: 0.85rem; line-height: 1;
 }
-.card-more:hover { background: color-mix(in srgb, var(--c) 25%, transparent); color: var(--text); }
-.who { position: absolute; right: 26px; top: -7px; display: flex; pointer-events: none; }
-.who img { width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--bg); margin-left: -5px; background: var(--surface-2); }
-/* Dans Discord : le panneau est étroit, on resserre encore un peu. */
-html.activity .grid { gap: 5px; }
-html.activity .card { min-width: 84px; }
-html.activity .card-main { min-height: 32px; font-size: 0.76rem; border-radius: 12px; padding: 3px 26px 3px 3px; gap: 6px; }
-html.activity .card-main .emoji { width: 22px; height: 22px; font-size: 0.8rem; }
-html.activity .card-more { width: 22px; height: 22px; font-size: 0.8rem; }
-html.activity .tab { min-height: 30px; padding: 0 11px; font-size: 0.8rem; }
-html.activity .section-title { margin-top: 8px; font-size: 0.78rem; }
-.card.is-playing .card-main {
-  border-color: var(--c); background: color-mix(in srgb, var(--c) 30%, var(--surface));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 55%, transparent), 0 0 22px color-mix(in srgb, var(--c) 45%, transparent);
-  animation: pulse 1.2s ease-in-out infinite;
+.card-more:hover { background: color-mix(in srgb, var(--c) 30%, transparent); color: var(--text); }
+.card-main { padding-right: 28px; }
+/* Qui joue ce son : l'avatar du premier, puis « +N » (à l'extrémité de la gélule sur écran à souris, sur le coin sur écran tactile). */
+.who { position: absolute; right: 24px; top: -7px; display: none; align-items: center; pointer-events: none; }
+.card.is-playing .who { display: flex; }
+.who img, .who-initial {
+  width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--text); background: var(--track); font-size: 0.6rem; font-weight: 700; display: grid; place-items: center;
 }
-@keyframes pulse { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 35%, transparent), 0 0 30px color-mix(in srgb, var(--c) 55%, transparent); } }
+.who-extra { margin-left: 3px; font-size: 0.66rem; font-weight: 700; text-shadow: 0 1px 2px var(--bg); }
+/* Lecture en cours : liseré de la couleur du son et halo qui respire. */
+.card::before {
+  content: ''; position: absolute; inset: -5px; z-index: -1; border-radius: 999px; background: var(--c); filter: blur(12px); opacity: 0; pointer-events: none;
+}
+.card.is-playing .card-main { border-color: var(--c); }
+.card.is-playing::before { opacity: 0.3; animation: halo 0.75s ease-in-out infinite alternate; }
+@keyframes halo { to { opacity: 0.85; } }
 
-/* ---------- Barre du bas ---------- */
+/* ---------- Barre du bas (petits écrans) ---------- */
 .dock {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; gap: 8px;
   padding: 8px max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-  background: color-mix(in srgb, var(--surface) 92%, transparent); border-top: 1px solid var(--outline);
+  background: color-mix(in srgb, var(--panel) 94%, transparent); border-top: 1px solid var(--track);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
 }
-.voice { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-size: 0.82rem; }
+.voice { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; font-size: 0.8rem; }
 .voice .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
 .voice.on .dot { background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
 .voice span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dock .btn { min-height: 40px; padding: 0 14px; flex: none; }
+.dock .tool { min-height: 40px; padding: 0 14px; flex: none; }
 
-/* ---------- Feuille d'options et menu ---------- */
+/* ---------- Barre latérale (grands écrans) : accueil, serveurs, catégories, « en ce moment », état ---------- */
+.sidebar { flex-direction: column; min-height: 0; padding: 8px 10px 10px; background: var(--panel); }
+.side-head { display: flex; align-items: center; gap: 10px; padding: 2px 2px 10px; }
+.side-head img { width: 28px; height: 28px; border-radius: 8px; }
+.side-head h1 { margin: 0; font-size: 1.05rem; font-weight: 700; }
+.members { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 8px; }
+.members:empty { display: none; }
+.member { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; overflow: hidden; display: grid; place-items: center; background: var(--track); font-size: 0.7rem; font-weight: 700; }
+.member img { width: 100%; height: 100%; object-fit: cover; }
+.member.active { border-color: var(--accent); box-shadow: 0 0 10px rgba(255, 255, 255, 0.55); }
+.nav-top { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 8px; }
+.nav-top .btn { min-height: 30px; padding: 0 8px; font-size: 0.78rem; border: 0; }
+.nav-top .btn.active { color: var(--on-accent); background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.side-nav { flex: 1; min-height: 48px; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+.nav-group { margin: 0 0 4px; }
+.nav-group-head {
+  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 28px; padding: 4px; border: 0; border-radius: 6px; background: transparent; color: var(--text);
+  font-size: 0.72rem; text-align: left;
+}
+.nav-group-head:hover { background: var(--bg); }
+.nav-group-head .chevron { width: 12px; font-size: 0.65rem; opacity: 0.7; }
+.nav-group.closed .chevron { transform: rotate(-90deg); }
+.nav-group-title { font-weight: 600; }
+.nav-count { opacity: 0.5; font-size: 0.7rem; }
+.nav-item {
+  display: flex; align-items: center; gap: 7px; width: calc(100% - 14px); min-height: 28px; margin: 0 0 2px 14px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent;
+  font-size: 0.78rem; text-align: left; color: var(--text);
+}
+.nav-item img { width: 16px; height: 16px; border-radius: 50%; flex: none; }
+.nav-icon { flex: none; width: 16px; text-align: center; font-size: 0.8rem; }
+.nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item:hover { background: var(--bg); }
+.nav-item[aria-current='true'] { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); font-weight: 700; }
+.side-now { margin-top: 8px; max-height: 150px; display: flex; flex-direction: column; min-height: 0; }
+.side-now h2 { margin: 0 0 4px 2px; font-size: 0.66rem; font-weight: 400; opacity: 0.55; }
+.now-list { overflow-y: auto; }
+.now-item { display: flex; align-items: flex-start; gap: 7px; margin: 0 0 4px; padding: 5px 6px; border-radius: 10px; background: var(--bg); font-size: 0.72rem; line-height: 1.3; }
+.now-item img, .now-initial { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--accent); display: grid; place-items: center; font-size: 0.6rem; font-weight: 700; }
+.now-text { min-width: 0; overflow-wrap: anywhere; align-self: center; }
+.now-none { margin: 0 0 0 2px; font-size: 0.72rem; opacity: 0.45; }
+.side-foot { margin-top: 8px; padding: 8px 2px 0; border-top: 1px solid var(--track); }
+.status { display: flex; align-items: center; gap: 7px; font-size: 0.74rem; opacity: 0.8; }
+.status .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.status.on .dot { background: #4ade80; animation: status-pulse 1.2s ease-in-out infinite alternate; }
+.status.off .dot { background: var(--danger); }
+@keyframes status-pulse { to { opacity: 0.35; } }
+.side-voice { margin: 3px 0 8px 15px; font-size: 0.72rem; opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-btn { width: 100%; justify-content: flex-start; min-height: 36px; padding: 0 12px; }
+
+/* ---------- Grands écrans : la barre latérale à gauche, la barre d'outils et les sons à droite (la page ne défile plus, les sons oui) ---------- */
+@media (min-width: 900px) {
+  :root { --dock-h: 0px; --pill-h: 40px; }
+  .app { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); height: 100vh; height: 100dvh; min-height: 0; padding-bottom: 0; overflow: hidden; }
+  .sidebar { display: flex; overflow: hidden; }
+  .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 12px 0 0 12px; }
+  .toolbar { position: static; padding: 0 12px 10px 0; background: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .search { flex: 1; max-width: 420px; }
+  .tool-actions { margin-left: auto; }
+  .tool-actions .tool { min-height: 36px; }
+  .add-btn { min-height: 36px; }
+  .wide-only { display: inline-flex; }
+  .brand, .avatar-btn, .tabs, .dock { display: none; }
+  .content { flex: 1; min-height: 0; overflow-y: auto; max-width: none; margin: 0; padding: 0 12px 16px 0; }
+  .card { min-width: 118px; }
+  .card-main { font-size: 0.8rem; }
+  /* Écran à souris : « ⋯ » n'apparaît qu'au survol (clic droit possible), l'avatar de qui joue occupe l'extrémité de la gélule. */
+  #toasts { align-items: flex-end; bottom: 20px; padding: 0 20px; }
+}
+@media (hover: hover) and (min-width: 900px) {
+  .card-main { padding-right: 34px; }
+  .card-more { opacity: 0; transition: opacity 0.12s ease; right: 6px; }
+  .card:hover .card-more, .card:focus-within .card-more { opacity: 1; }
+  .who { right: 7px; top: 50%; transform: translateY(-50%); }
+  .card:hover .who, .card:focus-within .who { opacity: 0; }
+}
+
+/* Dans Discord : le panneau est étroit, on resserre encore un peu (même sur grand écran, la gélule reste à 34 px de haut). */
+html.activity { --pill-h: 34px; }
+html.activity .grid { gap: 5px; }
+html.activity .card { min-width: 84px; }
+html.activity .card-main { font-size: 0.76rem; padding-right: 26px; }
+html.activity .emoji { font-size: 0.82rem; }
+html.activity .card-more { width: 22px; height: 22px; font-size: 0.8rem; }
+html.activity .tab { min-height: 30px; padding: 0 11px; font-size: 0.8rem; }
+html.activity .section-title { margin-top: 8px; font-size: 0.8rem; }
+
+/* ---------- Feuille d'options et paramètres ---------- */
 .overlay { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.5); display: flex; align-items: flex-end; justify-content: center; }
 .sheet {
   width: min(520px, 100%); max-height: 86dvh; overflow: auto; padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
-  background: var(--surface); border: 1px solid var(--outline); border-radius: 26px 26px 0 0; box-shadow: var(--shadow);
+  background: var(--panel); border: 1px solid var(--track); border-radius: 22px 22px 0 0; box-shadow: var(--shadow);
 }
 .sheet h2 { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; font-size: 1.1rem; }
 .sheet h2 .emoji { width: 40px; height: 40px; font-size: 1.4rem; }
+.sheet h2 img { width: 40px; height: 40px; border-radius: 50%; }
+.who-initial.big { width: 40px; height: 40px; font-size: 1rem; }
 .sheet .row { width: 100%; justify-content: flex-start; margin-bottom: 8px; }
 .sheet .label { margin: 14px 0 8px; font-size: 0.85rem; font-weight: 700; color: var(--muted); }
+.sheet .about { margin: 6px 2px 12px; font-size: 0.8rem; color: var(--muted); }
 .swatches { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
 .swatch { width: 40px; height: 40px; border-radius: 50%; border: 3px solid transparent; background: var(--c); padding: 0; }
 .swatch.auto { background: conic-gradient(#f97316, #eab308, #10b981, #06b6d4, #6366f1, #ec4899, #f97316); }
-.swatch[aria-pressed='true'] { border-color: var(--text); box-shadow: 0 0 0 2px var(--surface) inset; }
-@media (min-width: 700px) { .overlay { align-items: center; } .sheet { border-radius: 26px; } }
-
-.menu-layer { position: fixed; inset: 0; z-index: 40; }
-.menu {
-  position: absolute; top: calc(60px + env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: min(300px, calc(100vw - 24px));
-  padding: 8px; background: var(--surface); border: 1px solid var(--outline); border-radius: 18px; box-shadow: var(--shadow);
-}
-.menu .who-am-i { display: flex; align-items: center; gap: 10px; padding: 10px 10px 12px; border-bottom: 1px solid var(--outline); margin-bottom: 6px; font-weight: 700; }
-.menu .who-am-i img { width: 36px; height: 36px; border-radius: 50%; }
-.menu button.item { width: 100%; min-height: 46px; padding: 0 12px; border: 0; background: transparent; border-radius: 12px; text-align: left; font-weight: 600; }
-.menu button.item:hover { background: var(--surface-2); }
-.menu .about { padding: 8px 12px 4px; font-size: 0.8rem; color: var(--muted); }
+.swatch[aria-pressed='true'] { border-color: var(--text); box-shadow: 0 0 0 2px var(--panel) inset; }
+.palettes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 4px; }
+.palette { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 12px; border-radius: 12px; border: 2px solid var(--track); background: var(--bg); font-weight: 600; font-size: 0.85rem; text-align: left; }
+.palette[aria-pressed='true'] { border-color: var(--accent); }
+.palette-dots { display: inline-flex; flex: none; }
+.palette-dots span { width: 18px; height: 18px; border-radius: 50%; background: var(--c); border: 1px solid rgba(255, 255, 255, 0.3); }
+.palette-dots span + span { margin-left: -6px; }
+@media (min-width: 700px) { .overlay { align-items: center; } .sheet { border-radius: 22px; } }
 
 /* ---------- Messages ---------- */
 #toasts { position: fixed; z-index: 60; left: 0; right: 0; bottom: calc(var(--dock-h) + env(safe-area-inset-bottom) + 18px); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; padding: 0 14px; }
 .toast {
-  max-width: min(520px, 100%); padding: 12px 16px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--outline);
-  box-shadow: var(--shadow); line-height: 1.4; animation: toast-in 0.18s ease-out;
+  max-width: min(520px, 100%); padding: 12px 16px; border-radius: 10px; background: var(--panel); border: 1px solid var(--track); border-bottom: 3px solid var(--accent);
+  box-shadow: var(--shadow); line-height: 1.4; animation: toast-in 0.25s ease-out;
 }
-.toast.error { border-color: var(--danger); }
-.toast.success { border-color: var(--accent-2); }
-@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+.toast.error { border-bottom-color: var(--danger); }
+.toast.success { border-bottom-color: var(--accent-2); }
+@keyframes toast-in { from { opacity: 0; transform: translateX(24px); } }
 
 /* ---------- Éditeur de sons (ajout, modification, découpe) ---------- */
-.add-btn { flex: none; min-height: 38px; padding: 0 14px; }
 .overlay.editor-overlay { z-index: 45; }
 .overlay.confirm { z-index: 55; align-items: center; }
 .confirm-text { white-space: pre-line; line-height: 1.5; margin: 0 0 16px; }
@@ -280,12 +397,13 @@ html.activity .section-title { margin-top: 8px; font-size: 0.78rem; }
 /* Écran étroit : le nom de l'application et le libellé du bouton « vocal » cèdent la place à la recherche et à l'état du vocal. */
 @media (max-width: 520px) {
   .brand span { display: none; }
-  .dock .btn .label { display: none; }
-  .dock #join { width: 52px; padding: 0; }
+  .dock .tool-join .label { display: none; }
+  .dock .tool-join { width: 52px; padding: 0; }
   .add-btn .label { display: none; }
-  .add-btn { width: 44px; padding: 0; }
+  .add-btn { width: 40px; padding: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.sheet.settings .hint { margin: 4px 2px 14px; }

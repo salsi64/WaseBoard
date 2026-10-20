@@ -85,11 +85,12 @@ def origin_of(url: str) -> Optional[str]:
 class WebApp:
     def __init__(self, web_dir: Path, public_url: str, extra_redirect_uris: Iterable[str] = (),
                  client_id: Callable[[], str] = lambda: "", version: str = "", features: Optional[list] = None,
-                 activity: bool = True) -> None:
+                 activity: bool = True, invite_url: Callable[[], str] = lambda: "") -> None:
         self.web_dir = web_dir
         self.public_url = (public_url or "").rstrip("/")
         self.extra_redirect_uris = [u for u in extra_redirect_uris if origin_of(u)]
         self._client_id, self.version, self.features = client_id, version, features if features is not None else []
+        self._invite_url = invite_url
         self.activity = activity
         self._refused_origins: set = set()
         self.assets: dict[str, Asset] = {}
@@ -235,4 +236,5 @@ class WebApp:
             "version": self.version,
             "build": self.build_id,
             "features": self.features,
+            "invite_url": self._invite_url() or "",   # bouton « Ajouter le bot à mon serveur » des paramètres ; vide : pas de bouton
         }, headers=headers)

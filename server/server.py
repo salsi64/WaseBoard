@@ -178,7 +178,7 @@ ALLOWED_EXTENSIONS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".wma"}
 
 
 #: Version du serveur, annoncée par /status (page Diagnostic du client, rapports de support).
-SERVER_VERSION = "3.6.0"
+SERVER_VERSION = "3.7.0"
 
 #: Fonctionnalités annoncées aux clients par /status : un client récent ne propose une action que si le serveur la gère
 #: (un serveur plus ancien n'envoie pas ce champ, un ancien client l'ignore).
@@ -1267,6 +1267,14 @@ class WaseBoardServer(commands.Bot):
         application_id = self.application_id or (self.user.id if self.user else None)
         return str(application_id) if application_id else ""
 
+    def web_invite_url(self) -> str:
+        """Adresse d'ajout du bot à un serveur Discord, proposée dans les paramètres de la page web. Vide quand l'instance est pleine
+        (max_guilds atteint : le bot refuserait le nouveau serveur, autant ne pas le proposer) ou sans identifiant d'application."""
+        client_id = self.oauth_client_id()
+        if not client_id or (MAX_GUILDS > 0 and len(self.guilds) >= MAX_GUILDS):
+            return ""
+        return diagnostics.build_invite_url(client_id)
+
     async def _ensure_activity_entry_point(self) -> None:
         """Crée la commande qui lance l'Activité si l'application n'en a pas (sans elle, le lanceur d'activités de Discord affiche
         « aucune commande enregistrée pour les lancer »). Jamais bloquant : un échec (Activités pas encore activées au portail,
@@ -1924,7 +1932,7 @@ class WaseBoardServer(commands.Bot):
 
         if WEB_APP_ENABLED:
             web_app = webapp.WebApp(WEB_DIR, PUBLIC_URL, WEB_REDIRECT_URIS, self.oauth_client_id, SERVER_VERSION, SERVER_FEATURES,
-                                    activity=WEB_ACTIVITY_ENABLED)
+                                    activity=WEB_ACTIVITY_ENABLED, invite_url=self.web_invite_url)
             if web_app.load():
                 self.web_app = web_app
                 web_app.add_routes(app.router)

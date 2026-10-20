@@ -140,6 +140,9 @@ couleurs et vos catégories personnelles sont **les mêmes que dans l'applicatio
 apparaît de l'autre en moins d'une minute. Un clic sur le titre d'une section la replie (choix propre à l'appareil). Vous pouvez aussi y **ajouter** des sons (bouton « + », ou en
 glissant des fichiers audio ; sur téléphone, le sélecteur de fichiers permet d'envoyer un enregistrement vocal), puis les **modifier** (menu ⋯ › Modifier…) :
 nom, emoji, découpe avec forme d'onde, nouveau fichier, serveurs où il apparaît, suppression — avec les mêmes droits que dans l'application Windows.
+La page a la même apparence que l'application (barre latérale sur grand écran, version compacte sur téléphone). Ses **Paramètres** proposent les palettes de couleurs,
+la langue et **« Ajouter le bot à mon serveur Discord »** : Discord vous fait choisir le serveur, où il faut avoir le droit « Gérer le serveur » (chaque serveur a sa
+propre bibliothèque de sons).
 
 **Dans Discord (Activité)** : si l'hébergeur l'a activée, WaseBoard apparaît dans le lanceur d'activités d'un salon vocal (la fusée) : la liste des sons s'ouvre dans Discord,
 connexion automatique, et les sons partent dans le vocal du serveur où l'Activité a été lancée. Pensez à faire rejoindre le bot (🔊 Rejoindre mon vocal).

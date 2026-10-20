@@ -1,20 +1,21 @@
 // WaseBoard web : l'interface. Toute la logique testable est dans logic.js ; ici, le navigateur (DOM, réseau, stockage).
 // Règles : jamais de HTML construit à partir de données (les noms de sons et pseudos sont du texte), aucun style en ligne (CSP),
 // l'API est celle de l'application Windows, authentifiée par la session Discord en « Authorization: Bearer ».
-import { avatar, closeAllOverlays, closeOverlay, h, openOverlay, toast } from './dom.js';
+import { avatar, closeAllOverlays, closeOverlay, h, icon, openOverlay, toast } from './dom.js';
 import { createCategoryUi } from './categories-ui.js';
 import { audioFiles, uploadableGuilds } from './editor-logic.js';
 import { createEditor } from './editor.js';
 import { LANGUAGES, makeTranslator, pickLanguage } from './i18n.js';
 import { createPrefsStore } from './prefs.js';
 import {
-  PALETTE, buildAuthorizeUrl, buildSections, categoryTabs, colorFor, dedupeById, emptyPrefs, errorText, favoriteSounds, filterSounds, isActivityLocation,
-  loadJson, makeState, parseCallback, personalKey, playingMap, sanitizeColors, sanitizeIds, sanitizeSession, saveJson, setColor as setPrefsColor, sortByName,
-  toggleFavorite as toggleFavoritePrefs, toggleInSet, trimRange, voiceSummary,
+  PALETTE, PALETTES, activeUserIds, buildAuthorizeUrl, buildSections, categoryTabs, colorFor, dedupeById, emptyPrefs, errorText, favoriteSounds, filterSounds,
+  isActivityLocation, isInviteUrl, loadJson, makeState, nowPlayingEntries, parseCallback, personalKey, playingMap, sanitizeColors, sanitizeIds, sanitizePalette, sanitizeSession,
+  saveJson, setColor as setPrefsColor, sortByName, toggleFavorite as toggleFavoritePrefs, toggleInSet, trimRange, voiceSummary,
 } from './logic.js';
 
-const KEYS = { session: 'wb.session', favorites: 'wb.favorites', colors: 'wb.colors', lang: 'wb.lang', oauthState: 'wb.oauth_state' };
+const KEYS = { session: 'wb.session', favorites: 'wb.favorites', colors: 'wb.colors', lang: 'wb.lang', palette: 'wb.palette', oauthState: 'wb.oauth_state' };
 const collapsedKey = (userId) => `wb.collapsed.${userId}`;   // sections repliées : un choix d'affichage propre à cet appareil
+const navClosedKey = (userId) => `wb.navclosed.${userId}`;   // groupes repliés de la barre latérale (Serveurs, Catégories) : idem
 const LOGO = '/app/icons/icon-192.png';
 
 // ---------- Stockage (le navigateur peut le refuser : on retombe sur la mémoire de la page) ----------
@@ -35,6 +36,13 @@ const tabStorage = openStorage('sessionStorage');
 // ---------- État ----------
 let lang = LANGUAGES.includes(storage.getItem(KEYS.lang)) ? storage.getItem(KEYS.lang) : pickLanguage(navigator.languages || [navigator.language]);
 let t = makeTranslator(lang);
+let palette = sanitizePalette(storage.getItem(KEYS.palette));   // palette de couleurs (comme « Apparence » de l'application Windows), propre à ce navigateur
+function applyPalette() {
+  document.documentElement.dataset.palette = palette;
+  const dark = PALETTES.find((entry) => entry.id === palette).swatch[0];
+  document.querySelector('meta[name="theme-color"][media*="dark"]')?.setAttribute('content', dark);   // barre d'adresse de l'application installée
+}
+applyPalette();
 const state = {
   config: null,
   session: sanitizeSession(loadJson(storage, KEYS.session, null)),
@@ -45,6 +53,7 @@ const state = {
   playing: new Map(),
   tab: 'all', query: '',
   collapsed: new Set(),               // clés des sections repliées (onglet « Tous »), gardées dans ce navigateur
+  navClosed: new Set(),               // groupes repliés de la barre latérale
   favorites: new Set(),               // dérivés de prefs (voir applyPrefs)
   colors: {},
   load: 'idle', // idle | loading | error | ready
@@ -108,6 +117,7 @@ function endSession(messageKey) {
   if (prefsStore) prefsStore.stop();
   prefsStore = null;
   state.collapsed = new Set();
+  state.navClosed = new Set();
   state.prefs = emptyPrefs();
   state.favorites = new Set();
   state.colors = {};
@@ -210,6 +220,7 @@ function ensurePrefs() {
   });
   applyPrefs();
   state.collapsed = sanitizeIds(loadJson(storage, collapsedKey(state.session.user_id), []));
+  state.navClosed = sanitizeIds(loadJson(storage, navClosedKey(state.session.user_id), []));
 }
 
 const syncPrefs = () => { if (prefsStore) prefsStore.sync(); };
@@ -221,29 +232,62 @@ const categoryUi = createCategoryUi({
 });
 
 // ---------- Page principale ----------
+/** Bouton de la barre d'outils : icône (la couleur vient du texte) et, en option, libellé. */
+function toolButton(props, iconName, label) {
+  return h('button', { type: 'button', ...props, class: `tool ${props.class || ''}` }, icon(iconName), label ? h('span', { class: 'label', text: label }) : null);
+}
+
+/** Barre latérale (grands écrans) : accueil et favoris, serveurs et catégories, « en ce moment », état, paramètres. */
+function buildSidebar() {
+  ui.navHome = h('button', { type: 'button', class: 'btn nav-home', onclick: () => selectTab('all'), text: t('nav.home') });
+  ui.navFav = h('button', { type: 'button', class: 'btn nav-fav', onclick: () => selectTab('favorites'), text: t('nav.favorites') });
+  ui.members = h('div', { class: 'members', role: 'list', 'aria-label': t('members.label'), title: t('members.label') });
+  ui.navList = h('div', { class: 'side-nav' });
+  ui.nowList = h('div', { class: 'now-list', 'aria-live': 'polite' });
+  ui.status = h('div', { class: 'status' });
+  ui.sideVoice = h('div', { class: 'side-voice' });
+  return h('aside', { class: 'sidebar', 'aria-label': t('nav.label') },
+    h('div', { class: 'side-head' }, h('img', { src: LOGO, alt: '', width: 28, height: 28 }), h('h1', { text: t('app.name') })),
+    ui.members,
+    h('div', { class: 'nav-top' }, ui.navHome, ui.navFav),
+    ui.navList,
+    h('div', { class: 'side-now' }, h('h2', { text: t('now.title') }), ui.nowList),
+    h('div', { class: 'side-foot' }, ui.status, ui.sideVoice,
+      toolButton({ class: 'settings-btn', id: 'settings', onclick: openSettings }, 'gear', t('settings.title'))));
+}
+
 function showApp() {
   stopPreview();
   ensurePrefs();
   const search = h('input', { type: 'search', id: 'search', placeholder: t('search.placeholder'), 'aria-label': t('search.label'), autocomplete: 'off', enterkeyhint: 'search', oninput: onSearch });
   ui.main = h('div', { class: 'app' },
-    h('header', { class: 'topbar' },
-      h('div', { class: 'brand' }, h('img', { src: LOGO, alt: '', width: 34, height: 34 }), h('span', { text: t('app.name') })),
-      h('div', { class: 'search' }, h('span', { class: 'icon', 'aria-hidden': 'true', text: '🔍' }), search),
-      (ui.addButton = h('button', { class: 'btn primary add-btn', id: 'add', hidden: true, 'aria-label': t('menu.add'), title: t('menu.add'), onclick: () => ui.fileInput.click() },
-        h('span', { 'aria-hidden': 'true', text: '＋' }), h('span', { class: 'label', text: t('menu.add') }))),
-      (ui.fileInput = h('input', { type: 'file', multiple: true, hidden: true, accept: 'audio/*,.mp3,.wav,.ogg,.flac,.m4a,.wma', onchange: onFilesChosen })),
-      h('button', { class: 'avatar-btn', id: 'account', 'aria-label': t('menu.open'), 'aria-haspopup': 'true', onclick: openMenu },
-        state.session.avatar_url ? avatar(state.session.avatar_url, 44) : h('span', { class: 'initial', text: (state.session.username || '?').slice(0, 1).toUpperCase() }))),
-    (ui.tabs = h('nav', { class: 'tabs', role: 'tablist', 'aria-label': t('tabs.label') })),
-    (ui.content = h('main', { class: 'content' })),
-    h('footer', { class: 'dock' },
-      (ui.voice = h('div', { class: 'voice' })),
-      h('button', { class: 'btn', id: 'join', 'aria-label': t('voice.join'), title: t('voice.join'), onclick: joinVoice }, h('span', { 'aria-hidden': 'true', text: '🔊' }), h('span', { class: 'label', text: t('voice.join') })),
-      h('button', { class: 'btn danger', id: 'stop', onclick: stopAll, text: `⏹︎ ${t('stop')}` })));
+    buildSidebar(),
+    h('div', { class: 'main' },
+      h('header', { class: 'toolbar' },
+        h('div', { class: 'brand' }, h('img', { src: LOGO, alt: '', width: 34, height: 34 }), h('span', { text: t('app.name') })),
+        h('div', { class: 'search' }, icon('search'), search),
+        h('div', { class: 'tool-actions' },
+          toolButton({ class: 'wide-only', id: 'refresh', title: t('tool.refresh'), 'aria-label': t('tool.refresh'), onclick: refreshNow }, 'refresh'),
+          toolButton({ class: 'wide-only tool-join', id: 'join', title: t('voice.join'), onclick: joinVoice }, 'speaker', t('tool.voice')),
+          toolButton({ class: 'wide-only tool-stop', id: 'stop', onclick: stopAll }, 'stop', t('stop')),
+          toolButton({ class: 'wide-only', id: 'new-category', title: t('tabs.newCategory'), onclick: newCategory }, 'tag', t('tool.category')),
+          (ui.addButton = h('button', { type: 'button', class: 'btn primary add-btn', id: 'add', hidden: true, 'aria-label': t('menu.add'), title: t('menu.add'), onclick: () => ui.fileInput.click() },
+            icon('plus'), h('span', { class: 'label', text: t('menu.add') }))),
+          (ui.fileInput = h('input', { type: 'file', multiple: true, hidden: true, accept: 'audio/*,.mp3,.wav,.ogg,.flac,.m4a,.wma', onchange: onFilesChosen })),
+          h('button', { type: 'button', class: 'avatar-btn', id: 'account', 'aria-label': t('menu.open'), 'aria-haspopup': 'true', onclick: openSettings },
+            state.session.avatar_url ? avatar(state.session.avatar_url, 44) : h('span', { class: 'initial', text: (state.session.username || '?').slice(0, 1).toUpperCase() })))),
+      (ui.tabs = h('nav', { class: 'tabs', role: 'tablist', 'aria-label': t('tabs.label') })),
+      (ui.content = h('main', { class: 'content' })),
+      h('footer', { class: 'dock' },
+        (ui.voice = h('div', { class: 'voice' })),
+        toolButton({ class: 'tool-join', id: 'join-dock', 'aria-label': t('voice.join'), title: t('voice.join'), onclick: joinVoice }, 'speaker', t('voice.join')),
+        toolButton({ class: 'tool-stop solid', id: 'stop-dock', onclick: stopAll }, 'stop', t('stop')))));
   ui.search = search;
   ui.search.value = state.query;
   root.replaceChildren(ui.main);
   renderVoice();
+  renderNow();
+  renderStatus();
   if (state.load === 'ready') renderAll(); else loadData();
   startPolling();
 }
@@ -286,6 +330,16 @@ async function loadData() {
   syncPrefs();   // récupère ce qui a été changé ailleurs (application Windows, autre appareil)
 }
 
+/** Bouton « actualiser » de la barre d'outils : relit le catalogue et le dit. */
+async function refreshNow() {
+  const catalog = await fetchCatalog();
+  if (!catalog) return;
+  if (catalog.error) return toast(catalog.error, 'error');
+  applyCatalog(catalog);
+  renderAll();
+  toast(t('refresh.done'), 'success');
+}
+
 /** Recharge le catalogue après un ajout, une modification ou une suppression (sans écran de chargement). */
 async function refreshCatalog() {
   const catalog = await fetchCatalog();
@@ -299,6 +353,7 @@ function renderAll() {
   renderTabs();
   renderContent();
   renderVoice();
+  renderNow();
   ui.addButton.hidden = uploadableGuilds(state.guilds).length === 0;   // aucun serveur où l'on peut ajouter : pas de bouton
 }
 
@@ -307,32 +362,67 @@ function tabList() {
     { key: 'favorites', label: t('tabs.favorites'), icon: '★' },
     { key: 'all', label: t('tabs.all') },
     ...categoryTabs(state.sounds, state.guilds, state.prefs).map((tab) => (tab.type === 'guild'
-      ? { key: tab.key, label: tab.guild.name, iconUrl: tab.guild.icon_url }
-      : { key: tab.key, label: tab.name, icon: '📁' })),
+      ? { key: tab.key, label: tab.guild.name, iconUrl: tab.guild.icon_url, group: 'servers' }
+      : { key: tab.key, label: tab.name, icon: '📁', group: 'categories' })),
   ];
+}
+
+/** Choisit ce qui est affiché (accueil, favoris, un serveur ou une catégorie) et efface la recherche. */
+function selectTab(key) {
+  state.tab = key;
+  state.query = '';
+  if (ui.search) ui.search.value = '';
+  renderTabs();
+  renderContent();
 }
 
 function renderTabs() {
   const tabs = tabList();
   if (!tabs.some((tab) => tab.key === state.tab)) state.tab = 'all';
   ui.tabs.replaceChildren(...tabs.map((tab) => h('button', {
-    class: 'tab', role: 'tab', 'aria-selected': String(state.tab === tab.key && !state.query), onclick: () => { state.tab = tab.key; state.query = ''; ui.search.value = ''; renderTabs(); renderContent(); },
+    class: 'tab', role: 'tab', 'aria-selected': String(state.tab === tab.key && !state.query), onclick: () => selectTab(tab.key),
   }, tab.iconUrl ? avatar(tab.iconUrl, 22) : null, tab.icon ? h('span', { 'aria-hidden': 'true', text: tab.icon }) : null, h('span', { text: tab.label }))),
-  h('button', { class: 'tab add-category', id: 'new-category', title: t('tabs.newCategory'), 'aria-label': t('tabs.newCategory'), onclick: newCategory },
+  h('button', { class: 'tab add-category', id: 'new-category-tab', title: t('tabs.newCategory'), 'aria-label': t('tabs.newCategory'), onclick: newCategory },
     h('span', { 'aria-hidden': 'true', text: '📁＋' })));
   // Avec beaucoup d'onglets (serveurs + catégories personnelles), celui qu'on vient de choisir peut être hors de vue sur un petit écran.
   ui.tabs.querySelector('[aria-selected="true"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  renderNav(tabs);
+}
+
+/** Barre latérale : accueil / favoris, puis les groupes « Serveurs » et « Catégories » (repliables, comme dans l'application). */
+function renderNav(tabs = tabList()) {
+  if (!ui.navList) return;
+  const current = state.query ? null : state.tab;
+  for (const [button, key] of [[ui.navHome, 'all'], [ui.navFav, 'favorites']]) {
+    button.classList.toggle('active', current === key);
+    button.setAttribute('aria-pressed', String(current === key));
+  }
+  const group = (id, titleKey) => {
+    const items = tabs.filter((tab) => tab.group === id);
+    if (items.length === 0) return null;
+    const closed = state.navClosed.has(id);
+    const title = t(titleKey);
+    return h('div', { class: `nav-group${closed ? ' closed' : ''}` },
+      h('button', { type: 'button', class: 'nav-group-head', 'aria-expanded': String(!closed), 'aria-label': t('nav.toggle', title), onclick: () => toggleNavGroup(id) },
+        h('span', { class: 'chevron', 'aria-hidden': 'true', text: '▾' }), h('span', { class: 'nav-group-title', text: title }), h('span', { class: 'nav-count', text: String(items.length) })),
+      closed ? null : items.map((tab) => h('button', {
+        type: 'button', class: 'nav-item', title: tab.label, 'aria-current': String(current === tab.key), onclick: () => selectTab(tab.key),
+      }, tab.iconUrl ? avatar(tab.iconUrl, 16) : h('span', { class: 'nav-icon', 'aria-hidden': 'true', text: tab.icon }), h('span', { class: 'nav-label', text: tab.label }))));
+  };
+  ui.navList.replaceChildren(...[group('servers', 'nav.servers'), group('categories', 'nav.categories')].filter(Boolean));
+}
+
+function toggleNavGroup(id) {
+  state.navClosed = toggleInSet(state.navClosed, id);
+  saveJson(storage, navClosedKey(state.session.user_id), [...state.navClosed]);
+  renderNav();
 }
 
 /** Crée une catégorie (nom demandé) et l'affiche. */
 async function newCategory() {
   const name = await categoryUi.createCategory();
   if (!name) return;
-  state.tab = personalKey(name);
-  state.query = '';
-  if (ui.search) ui.search.value = '';
-  renderTabs();
-  renderContent();
+  selectTab(personalKey(name));
 }
 
 function currentView() {
@@ -353,6 +443,7 @@ function toggleSection(key) {
 function renderContent() {
   if (!ui.content) return;
   ui.cards = new Map();
+  renderStatus();
   if (state.load === 'loading' || state.load === 'idle') return ui.content.replaceChildren(h('p', { class: 'state-msg', text: t('loading') }));
   if (state.load === 'error') {
     return ui.content.replaceChildren(h('div', { class: 'state-msg' }, h('p', { text: `${t('load.error')} ${state.loadError || ''}` }),
@@ -389,7 +480,7 @@ function renderContent() {
 }
 
 function makeCard(sound) {
-  const card = h('div', { class: 'card', vars: { '--c': colorFor(sound, state.colors) }, 'data-id': sound.id },
+  const card = h('div', { class: 'card', vars: { '--c': colorFor(sound, state.colors) }, 'data-id': sound.id, oncontextmenu: (event) => { event.preventDefault(); openSheet(sound); } },
     h('button', { class: 'card-main', title: sound.name, 'aria-label': t('sound.play', sound.name), onclick: () => play(sound, card) },
       h('span', { class: 'emoji', 'aria-hidden': 'true', text: sound.emoji || '🔊' }),
       h('span', { class: 'name', text: sound.name }),
@@ -401,8 +492,10 @@ function makeCard(sound) {
   return card;
 }
 
-/** Allume les boutons des sons en cours de lecture dans votre salon, avec l'avatar de qui les a lancés. */
+/** Allume les boutons des sons en cours de lecture dans votre salon, avec l'avatar de qui les a lancés (le premier, puis « +N », comme l'application). */
 function refreshPlaying() {
+  renderNow();
+  renderMembers();
   if (!ui.cards) return;
   for (const [id, cards] of ui.cards) {
     const users = state.playing.get(id) || [];
@@ -412,19 +505,65 @@ function refreshPlaying() {
       const who = card.querySelector('.who');
       if (who.dataset.sig === signature) continue;
       who.dataset.sig = signature;
-      who.replaceChildren(...users.slice(0, 3).map((u) => avatar(u.avatar_url, 22)).filter(Boolean));
+      who.replaceChildren(...(users.length ? [avatar(users[0].avatar_url, 18) || h('span', { class: 'who-initial', text: (users[0].username || '?').slice(0, 1).toUpperCase() }),
+        users.length > 1 ? h('span', { class: 'who-extra', text: `+${users.length - 1}` }) : null].filter(Boolean) : []));
     }
   }
 }
 
+/** Voyant et texte du vocal : barre du bas (petits écrans) et pied de la barre latérale (grands écrans). */
 function renderVoice() {
-  if (!ui.voice) return;
   const voice = state.voice;
-  ui.voice.className = `voice ${voice.connected ? 'on' : ''}`;
   const text = voice.connected
     ? (voice.guildName ? t('voice.inGuild', voice.channel || '?', voice.guildName) : t('voice.in', voice.channel || '?'))
     : t('voice.none');
-  ui.voice.replaceChildren(h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { text }));
+  if (ui.voice) {
+    ui.voice.className = `voice ${voice.connected ? 'on' : ''}`;
+    ui.voice.replaceChildren(h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { text }));
+  }
+  if (ui.sideVoice) {
+    ui.sideVoice.className = `side-voice ${voice.connected ? 'on' : ''}`;
+    ui.sideVoice.replaceChildren(h('span', { text: voice.connected ? t('voice.side', voice.channel || '?') : t('voice.none') }));
+  }
+  renderMembers();
+}
+
+/** Avatars des personnes en vocal avec vous ; celui de qui lance un son s'allume en même temps que le bouton. */
+function renderMembers() {
+  if (!ui.members) return;
+  const members = state.voice.members || [];
+  const signature = members.map((m) => `${m.user_id}|${m.avatar_url || ''}`).join(',');
+  if (ui.members.dataset.sig !== signature) {
+    ui.members.dataset.sig = signature;
+    ui.members.replaceChildren(...members.map((m) => h('span', { class: 'member', role: 'listitem', 'data-user': m.user_id, title: m.username },
+      avatar(m.avatar_url, 22) || h('span', { class: 'member-initial', text: (m.username || '?').slice(0, 1).toUpperCase() }))));
+  }
+  const active = activeUserIds(state.playing);
+  for (const node of ui.members.children) node.classList.toggle('active', active.has(node.dataset.user));
+}
+
+/** « En ce moment » : qui joue quoi, d'après l'activité du serveur (même source que l'allumage des boutons). */
+function renderNow() {
+  if (!ui.nowList) return;
+  const entries = nowPlayingEntries(state.playing, state.sounds);
+  const signature = `${state.sounds.length}|${entries.map((e) => `${e.key}|${e.user.avatar_url || ''}`).join(',')}`;
+  if (ui.nowList.dataset.sig === signature) return;
+  ui.nowList.dataset.sig = signature;
+  ui.nowList.replaceChildren(...(entries.length
+    ? entries.map((e) => h('div', { class: 'now-item' },
+      avatar(e.user.avatar_url, 20) || h('span', { class: 'now-initial', text: (e.user.username || '?').slice(0, 1).toUpperCase() }),
+      h('span', { class: 'now-text' }, h('b', { text: e.user.username || '?' }), t('now.plays'), `${e.emoji} ${e.soundName}`)))
+    : [h('p', { class: 'now-none', text: t('now.none') })]));
+}
+
+/** Pastille et texte « Connecté — N son(s) » (pied de la barre latérale). */
+function renderStatus() {
+  if (!ui.status) return;
+  const ready = state.load === 'ready';
+  const failed = state.load === 'error';
+  ui.status.className = `status ${ready ? 'on' : failed ? 'off' : ''}`;
+  ui.status.replaceChildren(h('span', { class: 'dot', 'aria-hidden': 'true' }),
+    h('span', { text: ready ? t('status.connected', state.sounds.length) : failed ? t('status.offline') : t('loading') }));
 }
 
 // ---------- Actions ----------
@@ -630,18 +769,47 @@ const editor = createEditor({
   currentTab: () => state.tab,
 });
 
-// ---------- Menu du compte ----------
-function openMenu() {
+// ---------- Paramètres : compte, palette, langue ----------
+function choosePalette(id, row) {
+  palette = sanitizePalette(id);
+  storage.setItem(KEYS.palette, palette);
+  applyPalette();
+  for (const button of row.querySelectorAll('.palette')) button.setAttribute('aria-pressed', String(button.dataset.palette === palette));
+}
+
+/** Ouvre la page d'ajout du bot de Discord (dans l'Activité, par le kit : une Activité ne peut pas ouvrir d'onglet elle-même). */
+async function openInvite(url) {
+  closeOverlay();
+  if (!isInviteUrl(url)) return;
+  if (state.activity) {
+    try { await state.activity.connection.sdk.commands.openExternalLink({ url }); } catch { toast(t('settings.invite.fail'), 'error'); }
+    return;
+  }
+  window.open(url, '_blank', 'noopener');
+}
+
+function openSettings() {
   const session = state.session;
-  const items = [
-    h('div', { class: 'who-am-i' }, avatar(session.avatar_url, 36), h('span', { text: session.username || session.user_id })),
-    h('button', { class: 'item', onclick: () => { closeOverlay(); toggleLanguage(); }, text: t('menu.language') }),
-    state.installPrompt && !state.activity ? h('button', { class: 'item', onclick: installApp, text: t('menu.install') }) : null,
-    state.activity ? null : h('button', { class: 'item', onclick: () => { closeOverlay(); logout(); }, text: t('menu.logout') }),
+  const inviteUrl = state.config && isInviteUrl(state.config.invite_url) ? state.config.invite_url : null;
+  const row = h('div', { class: 'palettes', role: 'group', 'aria-label': t('settings.palette') });
+  row.append(...PALETTES.map((entry) => h('button', {
+    type: 'button', class: 'palette', 'data-palette': entry.id, 'aria-pressed': String(palette === entry.id), onclick: () => choosePalette(entry.id, row),
+  }, h('span', { class: 'palette-dots', 'aria-hidden': 'true' }, h('span', { vars: { '--c': entry.swatch[0] } }), h('span', { vars: { '--c': entry.swatch[1] } })),
+  h('span', { class: 'palette-name', text: t(entry.labelKey) }))));
+  const sheet = h('div', { class: 'sheet settings', role: 'dialog', 'aria-modal': 'true', 'aria-label': t('settings.title') },
+    h('h2', {}, avatar(session.avatar_url, 40) || h('span', { class: 'who-initial big', text: (session.username || '?').slice(0, 1).toUpperCase() }), h('span', { text: session.username || session.user_id })),
+    h('div', { class: 'label', text: t('settings.palette') }),
+    row,
+    h('p', { class: 'hint', text: t('settings.palette.note') }),
+    inviteUrl ? h('button', { class: 'btn row', id: 'invite-bot', onclick: () => openInvite(inviteUrl), text: `➕ ${t('settings.invite')}` }) : null,
+    inviteUrl ? h('p', { class: 'hint', text: t('settings.invite.hint') }) : null,
+    h('button', { class: 'btn row', onclick: () => { closeOverlay(); toggleLanguage(); }, text: `🌐 ${t('menu.language')}` }),
+    state.installPrompt && !state.activity ? h('button', { class: 'btn row', onclick: installApp, text: `⬇️ ${t('menu.install')}` }) : null,
+    state.activity ? null : h('button', { class: 'btn row', onclick: () => { closeOverlay(); logout(); }, text: `🚪 ${t('menu.logout')}` }),
     h('div', { class: 'about', text: t('menu.about', (state.config && state.config.version) || '') }),
-  ];
-  const layer = h('div', { class: 'menu-layer', onclick: (event) => { if (event.target === layer) closeOverlay(); } }, h('div', { class: 'menu', role: 'menu' }, items));
-  openOverlay(layer);
+    h('button', { class: 'btn row', onclick: closeOverlay, text: t('sheet.close') }));
+  const overlay = h('div', { class: 'overlay', onclick: (event) => { if (event.target === overlay) closeOverlay(); } }, sheet);
+  openOverlay(overlay);
 }
 
 function toggleLanguage() {

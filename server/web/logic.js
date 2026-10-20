@@ -353,15 +353,66 @@ export function playingMap(activityResponse) {
   return map;
 }
 
+/** Membres du salon vocal (GET /status, « channel_members ») : { user_id, username, avatar_url }, au plus 12, sans élément invalide. */
+export function voiceMembers(status) {
+  const list = status && Array.isArray(status.channel_members) ? status.channel_members : [];
+  return list
+    .filter((m) => m && typeof m.user_id === 'string' && m.user_id)
+    .slice(0, 12)
+    .map((m) => ({ user_id: m.user_id, username: typeof m.username === 'string' ? m.username : '', avatar_url: typeof m.avatar_url === 'string' && m.avatar_url ? m.avatar_url : null }));
+}
+
 /** Résumé de l'état vocal d'après GET /status. */
 export function voiceSummary(status) {
-  if (!status || !status.connected) return { connected: false, channel: null, guildName: null, guildId: null };
+  if (!status || !status.connected) return { connected: false, channel: null, guildName: null, guildId: null, members: [] };
   return {
     connected: true,
     channel: status.channel || null,
     guildName: status.guild_name || null,
     guildId: status.guild_id || null,
+    members: voiceMembers(status),
   };
+}
+
+/** « En ce moment » (barre latérale) : une ligne par couple (son, personne), d'après ce que le serveur dit être en cours de lecture.
+ *  Un son absent du catalogue visible est ignoré (on ne saurait pas l'afficher). */
+export function nowPlayingEntries(playing, sounds) {
+  const byId = new Map((sounds || []).map((sound) => [sound.id, sound]));
+  const entries = [];
+  for (const [soundId, users] of playing || []) {
+    const sound = byId.get(soundId);
+    if (!sound) continue;
+    for (const user of users) entries.push({ key: `${soundId}|${user.user_id}`, soundId, soundName: sound.name, emoji: sound.emoji || '🔊', user });
+  }
+  return entries;
+}
+
+/** Identifiants des personnes qui lancent un son en ce moment (pour allumer leur avatar dans le salon vocal). */
+export function activeUserIds(playing) {
+  const ids = new Set();
+  for (const users of (playing || new Map()).values()) for (const user of users) ids.add(user.user_id);
+  return ids;
+}
+
+/** Adresse d'ajout du bot reçue du serveur : seule une page d'autorisation de Discord est ouverte (jamais une adresse quelconque). */
+export function isInviteUrl(value) {
+  if (typeof value !== 'string' || !value.startsWith('https://discord.com/oauth2/authorize?')) return false;
+  try { return /^\d+$/.test(new URL(value).searchParams.get('client_id') || ''); } catch { return false; }
+}
+
+// ---------- Palettes (les mêmes que « Paramètres > Apparence » de l'application Windows ; les couleurs sont dans app.css) ----------
+export const PALETTES = [
+  { id: 'nightblue', labelKey: 'palette.nightblue', swatch: ['#0f1624', '#38bdf8'] },
+  { id: 'violet', labelKey: 'palette.violet', swatch: ['#1e1e2e', '#7c5cff'] },
+  { id: 'mint', labelKey: 'palette.mint', swatch: ['#101714', '#34d399'] },
+  { id: 'rose', labelKey: 'palette.rose', swatch: ['#1a1419', '#fb7185'] },
+  { id: 'amber', labelKey: 'palette.amber', swatch: ['#17140f', '#f59e0b'] },
+];
+export const DEFAULT_PALETTE = 'nightblue';
+
+/** Identifiant de palette valide (celui proposé, sinon la palette par défaut). */
+export function sanitizePalette(value) {
+  return PALETTES.some((palette) => palette.id === value) ? value : DEFAULT_PALETTE;
 }
 
 // ---------- Activité Discord ----------

@@ -27,8 +27,11 @@ def check(name, cond, detail=""):
 PUBLIC = "https://waseboard.test"
 
 
-def make_app(public=PUBLIC, extra=(), web_dir=None, client_id="555", activity=True):
-    wa = W.WebApp(web_dir or S.WEB_DIR, public, extra, lambda: client_id, "9.9.9", ["web_app"], activity=activity)
+INVITE = "https://discord.com/oauth2/authorize?client_id=555&permissions=3146752&scope=bot%20applications.commands"
+
+
+def make_app(public=PUBLIC, extra=(), web_dir=None, client_id="555", activity=True, invite=INVITE):
+    wa = W.WebApp(web_dir or S.WEB_DIR, public, extra, lambda: client_id, "9.9.9", ["web_app"], activity=activity, invite_url=lambda: invite)
     wa.load()
     return wa
 
@@ -113,8 +116,17 @@ async def main():
         cfg = await r.json()
         check("/app/api/config : identifiant client, adresse de retour, portée", cfg["client_id"] == "555" and cfg["redirect_uri"] == f"{PUBLIC}/app/callback"
               and cfg["scope"] == "identify" and cfg["version"] == "9.9.9" and cfg["build"] == wa.build_id, cfg)
-        check("…sans aucun secret, jamais mise en cache", set(cfg) == {"client_id", "redirect_uri", "scope", "activity", "version", "build", "features"}
+        check("…sans aucun secret, jamais mise en cache", set(cfg) == {"client_id", "redirect_uri", "scope", "activity", "version", "build", "features", "invite_url"}
               and r.headers["Cache-Control"] == "no-store")
+        check("adresse d'ajout du bot : celle fournie par le serveur (page publique de Discord, aucun secret)", cfg["invite_url"] == INVITE and cfg["invite_url"].startswith("https://discord.com/oauth2/authorize?"), cfg)
+    finally:
+        await client.close()
+
+    wa_full = make_app(invite="")
+    client = await serve(wa_full)
+    try:
+        r = await client.get("/app/api/config")
+        check("instance pleine : adresse d'ajout vide (la page n'affiche pas le bouton)", (await r.json())["invite_url"] == "")
     finally:
         await client.close()
 

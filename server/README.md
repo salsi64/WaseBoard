@@ -505,6 +505,13 @@ suppression est conservée, renvoyer deux fois la même chose ne change rien), e
 principe et les règles sont dans `preferences.py`. Les routes `/me/categories` de la 3.5.0 restent pour les anciens clients. Fonction annoncée par `/status`
 (`preferences_sync`).
 
+**Apparence** : celle de l'application Windows. Sur grand écran (900 px et plus) : barre latérale (accueil, favoris, serveurs, catégories, « en ce moment », état,
+paramètres), barre d'outils (recherche, actualiser, vocal, stop, catégorie, ajouter un son) et boutons de son en gélules ; sur téléphone et dans l'Activité, la même
+apparence en version compacte (barre du haut, onglets, barre du bas). **Paramètres** : les cinq palettes de l'application (choix propre au navigateur ; le thème clair
+ou sombre suit l'appareil), la langue, l'installation, la déconnexion et **« Ajouter le bot à mon serveur Discord »**. Ce dernier ouvre la page d'autorisation de
+Discord ; l'adresse vient du serveur (`invite_url` dans `/app/api/config`, la même que `/inviter-bot`) et reste vide, donc sans bouton, quand `max_guilds`
+est atteint (le bot refuserait le nouveau serveur).
+
 Elle est en français et en anglais (langue du navigateur).
 
 Pour l'activer, il faut **`public_url`** (l'adresse HTTPS publique du serveur : Discord ramène la personne sur
