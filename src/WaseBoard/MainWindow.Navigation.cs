@@ -217,7 +217,6 @@ namespace WaseBoard
             }
             else
             {
-                var firstFailure = _activityBackoff.ConsecutiveFailures == 0;
                 if (_activityBackoff.RecordFailure() && _activityTimer is not null) _activityTimer.Interval = _activityBackoff.Interval;
 
                 // Refus d'authentification de suite : l'appli ne peut rien jouer correctement, autant le dire (une fois par épisode).
@@ -227,9 +226,8 @@ namespace WaseBoard
                     ToastService.Show(Loc.T("main.key_refused"), ToastKind.Warning);
                 }
 
-                // Premier échec : on applique « personne ne joue » comme avant. Les suivants ne changeraient plus rien : on s'épargne
-                // le parcours de tout le catalogue à chaque tentative.
-                if (!firstFailure) return;
+                // Pas de sortie anticipée : le parcours ci-dessous réconcilie aussi les boutons joués dans le micro (mode jeu, sans serveur).
+                // Une fois ralenti, il ne tourne plus qu'au rythme du sondage (2 à 30 s).
             }
 
             // Construit la table de correspondance id->son PENDANT ce même parcours (plutôt qu'un

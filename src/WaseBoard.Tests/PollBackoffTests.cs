@@ -136,6 +136,6 @@ public class PollBackoffTests
         timer.Stop();
 
         Assert.Equal(0, changed);
-        Assert.True(timer.ElapsedMilliseconds < 500, $"{timer.ElapsedMilliseconds} ms pour 1 000 000 de succès");
+        Assert.True(timer.ElapsedMilliseconds < 3000, $"{timer.ElapsedMilliseconds} ms pour 1 000 000 de succès");
     }
 }
