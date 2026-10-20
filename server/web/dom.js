@@ -20,6 +20,36 @@ export function h(tag, props = {}, ...children) {
   return el;
 }
 
+// ---------- Icônes : traits simples de 24 × 24, dessinés par le DOM (SVG sans style en ligne : permis par la CSP) ----------
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const ICONS = {
+  search: ['circle:11,11,6.5', 'path:M16 16l4.5 4.5'],
+  refresh: ['path:M20 12a8 8 0 1 1-2.6-5.9', 'path:M20 4.5v4.5h-4.5'],
+  speaker: ['path:M4 9.5v5h3.5l4.5 4v-13l-4.5 4z', 'path:M15.6 9.2a4 4 0 0 1 0 5.6', 'path:M18.3 6.6a8 8 0 0 1 0 10.8'],
+  stop: ['rect:5.5,5.5,13,13,2.5'],
+  tag: ['path:M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7a1 1 0 0 1 .7.3l8.1 8.1a1 1 0 0 1 0 1.4l-7.7 7.7a1 1 0 0 1-1.4 0l-8.1-8.1a1 1 0 0 1-.3-.7z', 'circle:8,8,1.3'],
+  plus: ['path:M12 5v14M5 12h14'],
+  gear: ['circle:12,12,4.6', 'circle:12,12,1.6', 'path:M12 3.2v2.4M12 18.4v2.4M3.2 12h2.4M18.4 12h2.4M5.8 5.8l1.7 1.7M16.5 16.5l1.7 1.7M5.8 18.2l1.7-1.7M16.5 7.5l1.7-1.7'],
+};
+
+/** icon('speaker') : icône à contour (la couleur vient du texte du bouton) ; taille réglée par la feuille de style. */
+export function icon(name) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('class', `icon icon-${name}`);
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  for (const spec of ICONS[name] || []) {
+    const [kind, data] = [spec.slice(0, spec.indexOf(':')), spec.slice(spec.indexOf(':') + 1)];
+    const shape = document.createElementNS(SVG_NS, kind);
+    if (kind === 'path') shape.setAttribute('d', data);
+    else if (kind === 'circle') { const [cx, cy, r] = data.split(','); shape.setAttribute('cx', cx); shape.setAttribute('cy', cy); shape.setAttribute('r', r); }
+    else { const [x, y, w, hh, rx] = data.split(','); shape.setAttribute('x', x); shape.setAttribute('y', y); shape.setAttribute('width', w); shape.setAttribute('height', hh); shape.setAttribute('rx', rx); }
+    svg.append(shape);
+  }
+  return svg;
+}
+
 export function avatar(url, size) {
   if (!url) return null;
   const image = h('img', { src: url, alt: '', width: size, height: size, referrerpolicy: 'no-referrer', loading: 'lazy' });

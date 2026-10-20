@@ -6,6 +6,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MESSAGES, LANGUAGES, makeTranslator, pickLanguage } from '../../web/i18n.js';
+import { PALETTES } from '../../web/logic.js';
 
 const WEB = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web');
 const read = (name) => readFileSync(join(WEB, name), 'utf8');
@@ -142,4 +143,19 @@ test('Activité Discord : kit officiel embarqué, intact, chargé seulement à l
     else assert.ok(!code.includes('vendor/discord-embedded-app-sdk'), `${name} ne doit pas charger le kit`);
   }
   assert.ok(!read('sw.js').includes('vendor'), 'le service worker ne met pas le kit en cache');
+});
+
+test('palettes : chacune a ses couleurs dans la feuille de style (fond et accent identiques à ceux de la pastille) et son nom dans les deux langues', () => {
+  const css = read('app.css');
+  for (const entry of PALETTES) {
+    assert.ok(entry.labelKey in MESSAGES.fr && entry.labelKey in MESSAGES.en, `${entry.labelKey} non traduit`);
+    const [bg, accent] = entry.swatch;
+    if (entry.id === 'nightblue') {   // la palette par défaut est celle de :root
+      const root = css.slice(css.indexOf(':root {'), css.indexOf('}', css.indexOf(':root {')));
+      assert.ok(root.includes(`--bg: ${bg};`) && root.includes(`--accent: ${accent};`), 'nightblue : :root différent de la pastille');
+    } else {
+      assert.ok(css.includes(`:root[data-palette='${entry.id}'] { --accent: ${accent};`), `${entry.id} : accent absent de la feuille de style`);
+      assert.ok(css.includes(`:root[data-palette='${entry.id}'] { --bg: ${bg};`), `${entry.id} : fond absent de la feuille de style`);
+    }
+  }
 });

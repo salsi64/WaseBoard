@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PALETTE, addCategory, autoColor, buildAuthorizeUrl, buildSections, categoryPosition, categoryTabs, checkCategoryName, colorFor, dedupeById, emptyPrefs, errorText,
+  DEFAULT_PALETTE, PALETTE, PALETTES, activeUserIds, addCategory, nowPlayingEntries, sanitizePalette, voiceMembers, autoColor, buildAuthorizeUrl, buildSections, categoryPosition, categoryTabs, checkCategoryName, colorFor, dedupeById, emptyPrefs, errorText,
   favoriteSounds, filterSounds, isHexColor, loadJson, makeState, moveCategory, normalizeText, orderedEntries, parseCallback, personalKey, playingMap, prefsEqual,
   prefsToWire, removeCategory, renameCategory, sanitizeColors, sanitizeIds, sanitizePrefs, sanitizeSession, saveJson, setColor, setMembership, sortByName,
   toggleFavorite, toggleInSet, trimRange, voiceSummary,
@@ -272,9 +272,40 @@ test('réponses du serveur', () => {
   assert.equal(playingMap(null).size, 0);
   assert.equal(playingMap({}).size, 0);
 
-  assert.deepEqual(voiceSummary({ connected: true, channel: 'général', guild_name: 'Alpha', guild_id: '1' }), { connected: true, channel: 'général', guildName: 'Alpha', guildId: '1' });
+  assert.deepEqual(voiceSummary({ connected: true, channel: 'général', guild_name: 'Alpha', guild_id: '1' }), { connected: true, channel: 'général', guildName: 'Alpha', guildId: '1', members: [] });
   assert.equal(voiceSummary({ connected: false }).connected, false);
   assert.equal(voiceSummary(null).connected, false);
+  assert.deepEqual(voiceSummary(null).members, []);
+});
+
+test('salon vocal : membres reçus du serveur, nettoyés et limités à 12', () => {
+  assert.deepEqual(voiceMembers(null), []);
+  assert.deepEqual(voiceMembers({ channel_members: 'x' }), []);
+  assert.deepEqual(voiceMembers({ channel_members: [{ user_id: '1', username: 'Alice', avatar_url: 'https://a/1.png' }, { user_id: '2', username: 7, avatar_url: '' }, { user_id: 3 }, null, 'x'] }),
+    [{ user_id: '1', username: 'Alice', avatar_url: 'https://a/1.png' }, { user_id: '2', username: '', avatar_url: null }]);
+  const many = Array.from({ length: 30 }, (_, i) => ({ user_id: String(i + 1), username: `u${i}` }));
+  assert.equal(voiceMembers({ channel_members: many }).length, 12);
+  assert.equal(voiceSummary({ connected: true, channel: 'g', channel_members: many }).members.length, 12);
+});
+
+test('« en ce moment » : un couple (son, personne) par ligne, sons inconnus ignorés', () => {
+  const sounds = [sound('a', 'Applaudissements', { emoji: '👏' }), sound('b', 'Sans emoji')];
+  const alice = { user_id: '1', username: 'Alice', avatar_url: null };
+  const bob = { user_id: '2', username: 'Bob', avatar_url: 'https://a/2.png' };
+  const playing = new Map([['a', [alice, bob]], ['b', [bob]], ['zzz', [alice]]]);
+  const entries = nowPlayingEntries(playing, sounds);
+  assert.deepEqual(entries.map((e) => [e.key, e.soundName, e.emoji, e.user.username]), [['a|1', 'Applaudissements', '👏', 'Alice'], ['a|2', 'Applaudissements', '👏', 'Bob'], ['b|2', 'Sans emoji', '🔊', 'Bob']]);
+  assert.deepEqual(nowPlayingEntries(new Map(), sounds), []);
+  assert.deepEqual(nowPlayingEntries(null, null), []);
+  assert.deepEqual([...activeUserIds(playing)].sort(), ['1', '2']);
+  assert.equal(activeUserIds(null).size, 0);
+});
+
+test('palettes : les cinq de l\'application, identifiant inconnu = palette par défaut', () => {
+  assert.deepEqual(PALETTES.map((p) => p.id), ['nightblue', 'violet', 'mint', 'rose', 'amber']);
+  assert.equal(DEFAULT_PALETTE, 'nightblue');
+  for (const entry of PALETTES) assert.equal(sanitizePalette(entry.id), entry.id);
+  for (const bad of ['', 'Violet', 'rouge', null, undefined, 3, {}]) assert.equal(sanitizePalette(bad), 'nightblue');
 });
 
 test('Activité Discord : reconnaissance du contexte et repli du CDN', async () => {
