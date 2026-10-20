@@ -192,9 +192,44 @@ namespace WaseBoard
         }
 
         /// <summary>Sondage régulier de l'activité partagée (qui joue quoi) et de la présence (qui a l'app ouverte), communs à tous les clients.</summary>
+        /// <summary>Rythme du sondage d'activité : 300 ms tant que le serveur répond ; après 3 échecs de suite il passe à 2 s, 10 s puis 30 s
+        /// (retour immédiat à 300 ms au premier succès). Un client dont la clé du serveur est refusée ne martèle plus le serveur, des heures durant.</summary>
+        private readonly PollBackoff _activityBackoff = new(TimeSpan.FromMilliseconds(300),
+            new[] { TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30) });
+        private bool _keyRefusedNotified;
+
+        /// <summary>Repart au rythme normal (réglages enregistrés, actualisation demandée) : pas la peine d'attendre le prochain palier.</summary>
+        private void ResetActivityBackoff()
+        {
+            _keyRefusedNotified = false;
+            if (_activityBackoff.Reset() && _activityTimer is not null) _activityTimer.Interval = _activityBackoff.Interval;
+        }
+
         private async Task PollActivityAsync()
         {
-            var (activity, online) = await _library.GetActivityAsync();
+            var (activity, online, status) = await _library.GetActivityAsync();
+
+            if (status == ActivityPollStatus.Ok)
+            {
+                // Chemin normal : le compteur d'échecs est déjà à zéro, rien d'autre n'est touché (ni minuteur, ni interface).
+                if (_activityBackoff.RecordSuccess() && _activityTimer is not null) _activityTimer.Interval = _activityBackoff.Interval;
+                _keyRefusedNotified = false;
+            }
+            else
+            {
+                if (_activityBackoff.RecordFailure() && _activityTimer is not null) _activityTimer.Interval = _activityBackoff.Interval;
+
+                // Refus d'authentification de suite : l'appli ne peut rien jouer correctement, autant le dire (une fois par épisode).
+                if (status == ActivityPollStatus.Unauthorized && _activityBackoff.IsSlowed && !_keyRefusedNotified)
+                {
+                    _keyRefusedNotified = true;
+                    ToastService.Show(Loc.T("main.key_refused"), ToastKind.Warning);
+                }
+
+                // Pas de sortie anticipée : le parcours ci-dessous réconcilie aussi les boutons joués dans le micro (mode jeu, sans serveur).
+                // Une fois ralenti, il ne tourne plus qu'au rythme du sondage (2 à 30 s).
+            }
+
             // Construit la table de correspondance id->son PENDANT ce même parcours (plutôt qu'un
             // Sounds.FirstOrDefault(...) séparé par son actif plus bas) : sur un gros catalogue avec
             // plusieurs sons joués en même temps, ce sondage toutes les 300ms finissait par repasser
@@ -431,7 +466,11 @@ namespace WaseBoard
             RefreshSections();
         }
 
-        private async void RefreshButton_Click(object sender, RoutedEventArgs e) => await RefreshCatalogAsync();
+        private async void RefreshButton_Click(object sender, RoutedEventArgs e)
+        {
+            ResetActivityBackoff();
+            await RefreshCatalogAsync();
+        }
 
         private void Window_Closing(object sender, CancelEventArgs e)
         {

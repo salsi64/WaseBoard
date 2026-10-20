@@ -228,6 +228,11 @@ sudo systemctl enable --now waseboard
 sudo journalctl -u waseboard -f   # suivre les logs
 ```
 
+Le journal reste lisible : les **sondages réguliers** des applications et de la page web (`/activity`, `/status`, synchronisation des préférences) n'y figurent pas
+quand ils réussissent, et leurs **échecs répétés** (un client dont la clé du serveur est refusée réessaie toutes les 300 ms) sont regroupés : une ligne par minute et
+par type d'échec, qui indique combien ont été passés sous silence (`[+190 identiques non journalisées depuis la dernière ligne]`). L'adresse affichée est celle du
+proxy ; celle du client est dans le journal de nginx (`/var/log/nginx/access.log`).
+
 ## 6. Rendre le serveur accessible en HTTPS
 
 Le `shared_secret` doit passer par une connexion chiffrée. Let's Encrypt exige un nom de

@@ -28,6 +28,7 @@
     <Compile Include="..\WaseBoard\Services\ClipRingBuffer.cs" Link="Linked\ClipRingBuffer.cs" />
     <Compile Include="..\WaseBoard\Services\PreferencesDoc.cs" Link="Linked\PreferencesDoc.cs" />
     <Compile Include="..\WaseBoard\Services\PcmTools.cs" Link="Linked\PcmTools.cs" />
+    <Compile Include="..\WaseBoard\Services\PollBackoff.cs" Link="Linked\PollBackoff.cs" />
     <Compile Include="..\WaseBoard\Services\Localization\Loc.cs" Link="Linked\Loc.cs" />
     <EmbeddedResource Include="..\WaseBoard\Localization\*.json" LogicalName="Localization.%(Filename)%(Extension)" />
   </ItemGroup>

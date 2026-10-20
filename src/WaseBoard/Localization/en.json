@@ -134,6 +134,7 @@
   "main.joined_voice": "🔊 Connected to “{0}” on {1}.",
   "main.join_failed": "Could not connect to the voice channel.",
   "main.server.connected": "Connected — {0} sound(s)",
+  "main.key_refused": "The server rejects this app's key: check the server address and key in Settings › Server.",
   "main.server.unreachable": "Server unreachable",
   "main.mic_mode.game_tooltip": "Game mode: sounds go through your microphone (the game's voice chat). Click to switch to Discord mode.",
   "main.mic_mode.discord_tooltip": "Discord mode: sounds are played by the bot in your voice channel. Click to switch to game mode.",
