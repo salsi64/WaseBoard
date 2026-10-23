@@ -29,3 +29,6 @@ server/.env.bak-*
 .vs/
 .vscode/
 *.user
+
+# Dossier de l'assistant de développement (aperçus, essais, configuration locale) : jamais dans git
+.claude/
